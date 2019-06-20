@@ -37,9 +37,16 @@ def doit(opts):
     iterations = opts.iterations
     max_loss = opts.loss
 
-    if iterations and max_loss:
-        log("iterations and max_loss canot both be specified")
-        return
+    data_dir = output.split('.')[0] + '_data'
+    os.makedirs(data_dir)
+
+    log('style input: %s' % style)
+    log('content input: %s' % content)
+    log('output image: %s' % output)
+    log('engine: %s' % engine)
+    log('iterations: %s' % iterations)
+    log('max_loss: %s' % max_loss)
+    log('')
 
     if engine == 'gpu':
         if torch.cuda.is_available():
@@ -112,6 +119,8 @@ def doit(opts):
     n_iter = [0]
     current_loss = [9999999]
 
+    loss_graph = ([], [])
+
     def closure():
         optimizer.zero_grad()
         out = vgg(opt_img, loss_layers)
@@ -120,6 +129,10 @@ def doit(opts):
         loss.backward()
         current_loss[0] = loss.item()
         n_iter[0] += 1
+
+        loss_graph[0].append(n_iter[0])
+        loss_graph[1].append(loss.item())
+
         if n_iter[0] % show_iter == (show_iter - 1):
             nice_loss = '{:,.0f}'.format(loss.item())
             max_mem_cached = torch.cuda.max_memory_cached(0) / 1000000
@@ -148,18 +161,20 @@ def doit(opts):
             optimizer.step(closure)
 
     out_img = utils.postp(opt_img.data[0].cpu().squeeze())
+    out_img.save(output)
 
-    if output:
-        out_img.save(output)
-    else:
-        pyplot.imshow(out_img)
+    pyplot.plot(loss_graph[0], loss_graph[1])
+    pyplot.xlabel('iterations')
+    pyplot.ylabel('loss')
+    loss_graph_filepath = data_dir + '/loss.png'
+    pyplot.savefig(loss_graph_filepath)
 
     end = timer()
     duration = "%.02f seconds" % float(end-start)
     log('completed\n')
     log("duration: %s" % duration)
 
-    log_filepath = output.split('.')[0] + '.log'
+    log_filepath = data_dir + '/log.txt'
 
     with open(log_filepath, 'w') as log_file:
         log_file.write(LOG)

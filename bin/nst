@@ -7,14 +7,22 @@ import nst
 def main():
 
     p = OptionParser()
-    p.add_option("", "--content", dest='content', action='store')
-    p.add_option("", "--style", dest='style', action='store')
-    p.add_option("", "--output", dest='output', action='store')
-    p.add_option("", "--iterations", dest='iterations', action='store')
-    p.add_option("", "--loss", dest='loss', action='store')
-    p.add_option("", "--engine", dest="engine", action='store', default='gpu')
+    p.add_option("-c", "--content", dest='content', action='store')
+    p.add_option("-s", "--style", dest='style', action='store')
+    p.add_option("-o", "--output", dest='output', action='store')
+    p.add_option("-i", "--iterations", dest='iterations', action='store')
+    p.add_option("-l", "--loss", dest='loss', action='store')
+    p.add_option("-e", "--engine", dest="engine", action='store', default='gpu')
 
     opts, args = p.parse_args()
+
+    if opts.iterations and opts.max_loss:
+        print 'iterations and max_loss cannot both be specified'
+        return
+
+    if not opts.output:
+        print "no output was specified"
+        return
 
     nst.doit(opts)
 

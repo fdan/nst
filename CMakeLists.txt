@@ -7,7 +7,6 @@ rez_install_files(
     ${bin_files}
     DESTINATION .
     EXECUTABLE
-    LOCAL_SYMLINK
 )
 
 FILE(GLOB_RECURSE py_files "python/*.py")
