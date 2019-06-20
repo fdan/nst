@@ -11,6 +11,8 @@ from torch import optim
 
 from PIL import Image
 
+import matplotlib
+matplotlib.use('Agg')
 from matplotlib import pyplot
 
 from . import entities
@@ -18,6 +20,7 @@ from . import utils
 
 
 LOG = ''
+MAX_GPU_RAM_USAGE = 90
 
 
 def log(msg):
@@ -26,34 +29,49 @@ def log(msg):
     print msg
 
 
+def render_image(tensor, filepath):
+    out_img = utils.postp(tensor.data[0].cpu().squeeze())
+    out_img.save(filepath)
+
+
 def doit(opts):
 
     start = timer()
 
     style = opts.style
     content = opts.content
-    output = opts.output
+    output_dir = opts.output_dir
     engine = opts.engine
     iterations = opts.iterations
     max_loss = opts.loss
+    unsafe = opts.unsafe
 
-    data_dir = output.split('.')[0] + '_data'
-    os.makedirs(data_dir)
+    try:
+        os.makedirs(output_dir)
+    except:
+        pass
 
     log('style input: %s' % style)
     log('content input: %s' % content)
-    log('output image: %s' % output)
+    log('output dir: %s' % output_dir)
     log('engine: %s' % engine)
     log('iterations: %s' % iterations)
     log('max_loss: %s' % max_loss)
+
+    if unsafe:
+        log('unsafe: %s heroes explore to give us hope' % unsafe)
+    else:
+        log('unsafe: %s cutting edge is for people who want to bleed' % unsafe)
+
     log('')
 
     if engine == 'gpu':
         if torch.cuda.is_available():
             do_cuda = True
-            smi_cmd = ['nvidia-smi', '--query-gpu=memory.total', '--format=csv,noheader']
-            total_gpu_memory = subprocess.check_output(smi_cmd).rstrip('\n')
-            log("using cuda\navailable memory: %s" % total_gpu_memory)
+            smi_mem_total = ['nvidia-smi', '--query-gpu=memory.total', '--format=csv,noheader,nounits']
+            total_gpu_memory = float(subprocess.check_output(smi_mem_total).rstrip('\n'))
+
+            log("using cuda\navailable memory: %.0f Gb" % total_gpu_memory)
         else:
             msg = "gpu mode was requested, but cuda is not available"
             raise RuntimeError(msg)
@@ -122,6 +140,21 @@ def doit(opts):
     loss_graph = ([], [])
 
     def closure():
+
+        if engine == 'gpu':
+
+            if not unsafe:
+                # pytorch may not be the only process using GPU ram.  Be a good GPU memory citizen
+                # by checking, and abort if a treshold is met.
+                # Opt out by running with --safe False.
+                smi_mem_used = ['nvidia-smi', '--query-gpu=memory.free', '--format=csv,noheader,nounits']
+                used_gpu_memory = float(subprocess.check_output(smi_mem_used).rstrip('\n'))
+
+                percent_gpu_usage = used_gpu_memory / total_gpu_memory * 100
+                if percent_gpu_usage > MAX_GPU_RAM_USAGE:
+                    raise RuntimeError("Ran out of GPU memory")
+
+
         optimizer.zero_grad()
         out = vgg(opt_img, loss_layers)
         layer_losses = [weights[a] * loss_fns[a](A, targets[a]) for a, A in enumerate(out)]
@@ -160,13 +193,13 @@ def doit(opts):
         while current_loss[0] > int(max_loss):
             optimizer.step(closure)
 
-    out_img = utils.postp(opt_img.data[0].cpu().squeeze())
-    out_img.save(output)
+    output_render = output_dir + '/render.png'
+    render_image(opt_img, output_render)
 
     pyplot.plot(loss_graph[0], loss_graph[1])
     pyplot.xlabel('iterations')
     pyplot.ylabel('loss')
-    loss_graph_filepath = data_dir + '/loss.png'
+    loss_graph_filepath = output_dir + '/loss.png'
     pyplot.savefig(loss_graph_filepath)
 
     end = timer()
@@ -174,7 +207,7 @@ def doit(opts):
     log('completed\n')
     log("duration: %s" % duration)
 
-    log_filepath = data_dir + '/log.txt'
+    log_filepath = output_dir + '/log.txt'
 
     with open(log_filepath, 'w') as log_file:
         log_file.write(LOG)

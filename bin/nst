@@ -3,28 +3,39 @@
 from optparse import OptionParser
 
 import nst
+import nst.farm
 
 def main():
 
     p = OptionParser()
     p.add_option("-c", "--content", dest='content', action='store')
     p.add_option("-s", "--style", dest='style', action='store')
-    p.add_option("-o", "--output", dest='output', action='store')
+    p.add_option("-o", "--output_dir", dest='output_dir', action='store')
     p.add_option("-i", "--iterations", dest='iterations', action='store')
     p.add_option("-l", "--loss", dest='loss', action='store')
     p.add_option("-e", "--engine", dest="engine", action='store', default='gpu')
+    p.add_option("-f", "--farm", dest="farm", action='store_true')
+    p.add_option("-u", "--unsafe", dest="unsafe", action='store_true', default='False')
 
     opts, args = p.parse_args()
 
-    if opts.iterations and opts.max_loss:
+    if opts.iterations and opts.loss:
         print 'iterations and max_loss cannot both be specified'
         return
 
-    if not opts.output:
+    if not opts.output_dir:
         print "no output was specified"
         return
 
-    nst.doit(opts)
+    if len(opts.output_dir.split('.')) > 1:
+        print "output_dir should not contain extensions"
+        return
+
+    if not opts.farm:
+        nst.doit(opts)
+
+    if opts.farm:
+        nst.farm.doit(opts)
 
 
 if __name__ == "__main__":

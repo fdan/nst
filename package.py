@@ -2,9 +2,12 @@
 
 name = 'nst'
 
-version = '0.0.2'
+version = '0.0.3'
 
-requires = ['conda_pytorch']
+requires = [
+            'conda_pytorch',
+            'tractor'
+            ]
 
 build_requires = [
                   'python',
