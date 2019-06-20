@@ -6,6 +6,11 @@ version = '0.0.1'
 
 requires = ['conda_pytorch']
 
+build_requires = [
+                  'python',
+                  'nose'
+]
+
 def commands():
     env.NST_VGG_MODEL.set('/mnt/ala/research/danielf/models/gatys_nst_vgg/vgg_conv.pth')
     env.PATH.append('{root}/bin')
