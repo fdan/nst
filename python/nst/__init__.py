@@ -247,7 +247,7 @@ def doit(opts):
     if progressive:
         ffmpeg_cmd = []
         ffmpeg_cmd += ['ffmpeg', '-i', '%s/render.%%04d.png' % temp_dir]
-        ffmpeg_cmd += ['-c:v', 'libx264', '-crf', '15' '-y']
+        ffmpeg_cmd += ['-c:v', 'libx264', '-crf', '15', '-y']
         ffmpeg_cmd += ['%s/prog.mp4' % output_dir]
         subprocess.check_output(ffmpeg_cmd)
         shutil.rmtree(temp_dir)
