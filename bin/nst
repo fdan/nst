@@ -15,7 +15,9 @@ def main():
     p.add_option("-l", "--loss", dest='loss', action='store')
     p.add_option("-e", "--engine", dest="engine", action='store', default='gpu')
     p.add_option("-f", "--farm", dest="farm", action='store_true')
-    p.add_option("-u", "--unsafe", dest="unsafe", action='store_true', default='False')
+    p.add_option("-u", "--unsafe", dest="unsafe", action='store_true')
+    p.add_option("-r", "--random", dest="random_style", action='store_true')
+    p.add_option("", "--progressive", dest="progressive", action='store_true')
 
     opts, args = p.parse_args()
 

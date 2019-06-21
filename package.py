@@ -2,11 +2,12 @@
 
 name = 'nst'
 
-version = '0.0.3'
+version = '0.0.4'
 
 requires = [
             'conda_pytorch',
-            'tractor'
+            'tractor',
+            'ffmpeg'
             ]
 
 build_requires = [

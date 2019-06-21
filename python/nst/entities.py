@@ -37,9 +37,14 @@ class VGG(nn.Module):
             self.pool4 = nn.AvgPool2d(kernel_size=2, stride=2)
             self.pool5 = nn.AvgPool2d(kernel_size=2, stride=2)
 
-    def forward(self, x, out_keys):
+    def forward(self, tensor, out_keys):
+        """
+        :param tensor: torch.Tensor
+        :param out_keys: [str]
+        :return: [torch.Tensor]
+        """
         out = {}
-        out['r11'] = F.relu(self.conv1_1(x))
+        out['r11'] = F.relu(self.conv1_1(tensor))
         out['r12'] = F.relu(self.conv1_2(out['r11']))
         out['p1'] = self.pool1(out['r12'])
         out['r21'] = F.relu(self.conv2_1(out['p1']))
@@ -60,7 +65,9 @@ class VGG(nn.Module):
         out['r53'] = F.relu(self.conv5_3(out['r52']))
         out['r54'] = F.relu(self.conv5_4(out['r53']))
         out['p5'] = self.pool5(out['r54'])
-        return [out[key] for key in out_keys]
+        result = [out[key] for key in out_keys]
+        return result
+
 
 
 # gram matrix and loss

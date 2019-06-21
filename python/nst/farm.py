@@ -3,9 +3,17 @@ import os
 import tractor.api.author
 
 
+def get_full_path(filename):
+    if not filename.startswith('/'):
+        return os.getcwd() + '/' + filename
+    return filename
+
 
 def doit(opts):
     cmds = get_batch_cmd(opts)
+
+    output_dir = get_full_path(opts.output_dir)
+    prog = opts.progressive
 
     user = os.getenv('CREWNAME' or 'unknownUser')
     jobname = 'style_transfer_{0}'.format(user)
@@ -28,13 +36,20 @@ def doit(opts):
         task.newCommand(argv=cmd)
         task.newCommand(argv=['setup-conda-env', '-r'])
 
+        if prog:
+            ffmpeg_cmd = []
+            ffmpeg_cmd += ['ffmpeg', '-i', '%s/prog/render.%04d.png' % output_dir]
+            ffmpeg_cmd += ['-c:v', 'libx264', '-crf', '15']
+            ffmpeg_cmd += ['%s/prog.mp4' % output_dir]
+            task.newCommand(argv=ffmpeg_cmd)
+
         print job, task
 
         job.addChild(task)
 
     print job.asTcl()
-    jobid = job.spool()
-    print 'job sent to farm, id:', jobid
+    # jobid = job.spool()
+    # print 'job sent to farm, id:', jobid
 
 
 def get_batch_cmd(opts):
