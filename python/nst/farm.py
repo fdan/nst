@@ -35,14 +35,6 @@ def doit(opts):
         task.newCommand(argv=['setup-conda-env', '-i'])
         task.newCommand(argv=cmd)
         task.newCommand(argv=['setup-conda-env', '-r'])
-
-        if prog:
-            ffmpeg_cmd = []
-            ffmpeg_cmd += ['ffmpeg', '-i', '%s/prog/render.%04d.png' % output_dir]
-            ffmpeg_cmd += ['-c:v', 'libx264', '-crf', '15']
-            ffmpeg_cmd += ['%s/prog.mp4' % output_dir]
-            task.newCommand(argv=ffmpeg_cmd)
-
         print job, task
 
         job.addChild(task)
