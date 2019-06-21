@@ -40,8 +40,8 @@ def doit(opts):
         job.addChild(task)
 
     print job.asTcl()
-    # jobid = job.spool()
-    # print 'job sent to farm, id:', jobid
+    jobid = job.spool()
+    print 'job sent to farm, id:', jobid
 
 
 def get_batch_cmd(opts):
