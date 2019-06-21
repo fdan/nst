@@ -34,7 +34,7 @@ def doit(opts):
         task = tractor.api.author.Task(title=task_name)
         task.newCommand(argv=['setup-conda-env', '-i'])
         task.newCommand(argv=cmd)
-        task.newCommand(argv=['setup-conda-env', '-r'])
+        # task.newCommand(argv=['setup-conda-env', '-r'])
         print job, task
 
         job.addChild(task)

@@ -1,3 +1,4 @@
+import traceback
 import uuid
 import random
 import os
@@ -53,6 +54,16 @@ def get_full_path(filename):
 
 
 def doit(opts):
+    try:
+        _doit(opts)
+    except:
+        print traceback.print_exc()
+    finally:
+        env_cleanup = ['setup-conda-env', '-r']
+        subprocess.check_output(env_cleanup)
+
+
+def _doit(opts):
     start = timer()
     style = get_full_path(opts.style)
     content = get_full_path(opts.content)
