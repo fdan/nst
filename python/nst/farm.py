@@ -54,9 +54,10 @@ def get_batch_cmd(opts):
     iterations = opts.iterations
     loss = opts.loss
     unsafe = opts.unsafe
+    random = opts.random_style
+    progressive = opts.progressive
 
     cmd = []
-    # cmd += ['setup-conda-env', '-i;']
     cmd += ['nst']
     cmd += ['--content', content]
     cmd += ['--style', style]
@@ -67,6 +68,12 @@ def get_batch_cmd(opts):
         cmd += ['--iterations', iterations]
     elif loss:
         cmd += ['--loss', loss]
+
+    if random:
+        cmd += ['--random', random]
+
+    if progressive:
+        cmd += ['--progressive', progressive]
 
     cmd += ['--engine', engine, ';']
 

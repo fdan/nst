@@ -1,3 +1,20 @@
+"""
+experiments:
+
+* loss for multiple style images
+* from a content and output, calculate style
+* vary style/content balance across image
+* logarithmic graphs
+* tiling / scaling of style
+* style reconstruction
+* content reconstruction
+* style atlases
+
+
+"""
+
+
+
 import traceback
 import uuid
 import random
@@ -59,8 +76,9 @@ def doit(opts):
     except:
         print traceback.print_exc()
     finally:
-        env_cleanup = ['setup-conda-env', '-r']
-        subprocess.check_output(env_cleanup)
+        if opts.farm:
+            env_cleanup = ['setup-conda-env', '-r']
+            subprocess.check_output(env_cleanup)
 
 
 def _doit(opts):
@@ -133,10 +151,13 @@ def _doit(opts):
 
     if random_style:
         style_image = random_crop_image(style_image)
+        style_image.save('%s/style.png' % output_dir)
 
     content_image = Image.open(content)
 
     style_tensor = utils.image_to_tensor(style_image, do_cuda)
+    # style_tensor_1 = utils.image_to_tensor(style_image_1, do_cuda)
+    # style_tensor_2 = utils.image_to_tensor(style_image_2, do_cuda)
     content_tensor = utils.image_to_tensor(content_image, do_cuda)
 
     # variable is dperecated
@@ -146,6 +167,7 @@ def _doit(opts):
     style_layers = ['r11', 'r21', 'r31', 'r41', 'r51']
     content_layers = ['r42']
     loss_layers = style_layers + content_layers
+
     loss_fns = [entities.GramMSELoss()] * len(style_layers) + [nn.MSELoss()] * len(content_layers)
 
     if do_cuda:
@@ -158,8 +180,11 @@ def _doit(opts):
 
     # compute optimization targets
     style_targets = [entities.GramMatrix()(A).detach() for A in vgg(style_tensor, style_layers)]
+    # style_targets_1 = [entities.GramMatrix()(A).detach() for A in vgg(style_tensor_1, style_layers)]
+    # style_targets_2 = [entities.GramMatrix()(A).detach() for A in vgg(style_tensor_2, style_layers)]
     content_targets = [A.detach() for A in vgg(content_tensor, content_layers)]
     targets = style_targets + content_targets
+    # targets = (style_targets_1 + style_targets_2)/2 + content_targets
 
     # run style transfer
     show_iter = 20
@@ -246,9 +271,6 @@ def _doit(opts):
     loss_graph_filepath = output_dir + '/loss.png'
     pyplot.savefig(loss_graph_filepath)
 
-    if random:
-        style_image.save('%s/style.png' % output_dir)
-
     duration = "%.02f seconds" % float(end-start)
     log('completed\n')
     log("duration: %s" % duration)
@@ -272,7 +294,15 @@ def random_crop_image(image):
     Given a PIL.Image, crop it with a bbox of random location and size
     """
     x_size, y_size = image.size
-    bbox_min, bbox_max = 50, 400
+    min_size = min(x_size, y_size)
+
+    bbox_min_ratio = 0.2
+    bbox_max_ratio = 0.7
+
+    bbox_min = int(min_size * bbox_min_ratio)
+    bbox_max = int(min_size * bbox_max_ratio)
+
+    # bbox_min, bbox_max = 80, 400
     bbox_size = random.randrange(bbox_min, bbox_max)
 
     # the bbox_size determins where the center can be placed
