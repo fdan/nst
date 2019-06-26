@@ -2,7 +2,7 @@
 
 name = 'nst'
 
-version = '0.0.8'
+version = '0.0.9'
 
 requires = [
             'conda_pytorch',
