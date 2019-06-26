@@ -11,8 +11,14 @@ experiments:
 * style atlases
 
 
-"""
+tech things to do:
+* optimise a noise image rather than cloning content
+* perform content only reconstruction on noise image
+* perform style only reconstruction on noise image
+* output optimised image at various layers of cnn
 
+"""
+import random
 import traceback
 import uuid
 import os
@@ -97,8 +103,10 @@ def _doit(opts):
     style_layers = ['r11', 'r21', 'r31', 'r41', 'r51']
     content_layers = ['r42']
     loss_layers = style_layers + content_layers
+    # loss_layers = style_layers
 
     loss_fns = [entities.GramMSELoss()] * len(style_layers) + [nn.MSELoss()] * len(content_layers)
+    # loss_fns = [entities.GramMSELoss()] * len(style_layers)
     if DO_CUDA:
         loss_fns = [loss_fn.cuda() for loss_fn in loss_fns]
 
@@ -107,10 +115,13 @@ def _doit(opts):
     content_weights = [1e0]
     weights = style_weights + content_weights
 
+    # weights = [0.0, 0.0, 0.0, 0.0, 0.0, 1.0]
+
     # compute optimization targets
     style_targets = [entities.GramMatrix()(A).detach() for A in vgg(style_tensor, style_layers)]
     content_targets = [A.detach() for A in vgg(content_tensor, content_layers)]
     targets = style_targets + content_targets
+    # targets = style_targets
 
     # run style transfer
     show_iter = 20
@@ -255,7 +266,18 @@ def prepare_images(style, random_style, content, output_dir):
     style_tensor = utils.image_to_tensor(style_image, DO_CUDA)
     content_tensor = utils.image_to_tensor(content_image, DO_CUDA)
 
-    # variable is dperecated
-    opt_tensor = Variable(content_tensor.data.clone(), requires_grad=True)
-    
+    o_width = content_image.size[0]
+    o_height = content_image.size[1]
+    opt_image = Image.new("RGB", (o_width, o_height), 255)
+    random_grid = map(lambda x: (
+            int(random.random() * 256),
+            int(random.random() * 256),
+            int(random.random() * 256)
+        ), [0] * o_width * o_height)
+    opt_image.putdata(random_grid)
+    opt_tensor = utils.image_to_tensor(opt_image, DO_CUDA)
+    opt_tensor = Variable(opt_tensor.data.clone(), requires_grad=True)
+
+    # opt_tensor = Variable(content_tensor.data.clone(), requires_grad=True)
+
     return content_tensor, style_tensor, opt_tensor

@@ -69,7 +69,6 @@ class VGG(nn.Module):
         return result
 
 
-
 # gram matrix and loss
 class GramMatrix(nn.Module):
     def forward(self, input):
