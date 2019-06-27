@@ -10,7 +10,9 @@ def main():
     p = OptionParser()
     p.add_option("-c", "--content", dest='content', action='store')
     p.add_option("-s", "--style", dest='style', action='store')
-    p.add_option("-o", "--output_dir", dest='output_dir', action='store')
+    p.add_option("", "--style-layers", dest='style_layers', action='store')
+    p.add_option("-o", "--output-dir", dest='output_dir', action='store')
+    p.add_option("", "--render-name", dest='render_name', action='store')
     p.add_option("-i", "--iterations", dest='iterations', action='store')
     p.add_option("-l", "--loss", dest='loss', action='store')
     p.add_option("-e", "--engine", dest="engine", action='store', default='gpu')
@@ -19,7 +21,11 @@ def main():
     p.add_option("-r", "--random", dest="random_style", action='store_true')
     p.add_option("", "--progressive", dest="progressive", action='store_true')
 
+
     opts, args = p.parse_args()
+
+    # print [int(x) for x in opts.style_layers.split(',')]
+    # return
 
     if opts.iterations and opts.loss:
         print 'iterations and max_loss cannot both be specified'
