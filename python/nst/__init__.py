@@ -11,11 +11,53 @@ experiments:
 * style atlases
 
 
-tech things to do:
+tech things done:
 * optimise a noise image rather than cloning content
 * perform content only reconstruction on noise image
+
+tech things to do:
 * perform style only reconstruction on noise image
 * output optimised image at various layers of cnn
+
+
+
+some notes and discoveries
+
+1.  The magic-number weights Gatys provides, are selected for cases where the
+optimisation image is a duplicate of the content image.  If you want to perform
+gradient descent on a random noise image, you will need to significantly increase
+the "strength" of the content weight.
+
+2.  Running for 5000 iterations seems to give quite different results for a nosie
+image.  When optimising the content image, after a very high number of iterations
+the image begins to degrade significantly.  The same is not true of a randm noise
+image.
+
+3.  I assume the reason for using a clone of the content image as the optimisation
+image is performance - there is less transformation required, it's a primed image.
+
+4.  Playing with the manually specified weights is a pretty interesting way to
+significantly affect the outcome.  However a major pain is that it's not easy to
+affect the style/content ratio overall, because there's a list of 5 style weights.
+Need to find out if the 1.0 content weight can go above 1.0 (I doubt it), because
+if so it would be a very easy way to say "more or less content".
+
+This is definitely something you would want to expose to the artist as a control.
+Be good to do some wedge tests with these values changing over time.
+Also worth noting the magic numbers given are all proportinate to the size / rank
+of each layer in dimensions.  So the user input should probably be tied to this
+still.
+
+5.  While I suspect playing with the style weights could have the same effect,
+it would be nice to be able to output a snapshot of the optimised image at each
+layer.  This would presumably have to be done in the forward function of the VGG
+class?
+
+
+
+
+
+
 
 """
 import random
@@ -67,8 +109,15 @@ def doit(opts):
 
 def _doit(opts):
     start = timer()
-    style = utils.get_full_path(opts.style)
-    content = utils.get_full_path(opts.content)
+
+    style = opts.style
+    if style:
+        style = utils.get_full_path(style)
+
+    content = opts.content
+    if content:
+        content = utils.get_full_path(content)
+
     output_dir = utils.get_full_path(opts.output_dir)
     temp_dir = '/tmp/nst/%s' % str(uuid.uuid4())[:8:]
     engine = opts.engine
@@ -97,40 +146,66 @@ def _doit(opts):
     log('')
 
     vgg = prepare_engine(engine)
-    content_tensor, style_tensor, opt_tensor = prepare_images(style, random_style, content, output_dir)
 
     # define layers, loss functions, weights and compute optimization targets
-    style_layers = ['r11', 'r21', 'r31', 'r41', 'r51']
-    content_layers = ['r42']
-    loss_layers = style_layers + content_layers
-    # loss_layers = style_layers
+    # style_layers = ['r11', 'r21', 'r31', 'r41', 'r51']
+    # content_layers = ['r42']
+    # loss_layers = style_layers + content_layers
+    loss_layers = []
+    loss_fns = []
+    weights = []
+    targets = []
 
-    loss_fns = [entities.GramMSELoss()] * len(style_layers) + [nn.MSELoss()] * len(content_layers)
-    # loss_fns = [entities.GramMSELoss()] * len(style_layers)
+    if style:
+        style_layers = ['r11', 'r21', 'r31', 'r41', 'r51']
+        loss_layers += style_layers
+        style_loss_fns = [entities.GramMSELoss()] * len(style_layers)
+        loss_fns += style_loss_fns
+        style_weights = [1e3 / n ** 2 for n in [64, 128, 256, 512, 512]]
+        weights += style_weights
+        style_tensor = prepare_style(style, random_style, output_dir)
+        style_targets = [entities.GramMatrix()(A).detach() for A in vgg(style_tensor, style_layers)]
+        targets += style_targets
+
+    if content:
+        content_layers = ['r42']
+        loss_layers += content_layers
+        content_loss_fns = [nn.MSELoss()]
+        loss_fns += content_loss_fns
+        content_weights = [1.0]
+        weights += content_weights
+        content_tensor = prepare_content(content)
+        content_targets = [A.detach() for A in vgg(content_tensor, content_layers)]
+        targets += content_targets
+
+    # use a clone of the content image as the optimisation image
+    if style and content:
+        opt_tensor = prepare_opt(clone=content)
+
+    # use a random noise image as the optimisation image
+    else:
+        # use the x and y dimensions of the content image
+        if content:
+            content_image = Image.open(content)
+            opt_tensor = prepare_opt(width=content_image.size[0], height=content_image.size[1])
+        # use default x and y dimensions
+        if style:
+            opt_tensor = prepare_opt()
+        else:
+            raise Exception("Style, content or both must be specified")
+
     if DO_CUDA:
         loss_fns = [loss_fn.cuda() for loss_fn in loss_fns]
 
-    # these are good weights settings:
-    style_weights = [1e3 / n ** 2 for n in [64, 128, 256, 512, 512]]
-    content_weights = [1e0]
-    weights = style_weights + content_weights
-
-    # weights = [0.0, 0.0, 0.0, 0.0, 0.0, 1.0]
-
-    # compute optimization targets
-    style_targets = [entities.GramMatrix()(A).detach() for A in vgg(style_tensor, style_layers)]
-    content_targets = [A.detach() for A in vgg(content_tensor, content_layers)]
-    targets = style_targets + content_targets
-    # targets = style_targets
-
-    # run style transfer
     show_iter = 20
-    optimizer = optim.LBFGS([opt_tensor])
-    n_iter = [0]
+    optimizer = optim.LBFGS([opt_tensor], max_iter=int(iterations))
+    n_iter = [1]
     current_loss = [9999999]
     loss_graph = ([], [])
+    layer_tensors = [0]
 
     def closure():
+
         if engine == 'gpu':
             if not unsafe:
                 # pytorch may not be the only process using GPU ram.  Be a good GPU memory citizen
@@ -149,11 +224,35 @@ def _doit(opts):
         # The output is a list of tensors [torch.Tensor].
         output_tensors = vgg(opt_tensor, loss_layers)
 
+        # at this point, opt_tensor has not been changed...
+
+        layer_tensors[0] = []
+
         layer_losses = []
+
         for counter, tensor in enumerate(output_tensors):
+            # this is where you would output the image for each layer btw...
+            # layer_image = utils.postp(tensor)
+            # layer_image.save()
+            # layer_output_path = output_dir + ''
+            # layer_tensors[0].append(tensor)
+            # print ''
+            # print 'opt_tensor', opt_tensor.size(), opt_tensor.dim()
+            # print counter, 'output_tensor', tensor.size(), tensor.dim()
+
+            # if n_iter[0] == int(iterations)-1:
+            #     layer_output = output_dir + 'layer_%s.png' % counter
+            #     print 'rendering'
+            #     utils.render_image(opt_tensor, layer_output, 'layer: %s' % counter)
+
             w = weights[counter]
+            # print 1, w
             l = loss_fns[counter](tensor, targets[counter])
-            layer_losses.append(w * l)
+            # print 2, l
+            # l is a tensor, and here we just multiply it by a float:
+            weighted_loss = w * l
+            # to make weight variable, we should use an image instead.
+            layer_losses.append(weighted_loss)
 
         loss = sum(layer_losses)
         loss.backward()
@@ -172,7 +271,7 @@ def _doit(opts):
         if n_iter[0] % show_iter == (show_iter - 1):
             max_mem_cached = torch.cuda.max_memory_cached(0) / 1000000
             msg = ''
-            msg += 'Iteration: %d, ' % (n_iter[0] + 1)
+            msg += 'Iteration: %d, ' % (n_iter[0])
             msg += 'loss: %s, ' % (nice_loss)
 
             if DO_CUDA:
@@ -194,6 +293,17 @@ def _doit(opts):
     if max_loss:
         while current_loss[0] > int(max_loss):
             optimizer.step(closure)
+
+    # print len(layer_tensors[0])
+    # print layer_tensors[0]
+    # return
+    # for layer in layer_tensors[0]:
+    #     # print dir(layer)
+    #     layer_ind = layer_tensors[0].index(layer)
+    #     print 'layer %s size: %s dim: %s' % (layer_ind, layer.size(), layer.dim())
+    #     output_layer = output_dir + 'layer_%s.png' % layer_tensors[0].index(layer)
+    #     print 'rendering:', output_layer
+    #     utils.render_image(layer, output_layer)
 
     output_render = output_dir + '/render.png'
     utils.render_image(opt_tensor, output_render)
@@ -253,31 +363,40 @@ def prepare_engine(engine):
     return vgg
 
 
-def prepare_images(style, random_style, content, output_dir):
-    # list of PIL images
+def prepare_style(style, random_style, output_dir):
     style_image = Image.open(style)
 
     if random_style:
         style_image = utils.random_crop_image(style_image)
         style_image.save('%s/style.png' % output_dir)
 
-    content_image = Image.open(content)
-
     style_tensor = utils.image_to_tensor(style_image, DO_CUDA)
+    return style_tensor
+
+
+def prepare_content(content):
+    content_image = Image.open(content)
     content_tensor = utils.image_to_tensor(content_image, DO_CUDA)
+    return content_tensor
 
-    o_width = content_image.size[0]
-    o_height = content_image.size[1]
-    opt_image = Image.new("RGB", (o_width, o_height), 255)
-    random_grid = map(lambda x: (
-            int(random.random() * 256),
-            int(random.random() * 256),
-            int(random.random() * 256)
-        ), [0] * o_width * o_height)
-    opt_image.putdata(random_grid)
-    opt_tensor = utils.image_to_tensor(opt_image, DO_CUDA)
-    opt_tensor = Variable(opt_tensor.data.clone(), requires_grad=True)
 
-    # opt_tensor = Variable(content_tensor.data.clone(), requires_grad=True)
+def prepare_opt(clone=None, width=500, height=500):
+    if clone:
+        content_image = Image.open(clone)
+        content_tensor = utils.image_to_tensor(content_image, DO_CUDA)
+        opt_tensor = Variable(content_tensor.data.clone(), requires_grad=True)
+    else:
+        o_width = width
+        o_height = height
+        opt_image = Image.new("RGB", (o_width, o_height), 255)
+        random_grid = map(lambda x: (
+                int(random.random() * 256),
+                int(random.random() * 256),
+                int(random.random() * 256)
+            ), [0] * o_width * o_height)
+        opt_image.putdata(random_grid)
+        opt_tensor = utils.image_to_tensor(opt_image, DO_CUDA)
+        opt_tensor = Variable(opt_tensor.data.clone(), requires_grad=True)
 
-    return content_tensor, style_tensor, opt_tensor
+    return opt_tensor
+
