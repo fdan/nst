@@ -118,7 +118,16 @@ def _doit(opts):
     if content:
         content = utils.get_full_path(content)
 
+    user_style_layers = opts.style_layers
+    if user_style_layers:
+        user_style_layers = [int(x) for x in user_style_layers.split(',')]
+
+    render_name = opts.render_name
+
     output_dir = utils.get_full_path(opts.output_dir)
+    if not output_dir.endswith('/'):
+        output_dir += '/'
+
     temp_dir = '/tmp/nst/%s' % str(uuid.uuid4())[:8:]
     engine = opts.engine
     iterations = opts.iterations
@@ -147,17 +156,19 @@ def _doit(opts):
 
     vgg = prepare_engine(engine)
 
-    # define layers, loss functions, weights and compute optimization targets
-    # style_layers = ['r11', 'r21', 'r31', 'r41', 'r51']
-    # content_layers = ['r42']
-    # loss_layers = style_layers + content_layers
     loss_layers = []
     loss_fns = []
     weights = []
     targets = []
 
     if style:
-        style_layers = ['r11', 'r21', 'r31', 'r41', 'r51']
+        potential_style_layers = ['r11', 'r21', 'r31', 'r41', 'r51']
+
+        if user_style_layers:
+            style_layers = [potential_style_layers[x-1] for x in user_style_layers]
+        else:
+            style_layers = potential_style_layers
+
         loss_layers += style_layers
         style_loss_fns = [entities.GramMSELoss()] * len(style_layers)
         loss_fns += style_loss_fns
@@ -190,7 +201,7 @@ def _doit(opts):
             opt_tensor = prepare_opt(width=content_image.size[0], height=content_image.size[1])
         # use default x and y dimensions
         if style:
-            opt_tensor = prepare_opt()
+            opt_tensor = prepare_opt(height=743, width=1356)
         else:
             raise Exception("Style, content or both must be specified")
 
@@ -305,7 +316,10 @@ def _doit(opts):
     #     print 'rendering:', output_layer
     #     utils.render_image(layer, output_layer)
 
-    output_render = output_dir + '/render.png'
+    output_render_name = render_name or 'render.png'
+    output_render = output_dir + output_render_name
+    print 2, output_render
+    # output_render = output_dir + 'render.png'
     utils.render_image(opt_tensor, output_render)
 
     end = timer()
