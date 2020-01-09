@@ -2,3 +2,5 @@
 Models/*
 .ipynb_checkpoints/
 build/
+*.pyc
+*.pth

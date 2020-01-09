@@ -1,6 +1,9 @@
 import os
 
-import tractor.api.author
+try:
+    import tractor.api.author
+except ImportError:
+    pass
 
 
 def get_full_path(filename):
