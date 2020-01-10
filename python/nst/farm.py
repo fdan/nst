@@ -64,7 +64,7 @@ def get_batch_cmd(opts):
     cmd += ['nst']
     cmd += ['--content', content]
     cmd += ['--style', style]
-    cmd += ['--output_dir', output_dir]
+    cmd += ['--output-dir', output_dir]
     cmd += ['--unsafe', unsafe]
 
     if iterations:
