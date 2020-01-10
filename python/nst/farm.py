@@ -31,6 +31,7 @@ def doit(opts):
 
     job.service = 'Studio'
     job.tier = 'batch'
+    job.atmost = '56'
 
     for cmd in cmds:
         task_name = jobname + '_task'
