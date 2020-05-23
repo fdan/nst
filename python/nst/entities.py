@@ -99,9 +99,6 @@ class GramMatrix(nn.Module):
     def forward(self, input):
         b, c, h, w = input.size()
         F = input.view(b, c, h * w)
-
-        # bmm = batch matrix-matrix product
-        # https://pytorch.org/docs/stable/torch.html?highlight=bmm#torch.bmm
         G = torch.bmm(F, F.transpose(1, 2))
         G.div_(h * w)
         return G

@@ -73,7 +73,7 @@ def random_crop_image(image):
     return image.crop((bbox_left, bbox_upper, bbox_right, bbox_lower))
 
 
-def render_image(tensor, filepath, text=None):
+def tensor_to_image(tensor):
     postpa = transforms.Compose([transforms.Lambda(lambda x: x.mul_(1. / 255)),
                                  transforms.Normalize(mean=[-0.40760392, -0.45795686, -0.48501961],  # add imagenet mean
                                                       std=[1, 1, 1]),
@@ -87,13 +87,44 @@ def render_image(tensor, filepath, text=None):
     t[t > 1] = 1
     t[t < 0] = 0
     out_img = postpb(t)
+    return out_img
 
+
+def layer_to_image(tensor):
+
+    s = tensor.size()[-1]
+    t_ = torch.empty(1, 3, s, s)
+    t_[0][0] = tensor
+    t_[0][1] = tensor
+    t_[0][2] = tensor
+
+
+    postpa = transforms.Compose([transforms.Lambda(lambda x: x.mul_(1. / 255)),
+                                 transforms.Lambda(lambda x: x[torch.LongTensor([2, 1, 0])]),  # turn to RGB
+                                 ])
+
+    # what's this do?
+    postpb = transforms.Compose([transforms.ToPILImage()])
+
+    t = postpa(t.data[0].cpu().squeeze())
+    t[t > 1] = 1
+    t[t < 0] = 0
+    out_img = postpb(t)
+    return out_img
+
+
+def annotate_image(image, text):
+    draw = ImageDraw.Draw(image)
+    font = ImageFont.truetype('/usr/share/fonts/dejavu/DejaVuSansMono.ttf', 30)
+    draw.text((0, 0), text, (255, 255, 255), font=font)
+    return image
+
+
+def render_image(tensor, filepath, text=None):
+
+    out_img = tensor_to_image(tensor)
     if text:
-        # do annotation
-        draw = ImageDraw.Draw(out_img)
-        font = ImageFont.truetype('/usr/share/fonts/dejavu/DejaVuSansMono.ttf', 30)
-        draw.text((0, 0), text, (255, 255, 255), font=font)
-
+        annotate_image(out_img, text)
     out_img.save(filepath)
 
 
