@@ -8,13 +8,14 @@ from timeit import default_timer as timer
 import memory_profiler
 
 import torch
-from torch.autograd import Variable # deprecated - use Tensor
+from torch.autograd import Variable  # deprecated - use Tensor
 import torch.nn as nn
 from torch import optim
 
 from PIL import Image
 
 import matplotlib
+
 matplotlib.use('Agg')
 
 from . import entities
@@ -113,7 +114,7 @@ def _doit(opts):
 
     utils.graph_loss(style_imager.loss_graph, output_dir)
 
-    duration = "%.02f seconds" % float(end-start)
+    duration = "%.02f seconds" % float(end - start)
     log('completed\n')
     log("duration: %s" % duration)
     log_filepath = output_dir + '/log.txt'
@@ -301,7 +302,7 @@ class StyleImager(object):
                     msg += 'memory used: %s of %s' % (max_mem_cached, TOTAL_GPU_MEMORY)
                 else:
                     mem_usage = memory_profiler.memory_usage(proc=-1, interval=0.1, timeout=0.1)
-                    msg += 'memory used: %.02f of %s Gb' % (mem_usage[0]/1000, TOTAL_SYSTEM_MEMORY/1000000000)
+                    msg += 'memory used: %.02f of %s Gb' % (mem_usage[0] / 1000, TOTAL_SYSTEM_MEMORY / 1000000000)
 
                 log(msg)
             return loss
@@ -317,151 +318,7 @@ class StyleImager(object):
             while current_loss[0] > int(self.max_loss):
                 optimizer.step(closure)
 
-        # for layer in layer_tensors[0]:
-        #     # print dir(layer)
-        #     layer_ind = layer_tensors[0].index(layer)
-        #     print 'layer %s size: %s dim: %s' % (layer_ind, layer.size(), layer.dim())
-        #     output_layer = output_dir + 'layer_%s.png' % layer_tensors[0].index(layer)
-        #     print 'rendering:', output_layer
-        #     utils.render_image(layer, output_layer)
-
         return opt_tensor
-
-
-class StyleOptimiser(object):
-
-    def __init__(self, styled_image=None, content_image=None):
-        self.iterations = 500
-        self.styled_image = styled_image
-        self.content_image = content_image
-        self.output_dir = None
-        self.engine = 'gpu'
-        self.unsafe = False
-        self.progressive = False
-        self.max_loss = None
-        self.loss_graph = ([], [])
-        self.style_layers = ['r11', 'r21', 'r31', 'r41', 'r51']
-
-    def generate_image(self):
-        tensor = self.generate_tensor()
-        return utils.tensor_to_image(tensor)
-
-    def generate_tensor(self):
-
-        vgg = prepare_engine(self.engine)
-
-        loss_layers = []
-        loss_fns = []
-        weights = []
-        targets = []
-        masks = []
-
-        # style_image will be the thing we optimise
-        content_image = Image.open(self.content_image)
-        styled_image = Image.open(self.styled_image)
-        opt_tensor = prepare_opt(width=content_image.size[0], height=content_image.size[1])
-
-        # what do we want from the styled image?
-        # how is this gonna work?
-        # we take the content image, opt/noise image (style), perform 100 iterations on it to obtain
-        # a styled image
-
-        # opt image is style image - move to closure?
-        # loss_layers += self.style_layers
-        # style_loss_fns = [entities.GramMSELoss()] * len(self.style_layers)
-        # loss_fns += style_loss_fns
-        # style_weights = [1e3 / n ** 2 for n in [64, 128, 256, 512, 512]]
-        # weights += style_weights
-        # style_tensor = prepare_style(self.style_image, self.random_style, self.output_dir)
-        # style_targets = [entities.GramMatrix()(A).detach() for A in vgg(style_tensor, self.style_layers)]
-        # targets += style_targets
-
-        # content
-        content_layers = ['r42']
-        content_masks = [torch.Tensor(0)]
-        masks += content_masks
-        loss_layers += content_layers
-        content_loss_fns = [nn.MSELoss()]
-        loss_fns += content_loss_fns
-        content_weights = [1.0]
-        weights += content_weights
-        content_tensor = prepare_content(self.content_image)
-        content_targets = [A.detach() for A in vgg(content_tensor, content_layers)]
-        targets += content_targets
-
-        # styled
-        styled_layers = ['r42']
-        styled_masks = [torch.Tensor(0)]
-        masks += styled_masks
-        loss_layers += styled_layers
-        styled_loss_fns = [nn.MSELoss()]
-        loss_fns += styled_loss_fns
-        styled_weights = [1.0]
-        weights += styled_weights
-        styled_tensor = prepare_content(self.styled_image)
-        styled_targets = [A.detach() for A in vgg(styled_tensor, styled_layers)]
-        targets += styled_targets
-
-        if DO_CUDA:
-            loss_fns = [loss_fn.cuda() for loss_fn in loss_fns]
-
-        show_iter = 20
-        optimizer = optim.LBFGS([opt_tensor], max_iter=int(self.iterations))
-        n_iter = [1]
-        current_loss = [9999999]
-        loss_graph = ([], [])
-        layer_tensors = [0]
-
-        def closure():
-
-            if self.engine == 'gpu':
-                if not self.unsafe:
-                    # pytorch may not be the only process using GPU ram.  Be a good GPU memory citizen
-                    # by checking, and abort if a treshold is met.  Opt out via --unsafe flag.
-                    smi_mem_used = ['nvidia-smi', '--query-gpu=memory.free', '--format=csv,noheader,nounits']
-                    used_gpu_memory = float(subprocess.check_output(smi_mem_used).rstrip('\n'))
-
-                    percent_gpu_usage = used_gpu_memory / TOTAL_GPU_MEMORY * 100
-                    if percent_gpu_usage > MAX_GPU_RAM_USAGE:
-                        raise RuntimeError("Ran out of GPU memory")
-
-            optimizer.zero_grad()
-
-            output_tensors = vgg(opt_tensor, loss_layers)
-
-            layer_tensors[0] = []
-
-            layer_losses = []
-
-            for counter, tensor in enumerate(output_tensors):
-                w = weights[counter]
-                l = loss_fns[counter](tensor, targets[counter], masks[counter])
-                weighted_loss = w * l
-                layer_losses.append(weighted_loss)
-
-            loss = sum(layer_losses)
-            loss.backward()
-            nice_loss = '{:,.0f}'.format(loss.item())
-
-            current_loss[0] = loss.item()
-            n_iter[0] += 1
-
-            if n_iter[0] % show_iter == (show_iter - 1):
-                msg = ''
-                msg += 'Iteration: %d, ' % (n_iter[0])
-                msg += 'loss: %s, ' % (nice_loss)
-                log(msg)
-            return loss
-
-        max_iter = int(self.iterations)
-        log('')
-        while n_iter[0] <= max_iter:
-            optimizer.step(closure)
-        log('')
-
-        return opt_tensor
-
-
 
 
 def prepare_engine(engine):
@@ -476,7 +333,7 @@ def prepare_engine(engine):
 
     if engine == 'gpu':
         global TOTAL_GPU_MEMORY
-        
+
         if torch.cuda.is_available():
             DO_CUDA = True
             smi_mem_total = ['nvidia-smi', '--query-gpu=memory.total', '--format=csv,noheader,nounits']
@@ -490,7 +347,7 @@ def prepare_engine(engine):
 
     elif engine == 'cpu':
         global TOTAL_SYSTEM_MEMORY
-        
+
         DO_CUDA = False
         from psutil import virtual_memory
         TOTAL_SYSTEM_MEMORY = virtual_memory().total
@@ -498,8 +355,8 @@ def prepare_engine(engine):
 
     else:
         msg = "invalid arg for engine: valid options are cpu, gpu"
-        raise RuntimeError(msg) 
-    
+        raise RuntimeError(msg)
+
     return vgg
 
 
@@ -530,10 +387,10 @@ def prepare_opt(clone=None, width=500, height=500):
         o_height = height
         opt_image = Image.new("RGB", (o_width, o_height), 255)
         random_grid = map(lambda x: (
-                int(random.random() * 256),
-                int(random.random() * 256),
-                int(random.random() * 256)
-            ), [0] * o_width * o_height)
+            int(random.random() * 256),
+            int(random.random() * 256),
+            int(random.random() * 256)
+        ), [0] * o_width * o_height)
         opt_image.putdata(random_grid)
         opt_tensor = utils.image_to_tensor(opt_image, DO_CUDA)
         opt_tensor = Variable(opt_tensor.data.clone(), requires_grad=True)

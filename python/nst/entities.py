@@ -109,6 +109,41 @@ class GramMSELoss(nn.Module):
     MSE = Mean Squared Error
     https://pytorch.org/docs/stable/nn.html#mseloss
     """
-    def forward(self, input, target):
+    def forward(self, input, target, mask):
         out = nn.MSELoss()(GramMatrix()(input), target)
         return (out)
+
+
+class MaskedGramMSELoss(nn.Module):
+    """
+    MSE = Mean Squared Error
+    https://pytorch.org/docs/stable/nn.html#mseloss
+    """
+    def forward(self, input, target, mask):
+        b, c, w, h = input.size()
+
+        mask_x, mask_y = mask.size()
+        # mask_area = mask_x * mask_y
+        # mask_weight = mask_area / mask.sum()
+        mask_weight = mask_x * mask_y / mask.sum()
+
+        # print 123, mask_weight
+
+        masked_input = input.clone()
+        for i in range(0, c):
+            masked_input[0][i] *= mask
+
+        # masked_input = masked_input.div_(100)
+        masked_input = masked_input * mask_weight
+        input_gram = GramMatrix()(masked_input)
+        out = nn.MSELoss()(input_gram, target)
+        return (out)
+
+
+class MaskedMSELoss(nn.Module):
+
+    def forward(self, input, target, mask):
+        out = nn.MSELoss()(input, target)
+        return out
+
+
