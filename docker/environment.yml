@@ -1,0 +1,10 @@
+name: pytorch
+channels:
+  - anaconda
+dependencies:
+  - pytorch=1.1.0
+  - jupyterlab
+  - matplotlib
+  - torchvision
+  - memory_profiler
+  - python=3

@@ -1,0 +1,7 @@
+
+# tag an ID
+sudo docker tag cea8f0a2848d ffdanff/pytorch-oiio:latest
+
+
+# push to dockerhub
+docker push ffdanff/pytorch-oiio:latest
