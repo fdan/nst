@@ -33,6 +33,7 @@ TOTAL_SYSTEM_MEMORY = 1
 
 
 def log(msg):
+    return
     global LOG
     LOG += msg + '\n'
     print msg
@@ -140,7 +141,8 @@ class StyleImager(object):
         self.progressive = False
         self.max_loss = None
         self.loss_graph = ([], [])
-        self.style_layers = ['r11', 'r21', 'r31', 'r41', 'r51']
+        # self.style_layers = ['r11', 'r21', 'r31', 'r41', 'r51']
+        self.style_layers = ['r31']
 
     def generate_image(self):
         tensor = self.generate_tensor()

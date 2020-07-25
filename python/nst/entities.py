@@ -122,19 +122,24 @@ class MaskedGramMSELoss(nn.Module):
     def forward(self, input, target, mask):
         b, c, w, h = input.size()
 
+        # note: we're assuming the mask is the same size
         mask_x, mask_y = mask.size()
-        # mask_area = mask_x * mask_y
-        # mask_weight = mask_area / mask.sum()
-        mask_weight = mask_x * mask_y / mask.sum()
 
-        # print 123, mask_weight
+        # determine the "presence" of the mask, by getting the ration
+        # of filled in pixels
+        mask_area = mask_x * mask_y
+        mask_weight = mask_area / mask.sum()
 
         masked_input = input.clone()
         for i in range(0, c):
             masked_input[0][i] *= mask
 
-        # masked_input = masked_input.div_(100)
+        # why do we do this?
+        masked_input = masked_input.div_(5)
+
+        # what is this?
         masked_input = masked_input * mask_weight
+
         input_gram = GramMatrix()(masked_input)
         out = nn.MSELoss()(input_gram, target)
         return (out)
