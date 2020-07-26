@@ -4,3 +4,4 @@ Models/*
 build/
 *.pyc
 *.pth
+*~

@@ -28,15 +28,15 @@ def main():
     # return
 
     if opts.iterations and opts.loss:
-        print 'iterations and max_loss cannot both be specified'
+        print('iterations and max_loss cannot both be specified')
         return
 
     if not opts.output_dir:
-        print "no output was specified"
+        print("no output was specified")
         return
 
     if len(opts.output_dir.split('.')) > 1:
-        print "output_dir should not contain extensions"
+        print("output_dir should not contain extensions")
         return
 
     if not opts.farm:

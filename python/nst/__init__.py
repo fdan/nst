@@ -33,17 +33,16 @@ TOTAL_SYSTEM_MEMORY = 1
 
 
 def log(msg):
-    return
     global LOG
     LOG += msg + '\n'
-    print msg
+    print(msg)
 
 
 def doit(opts):
     try:
         _doit(opts)
     except:
-        print traceback.print_exc()
+        print(traceback.print_exc())
     finally:
         if opts.farm:
             env_cleanup = ['setup-conda-env', '-r']
@@ -169,6 +168,7 @@ class StyleImager(object):
             loss_layers += self.style_layers
 
             if self.style_masks:
+
                 style_masks = []
 
                 for x in self.style_layers:
@@ -240,7 +240,7 @@ class StyleImager(object):
                     # pytorch may not be the only process using GPU ram.  Be a good GPU memory citizen
                     # by checking, and abort if a treshold is met.  Opt out via --unsafe flag.
                     smi_mem_used = ['nvidia-smi', '--query-gpu=memory.free', '--format=csv,noheader,nounits']
-                    used_gpu_memory = float(subprocess.check_output(smi_mem_used).rstrip('\n'))
+                    used_gpu_memory = float(subprocess.check_output(smi_mem_used).rstrip(b'\n'))
 
                     percent_gpu_usage = used_gpu_memory / TOTAL_GPU_MEMORY * 100
                     if percent_gpu_usage > MAX_GPU_RAM_USAGE:
@@ -265,13 +265,13 @@ class StyleImager(object):
                 # layer_image.save()
                 # layer_output_path = output_dir + ''
                 # layer_tensors[0].append(tensor)
-                # print ''
-                # print 'opt_tensor', opt_tensor.size(), opt_tensor.dim()
-                # print counter, 'output_tensor', tensor.size(), tensor.dim()
+                # print('')
+                # print('opt_tensor', opt_tensor.size(), opt_tensor.dim())
+                # print(counter, 'output_tensor', tensor.size(), tensor.dim())
 
                 # if n_iter[0] == int(iterations)-1:
                 #     layer_output = output_dir + 'layer_%s.png' % counter
-                #     print 'rendering'
+                #     print('rendering')
                 #     utils.render_image(opt_tensor, layer_output, 'layer: %s' % counter)
 
                 w = weights[counter]
@@ -320,11 +320,11 @@ class StyleImager(object):
                 optimizer.step(closure)
 
         # for layer in layer_tensors[0]:
-        #     # print dir(layer)
+        #     # print(dir(layer))
         #     layer_ind = layer_tensors[0].index(layer)
-        #     print 'layer %s size: %s dim: %s' % (layer_ind, layer.size(), layer.dim())
+        #     print('layer %s size: %s dim: %s' % (layer_ind, layer.size(), layer.dim()))
         #     output_layer = output_dir + 'layer_%s.png' % layer_tensors[0].index(layer)
-        #     print 'rendering:', output_layer
+        #     print('rendering:', output_layer)
         #     utils.render_image(layer, output_layer)
 
         return opt_tensor
@@ -482,7 +482,7 @@ def prepare_engine(engine):
         if torch.cuda.is_available():
             DO_CUDA = True
             smi_mem_total = ['nvidia-smi', '--query-gpu=memory.total', '--format=csv,noheader,nounits']
-            TOTAL_GPU_MEMORY = float(subprocess.check_output(smi_mem_total).rstrip('\n'))
+            TOTAL_GPU_MEMORY = float(subprocess.check_output(smi_mem_total).rstrip(b'\n'))
             vgg.cuda()
 
             log("using cuda\navailable memory: %.0f Gb" % TOTAL_GPU_MEMORY)

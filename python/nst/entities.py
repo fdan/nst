@@ -49,7 +49,7 @@ class VGG(nn.Module):
         out = {}
 
         out['r11'] = F.relu(self.conv1_1(tensor))
-        # print out['r11'].size(), out['r11'].dim()
+        # print(out['r11'].size(), out['r11'].dim())
         # layer_out = out_path + 'layer_r11.png'
         # utils.render_image(tensor, layer_out)
 

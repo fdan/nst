@@ -39,13 +39,13 @@ def doit(opts):
         task.newCommand(argv=['setup-conda-env', '-i'])
         task.newCommand(argv=cmd)
         # task.newCommand(argv=['setup-conda-env', '-r'])
-        print job, task
+        print(job, task)
 
         job.addChild(task)
 
-    print job.asTcl()
+    print(job.asTcl())
     jobid = job.spool()
-    print 'job sent to farm, id:', jobid
+    print('job sent to farm, id:', jobid)
 
 
 def get_batch_cmd(opts):

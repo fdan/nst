@@ -36,14 +36,14 @@ TOTAL_SYSTEM_MEMORY = 1
 def log(msg):
     global LOG
     LOG += msg + '\n'
-    print msg
+    print(msg)
 
 
 def doit(opts):
     try:
         _doit(opts)
     except:
-        print traceback.print_exc()
+        print(traceback.print_exc())
     finally:
         if opts.farm:
             env_cleanup = ['setup-conda-env', '-r']
@@ -264,13 +264,13 @@ class StyleImager(object):
                 # layer_image.save()
                 # layer_output_path = output_dir + ''
                 # layer_tensors[0].append(tensor)
-                # print ''
-                # print 'opt_tensor', opt_tensor.size(), opt_tensor.dim()
-                # print counter, 'output_tensor', tensor.size(), tensor.dim()
+                # print('')
+                # print('opt_tensor', opt_tensor.size(), opt_tensor.dim())
+                # print(counter, 'output_tensor', tensor.size(), tensor.dim())
 
                 # if n_iter[0] == int(iterations)-1:
                 #     layer_output = output_dir + 'layer_%s.png' % counter
-                #     print 'rendering'
+                #     print('rendering')
                 #     utils.render_image(opt_tensor, layer_output, 'layer: %s' % counter)
 
                 w = weights[counter]
