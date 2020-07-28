@@ -1,0 +1,14 @@
+
+# open a shell from a docker image:
+singularity shell --nv docker://ffdanff/pytorch-oiio:latest
+
+# if done repeatedly, does this use the singularity image?  or re-convert the docker one?
+
+# check how much data singularity uses
+singularity cache list
+
+# execute something in a singularity container
+singularity exec --nv docker://tensorflow/tensorflow:latest-gpu python ./models/tutorials/image/mnist/convolutional.py
+
+# use spython (requires separate install) to convert a dockerfile to a singularity recipe
+spython recipe Dockerfile Singularity
