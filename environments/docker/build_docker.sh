@@ -1,3 +1,3 @@
 #! /usr/bin/bash
 
-sudo docker build -t pytorch-oiio:latest -f Dockerfile .
+sudo docker build -t ffdanff/pytorch-oiio:v02 -f Dockerfile .

@@ -61,3 +61,7 @@ RUN cd /tmp && \
   /usr/local/bin/cmake -DUSE_PYTHON=1 -DOIIO_BUILD_TESTS=0 -DOIIO_BUILD_TOOLS=0 -DPYTHON_VERSION=3.7 -DCMAKE_INSTALL_PREFIX=/opt/conda/envs/pytorch .. && \
   make -j12 && \
   make install -j12
+
+RUN mkdir -p /root/.jupyter/lab/user-settings/@jupyterlab/apputils-extension/
+RUN touch /root/.jupyter/lab/user-settings/@jupyterlab/apputils-extension/themes.jupyterlab-settings
+RUN echo "{\"theme\": \"JupyterLab Dark\"}" >> /root/.jupyter/lab/user-settings/@jupyterlab/apputils-extension/themes.jupyterlab-settings
