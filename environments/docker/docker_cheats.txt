@@ -10,3 +10,6 @@ sudo docker run --gpus all --rm -it -v /home/$USER/git:/workspace/git ffdanff/py
 
 # run jupyter
 sudo docker run --gpus all --rm -it -p 8888:8888 -v /home/$USER/git:/workspace/git --net=host ffdanff/pytorch-oiio:latest jupyter lab --allow-root
+
+# cli login to docker
+docker login --username=xxxxx --password=xxxxxxx
