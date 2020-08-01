@@ -13,3 +13,11 @@ sudo docker run --gpus all --rm -it -p 8888:8888 -v /home/$USER/git:/workspace/g
 
 # cli login to docker
 docker login --username=xxxxx --password=xxxxxxx
+
+# non-sudo usage of docker (necessary for pycharm integration)
+sudo groupadd docker
+sudo usermod -aG docker $USER
+sudo service docker stop
+# log out / in
+sudo service docker start
+

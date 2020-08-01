@@ -62,6 +62,14 @@ RUN cd /tmp && \
   make -j12 && \
   make install -j12
 
-RUN mkdir -p /root/.jupyter/lab/user-settings/@jupyterlab/apputils-extension/
-RUN touch /root/.jupyter/lab/user-settings/@jupyterlab/apputils-extension/themes.jupyterlab-settings
-RUN echo "{\"theme\": \"JupyterLab Dark\"}" >> /root/.jupyter/lab/user-settings/@jupyterlab/apputils-extension/themes.jupyterlab-settings
+RUN mkdir -p /.local/share/jupyter/runtime/
+RUN chmod -R 777 /.local
+RUN mkdir -p /.jupyter/lab/user-settings/@jupyterlab/apputils-extension/
+RUN chmod -R 777 /.jupyter
+RUN touch /.jupyter/lab/user-settings/@jupyterlab/apputils-extension/themes.jupyterlab-settings
+RUN echo "{\"theme\": \"JupyterLab Dark\"}" >> /.jupyter/lab/user-settings/@jupyterlab/apputils-extension/themes.jupyterlab-settings
+
+# set env vars for nst
+ENV PATH /workspace/git/nst/bin:$PATH
+ENV PYTHONPATH /workspace/git/nst/python:$PYTHONPATH
+ENV NST_VGG_MODEL /workspace/git/nst/bin/Models/vgg_conv.pth

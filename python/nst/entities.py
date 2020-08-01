@@ -128,17 +128,29 @@ class MaskedGramMSELoss(nn.Module):
         # determine the "presence" of the mask, by getting the ration
         # of filled in pixels
         mask_area = mask_x * mask_y
-        mask_weight = mask_area / mask.sum()
+
+        mask_weight = mask.sum() / mask_area
+
+        # mask_weight = mask_area / mask.sum()
+        # print("mask_area", mask_area)
+        # print("mask sum", mask.sum())
+        # print("mask_weight", mask_weight)
 
         masked_input = input.clone()
+
+        # apply the mask to each channel in the activations tensor for a layer
         for i in range(0, c):
-            masked_input[0][i] *= mask
+            masked_input[0][i] *= mask / mask_weight
 
         # why do we do this?
-        masked_input = masked_input.div_(5)
+        # masked_input = masked_input.div_(5)
 
         # what is this?
-        masked_input = masked_input * mask_weight
+        # masked_input = masked_input * mask_weight
+
+        # masked_input = masked_input * 2.2
+
+        # masked_input = masked_input * mask_weight.div(2.0)
 
         input_gram = GramMatrix()(masked_input)
         out = nn.MSELoss()(input_gram, target)

@@ -33,6 +33,7 @@ TOTAL_SYSTEM_MEMORY = 1
 
 
 def log(msg):
+    return
     global LOG
     LOG += msg + '\n'
     print(msg)
@@ -168,6 +169,7 @@ class StyleImager(object):
             loss_layers += self.style_layers
 
             if self.style_masks:
+                style_loss_fns = [entities.MaskedGramMSELoss()] * len(self.style_layers)
 
                 style_masks = []
 
@@ -180,12 +182,15 @@ class StyleImager(object):
                     style_masks.append(mask_tensor)
 
             else:
+                style_loss_fns = [entities.GramMSELoss()] * len(self.style_layers)
+
                 style_masks = [None for x in self.style_layers]
 
             masks += style_masks
 
             # style_loss_fns = [entities.GramMSELoss()] * len(style_layers)
-            style_loss_fns = [entities.MaskedGramMSELoss()] * len(self.style_layers)
+            # style_loss_fns = [entities.MaskedGramMSELoss()] * len(self.style_layers)
+
             loss_fns += style_loss_fns
             style_weights = [1e3 / n ** 2 for n in [64, 128, 256, 512, 512]]
             weights += style_weights
