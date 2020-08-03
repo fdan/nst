@@ -1,3 +1,5 @@
+import math
+
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -122,35 +124,14 @@ class MaskedGramMSELoss(nn.Module):
     def forward(self, input, target, mask):
         b, c, w, h = input.size()
 
-        # note: we're assuming the mask is the same size
-        mask_x, mask_y = mask.size()
-
-        # determine the "presence" of the mask, by getting the ration
-        # of filled in pixels
-        mask_area = mask_x * mask_y
-
-        mask_weight = mask.sum() / mask_area
-
-        # mask_weight = mask_area / mask.sum()
-        # print("mask_area", mask_area)
-        # print("mask sum", mask.sum())
-        # print("mask_weight", mask_weight)
+        # # normalise the mask
+        mean_square = torch.sqrt(mask.mean())
+        weighted_mask = mask.div_(mean_square)
 
         masked_input = input.clone()
 
-        # apply the mask to each channel in the activations tensor for a layer
         for i in range(0, c):
-            masked_input[0][i] *= mask / mask_weight
-
-        # why do we do this?
-        # masked_input = masked_input.div_(5)
-
-        # what is this?
-        # masked_input = masked_input * mask_weight
-
-        # masked_input = masked_input * 2.2
-
-        # masked_input = masked_input * mask_weight.div(2.0)
+            masked_input[0][i] *= weighted_mask
 
         input_gram = GramMatrix()(masked_input)
         out = nn.MSELoss()(input_gram, target)
@@ -160,6 +141,16 @@ class MaskedGramMSELoss(nn.Module):
 class MaskedMSELoss(nn.Module):
 
     def forward(self, input, target, mask):
+
+        # print(1111, mask.size())
+        # print(2222, input.size())
+
+        # b, c, w, h = input.size()
+        # masked_input = input.clone()
+        # for i in range(0, c):
+        #     masked_input[0][i] *= mask
+        # out = nn.MSELoss()(masked_input, target)
+
         out = nn.MSELoss()(input, target)
         return out
 

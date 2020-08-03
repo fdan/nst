@@ -1,3 +1,4 @@
+import sys
 import random
 import traceback
 import uuid
@@ -33,7 +34,6 @@ TOTAL_SYSTEM_MEMORY = 1
 
 
 def log(msg):
-    return
     global LOG
     LOG += msg + '\n'
     print(msg)
@@ -128,8 +128,8 @@ def _doit(opts):
 
 class StyleImager(object):
 
-    def __init__(self, style_image=None, content_image=None, style_masks={}):
-        self.style_masks = style_masks
+    def __init__(self, style_image=None, content_image=None, masks={}):
+        self.masks = masks
         self.iterations = 500
         self.style_image = style_image
         self.content_image = content_image
@@ -168,13 +168,13 @@ class StyleImager(object):
             # style_layers = ['r31']
             loss_layers += self.style_layers
 
-            if self.style_masks:
+            if self.masks:
                 style_loss_fns = [entities.MaskedGramMSELoss()] * len(self.style_layers)
 
                 style_masks = []
 
                 for x in self.style_layers:
-                    mask = oiio.ImageBuf(self.style_masks[x])
+                    mask = oiio.ImageBuf(self.masks[x])
                     mask_np = mask.get_pixels()
                     x, y, z = mask_np.shape
                     mask_np = mask_np[:, :, :1].reshape(x, y)
@@ -193,6 +193,7 @@ class StyleImager(object):
 
             loss_fns += style_loss_fns
             style_weights = [1e3 / n ** 2 for n in [64, 128, 256, 512, 512]]
+
             weights += style_weights
             style_tensor = prepare_style(self.style_image, self.random_style, self.output_dir)
             style_targets = [entities.GramMatrix()(A).detach() for A in vgg(style_tensor, self.style_layers)]
@@ -200,8 +201,19 @@ class StyleImager(object):
 
         if self.content_image:
             content_layers = ['r42']
+
+            # mask = oiio.ImageBuf(self.masks['r42'])
+            # mask_np = mask.get_pixels()
+            # x, y, z = mask_np.shape
+            # mask_np = mask_np[:, :, :1].reshape(x, y)
+            # mask_tensor = torch.Tensor(mask_np).detach().to(torch.device("cuda:0"))
+            # masks.append(mask_tensor)
+
             content_masks = [torch.Tensor(0)]
             masks += content_masks
+
+
+
             loss_layers += content_layers
             # content_loss_fns = [nn.MSELoss()]
             content_loss_fns = [entities.MaskedMSELoss()]
@@ -223,7 +235,7 @@ class StyleImager(object):
                 content_image = Image.open(self.content_image)
                 opt_tensor = prepare_opt(width=content_image.size[0], height=content_image.size[1])
             # use default x and y dimensions
-            if self.style_image:
+            elif self.style_image:
                 opt_tensor = prepare_opt(height=743, width=1356)
             else:
                 raise Exception("Style, content or both must be specified")
@@ -405,6 +417,11 @@ def prepare_opt(clone=None, width=500, height=500):
                 int(random.random() * 256),
                 int(random.random() * 256)
             ), [0] * o_width * o_height)
+
+        # handle different map behaviour for python3
+        if sys.version[0] == '3':
+            random_grid = list(random_grid)
+
         opt_image.putdata(random_grid)
         opt_tensor = utils.image_to_tensor(opt_image, DO_CUDA)
         opt_tensor = Variable(opt_tensor.data.clone(), requires_grad=True)
