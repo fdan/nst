@@ -8,9 +8,30 @@ from . import utils
 
 # vgg definition that conveniently let's you grab the outputs from any layer
 class VGG(nn.Module):
+
+    layers = {}
+    layers['r11'] = {'channels': 64, 'x': 512}
+    layers['r12'] = {'channels': 64, 'x': 512}
+    layers['r21'] = {'channels': 128, 'x': 256}
+    layers['r22'] = {'channels': 128, 'x': 256}
+    layers['r31'] = {'channels': 256, 'x': 128}
+    layers['r32'] = {'channels': 256, 'x': 128}
+    layers['r34'] = {'channels': 256, 'x': 128}
+    layers['r41'] = {'channels': 512, 'x': 64}
+    layers['r42'] = {'channels': 512, 'x': 64}
+    layers['r43'] = {'channels': 512, 'x': 64}
+    layers['r44'] = {'channels': 512, 'x': 64}
+    layers['r51'] = {'channels': 512, 'x': 32}
+    layers['r52'] = {'channels': 512, 'x': 32}
+    layers['r53'] = {'channels': 512, 'x': 32}
+    layers['r54'] = {'channels': 512, 'x': 32}
+
     def __init__(self, pool='max'):
         super(VGG, self).__init__()
         # vgg modules
+
+        # note: first two args of Conv2d are in channels, out channels
+        # where is the x and y dimensions of each filter defined?
         self.conv1_1 = nn.Conv2d(3, 64, kernel_size=3, padding=1)
         self.conv1_2 = nn.Conv2d(64, 64, kernel_size=3, padding=1)
         self.conv2_1 = nn.Conv2d(64, 128, kernel_size=3, padding=1)
@@ -123,33 +144,20 @@ class MaskedGramMSELoss(nn.Module):
     """
     def forward(self, input, target, mask):
         b, c, w, h = input.size()
-
-        # # normalise the mask
-        mean_square = torch.sqrt(mask.mean())
-        weighted_mask = mask.div_(mean_square)
-
         masked_input = input.clone()
 
+        # doing this every iteration is quite performance intensive:
         for i in range(0, c):
-            masked_input[0][i] *= weighted_mask
+            masked_input[0][i] *= mask
 
         input_gram = GramMatrix()(masked_input)
         out = nn.MSELoss()(input_gram, target)
         return (out)
 
 
-class MaskedMSELoss(nn.Module):
+class MSELoss(nn.Module):
 
     def forward(self, input, target, mask):
-
-        # print(1111, mask.size())
-        # print(2222, input.size())
-
-        # b, c, w, h = input.size()
-        # masked_input = input.clone()
-        # for i in range(0, c):
-        #     masked_input[0][i] *= mask
-        # out = nn.MSELoss()(masked_input, target)
 
         out = nn.MSELoss()(input, target)
         return out

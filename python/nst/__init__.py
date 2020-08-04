@@ -61,9 +61,9 @@ def _doit(opts):
     if content:
         content = utils.get_full_path(content)
 
-    user_style_layers = opts.style_layers
-    if user_style_layers:
-        user_style_layers = [int(x) for x in user_style_layers.split(',')]
+    # user_style_layers = opts.style_layers
+    # if user_style_layers:
+    #     user_style_layers = [int(x) for x in user_style_layers.split(',')]
 
     render_name = opts.render_name
 
@@ -131,6 +131,7 @@ class StyleImager(object):
     def __init__(self, style_image=None, content_image=None, masks={}):
         self.masks = masks
         self.iterations = 500
+        self.log_iterations = 20
         self.style_image = style_image
         self.content_image = content_image
         self.random_style = False
@@ -141,8 +142,8 @@ class StyleImager(object):
         self.progressive = False
         self.max_loss = None
         self.loss_graph = ([], [])
-        # self.style_layers = ['r11', 'r21', 'r31', 'r41', 'r51']
-        self.style_layers = ['r31']
+        self.style_layers = ['r11', 'r21', 'r31', 'r41', 'r51']
+        self.content_layers = ['r41']
 
     def generate_image(self):
         tensor = self.generate_tensor()
@@ -158,70 +159,18 @@ class StyleImager(object):
         targets = []
         masks = []
 
-        if self.style_image:
-            # potential_style_layers = ['r11', 'r21', 'r31', 'r41', 'r51']
-            # if self.style_layers:
-            #     style_layers = [potential_style_layers[x-1] for x in self.style_layers]
-            # else:
-            #     style_layers = potential_style_layers
-            # style_layers = ['r11', 'r21', 'r31', 'r41', 'r51']
-            # style_layers = ['r31']
-            loss_layers += self.style_layers
-
-            if self.masks:
-                style_loss_fns = [entities.MaskedGramMSELoss()] * len(self.style_layers)
-
-                style_masks = []
-
-                for x in self.style_layers:
-                    mask = oiio.ImageBuf(self.masks[x])
-                    mask_np = mask.get_pixels()
-                    x, y, z = mask_np.shape
-                    mask_np = mask_np[:, :, :1].reshape(x, y)
-                    mask_tensor = torch.Tensor(mask_np).detach().to(torch.device("cuda:0"))
-                    style_masks.append(mask_tensor)
-
-            else:
-                style_loss_fns = [entities.GramMSELoss()] * len(self.style_layers)
-
-                style_masks = [None for x in self.style_layers]
-
-            masks += style_masks
-
-            # style_loss_fns = [entities.GramMSELoss()] * len(style_layers)
-            # style_loss_fns = [entities.MaskedGramMSELoss()] * len(self.style_layers)
-
-            loss_fns += style_loss_fns
-            style_weights = [1e3 / n ** 2 for n in [64, 128, 256, 512, 512]]
-
-            weights += style_weights
-            style_tensor = prepare_style(self.style_image, self.random_style, self.output_dir)
-            style_targets = [entities.GramMatrix()(A).detach() for A in vgg(style_tensor, self.style_layers)]
-            targets += style_targets
-
         if self.content_image:
-            content_layers = ['r42']
-
-            # mask = oiio.ImageBuf(self.masks['r42'])
-            # mask_np = mask.get_pixels()
-            # x, y, z = mask_np.shape
-            # mask_np = mask_np[:, :, :1].reshape(x, y)
-            # mask_tensor = torch.Tensor(mask_np).detach().to(torch.device("cuda:0"))
-            # masks.append(mask_tensor)
-
+            content_layers = self.content_layers
             content_masks = [torch.Tensor(0)]
             masks += content_masks
-
-
-
             loss_layers += content_layers
-            # content_loss_fns = [nn.MSELoss()]
-            content_loss_fns = [entities.MaskedMSELoss()]
+            content_loss_fns = [entities.MSELoss()] # not using mask, but need to handle extra arg...
             loss_fns += content_loss_fns
             content_weights = [1.0]
             weights += content_weights
             content_tensor = prepare_content(self.content_image)
-            content_targets = [A.detach() for A in vgg(content_tensor, content_layers)]
+            content_activations = vgg(content_tensor, content_layers)
+            content_targets = [A.detach() for A in content_activations]
             targets += content_targets
 
         # use a clone of the content image as the optimisation image
@@ -240,10 +189,57 @@ class StyleImager(object):
             else:
                 raise Exception("Style, content or both must be specified")
 
+        if self.style_image:
+            loss_layers += self.style_layers
+
+            style_tensor = prepare_style(self.style_image, self.random_style, self.output_dir)
+            style_activations = [x for x in vgg(style_tensor, self.style_layers)]
+
+            if self.masks:
+                style_loss_fns = [entities.MaskedGramMSELoss()] * len(self.style_layers)
+                style_masks = []
+
+                for sl in self.style_layers:
+
+                    # determine the target dimensions of the layer mask and resize
+                    opt_x, opt_y = opt_tensor.size()[2], opt_tensor.size()[3]
+                    opt_ratio = opt_x / opt_y
+
+                    x = entities.VGG.layers[sl]['x']
+                    y = int(x / opt_ratio)
+
+                    mask = oiio.ImageBuf(self.masks[sl])
+
+                    # oiio axis are flipped:
+                    scaled_mask = oiio.ImageBufAlgo.resize(mask, roi=oiio.ROI(0, y, 0, x, 0, 1, 0, 3))
+                    mask_np = scaled_mask.get_pixels()
+
+                    # get mask tensor
+                    x, y, z = mask_np.shape
+                    mask_np = mask_np[:, :, :1].reshape(x, y)
+                    mask_tensor = torch.Tensor(mask_np).detach().to(torch.device("cuda:0"))
+
+                    # normalise the mask by dividing by mean square
+                    mean_square = torch.sqrt(mask_tensor.mean())
+                    weighted_mask_tensor = torch.div(mask_tensor, mean_square)
+
+                    style_masks.append(weighted_mask_tensor)
+
+            else:
+                style_loss_fns = [entities.GramMSELoss()] * len(self.style_layers)
+                style_masks = [None for x in self.style_layers]
+
+            masks += style_masks
+            loss_fns += style_loss_fns
+            style_weights = [1e3 / n ** 2 for n in [64, 128, 256, 512, 512]]
+            weights += style_weights
+            style_targets = [entities.GramMatrix()(A).detach() for A in style_activations]
+            targets += style_targets
+
         if DO_CUDA:
             loss_fns = [loss_fn.cuda() for loss_fn in loss_fns]
 
-        show_iter = 20
+        show_iter = self.log_iterations
         optimizer = optim.LBFGS([opt_tensor], max_iter=int(self.iterations))
         n_iter = [1]
         current_loss = [9999999]
@@ -265,19 +261,12 @@ class StyleImager(object):
 
             optimizer.zero_grad()
 
-            # The __call__ method on the class seems to actually execute the foward method
-            # The args given to vgg.__call__() are passed to vgg.forward()
-            # The output is a list of tensors [torch.Tensor].
             output_tensors = vgg(opt_tensor, loss_layers)
-
-            # at this point, opt_tensor has not been changed...
-
             layer_tensors[0] = []
-
             layer_losses = []
 
             for counter, tensor in enumerate(output_tensors):
-                # this is where you would output the image for each layer btw...
+                # this is where you would output the image for each layer...
                 # layer_image = utils.postp(tensor)
                 # layer_image.save()
                 # layer_output_path = output_dir + ''
@@ -285,7 +274,6 @@ class StyleImager(object):
                 # print('')
                 # print('opt_tensor', opt_tensor.size(), opt_tensor.dim())
                 # print(counter, 'output_tensor', tensor.size(), tensor.dim())
-
                 # if n_iter[0] == int(iterations)-1:
                 #     layer_output = output_dir + 'layer_%s.png' % counter
                 #     print('rendering')
@@ -336,6 +324,7 @@ class StyleImager(object):
             while current_loss[0] > int(self.max_loss):
                 optimizer.step(closure)
 
+        # render to disk...disabled for now
         # for layer in layer_tensors[0]:
         #     # print(dir(layer))
         #     layer_ind = layer_tensors[0].index(layer)
@@ -366,7 +355,7 @@ def prepare_engine(engine):
             TOTAL_GPU_MEMORY = float(subprocess.check_output(smi_mem_total).rstrip(b'\n'))
             vgg.cuda()
 
-            log("using cuda\navailable memory: %.0f Gb" % TOTAL_GPU_MEMORY)
+            # log("using cuda\navailable memory: %.0f Gb" % TOTAL_GPU_MEMORY)
         else:
             msg = "gpu mode was requested, but cuda is not available"
             raise RuntimeError(msg)
@@ -377,7 +366,7 @@ def prepare_engine(engine):
         DO_CUDA = False
         from psutil import virtual_memory
         TOTAL_SYSTEM_MEMORY = virtual_memory().total
-        log("using cpu\navailable memory: %s Gb" % (TOTAL_SYSTEM_MEMORY / 1000000000))
+        # log("using cpu\navailable memory: %s Gb" % (TOTAL_SYSTEM_MEMORY / 1000000000))
 
     else:
         msg = "invalid arg for engine: valid options are cpu, gpu"
