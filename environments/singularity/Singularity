@@ -66,6 +66,9 @@ cd build && \
 /usr/local/bin/cmake -DUSE_PYTHON=1 -DOIIO_BUILD_TESTS=0 -DOIIO_BUILD_TOOLS=0 -DPYTHON_VERSION=3.7 -DCMAKE_INSTALL_PREFIX=/opt/conda/envs/pytorch .. && \
 make -j12 && \
 make install -j12
+
+pip install protobuf
+
 %environment
 export LANG=C.UTF-8
 export LC_ALL=C.UTF-8

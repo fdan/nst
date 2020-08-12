@@ -62,6 +62,9 @@ RUN cd /tmp && \
   make -j12 && \
   make install -j12
 
+#  for nuke-ML-server:
+RUN pip install protobuf
+
 RUN mkdir -p /.local/share/jupyter/runtime/
 RUN chmod -R 777 /.local
 RUN mkdir -p /.jupyter/lab/user-settings/@jupyterlab/apputils-extension/

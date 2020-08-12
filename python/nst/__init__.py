@@ -150,6 +150,7 @@ class StyleImager(object):
         return utils.tensor_to_image(tensor)
 
     def generate_tensor(self):
+        start = timer()
 
         vgg = prepare_engine(self.engine)
 
@@ -323,6 +324,10 @@ class StyleImager(object):
         if self.max_loss:
             while current_loss[0] > int(self.max_loss):
                 optimizer.step(closure)
+
+        end = timer()
+        duration = "%.02f seconds" % float(end - start)
+        log("duration: %s" % duration)
 
         # render to disk...disabled for now
         # for layer in layer_tensors[0]:

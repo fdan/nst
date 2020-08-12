@@ -12,3 +12,6 @@ singularity exec --nv docker://tensorflow/tensorflow:latest-gpu python ./models/
 
 # use spython (requires separate install) to convert a dockerfile to a singularity recipe
 spython recipe Dockerfile Singularity
+
+# build a recipe
+singularity build nuke_ml_server.sif Singularity
