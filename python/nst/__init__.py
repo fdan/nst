@@ -128,7 +128,8 @@ def _doit(opts):
 
 class StyleImager(object):
 
-    def __init__(self, style_image=None, content_image=None, masks={}):
+    def __init__(self, style_image=None, content_image=None, masks={}, frame=0, render_out=None, denoise=False):
+        self.denoise = denoise
         self.masks = masks
         self.iterations = 500
         self.log_iterations = 20
@@ -143,11 +144,28 @@ class StyleImager(object):
         self.max_loss = None
         self.loss_graph = ([], [])
         self.style_layers = ['r11', 'r21', 'r31', 'r41', 'r51']
-        self.content_layers = ['r41']
+        self.content_layers = ['r42']
+        self.frame = frame
+        self.render_out = render_out
+
+        if self.content_image:
+            self.content_image_pil = Image.open(self.content_image)
 
     def generate_image(self):
         tensor = self.generate_tensor()
         return utils.tensor_to_image(tensor)
+
+    def render_to_disk(self):
+        img = self.generate_image()
+        img_path = self.render_out
+
+        t_ = img_path.split('/')
+        t_.pop()
+        d_ = ('/'.join(t_))
+        if not os.path.isdir(d_):
+            os.makedirs(d_)
+
+        img.save(img_path)
 
     def generate_tensor(self):
         start = timer()
@@ -160,19 +178,58 @@ class StyleImager(object):
         targets = []
         masks = []
 
-        if self.content_image:
-            content_layers = self.content_layers
-            content_masks = [torch.Tensor(0)]
-            masks += content_masks
-            loss_layers += content_layers
-            content_loss_fns = [entities.MSELoss()] # not using mask, but need to handle extra arg...
-            loss_fns += content_loss_fns
-            content_weights = [1.0]
-            weights += content_weights
-            content_tensor = prepare_content(self.content_image)
-            content_activations = vgg(content_tensor, content_layers)
-            content_targets = [A.detach() for A in content_activations]
-            targets += content_targets
+        if self.content_image_pil:
+
+            if not self.denoise:
+                content_layers = self.content_layers
+                content_masks = [torch.Tensor(0)]
+                masks += content_masks
+                loss_layers += content_layers
+                content_loss_fns = [entities.MSELoss()] # not using mask, but need to handle extra arg...
+                loss_fns += content_loss_fns
+                content_weights = [1.0]
+                weights += content_weights
+                content_tensor = prepare_content(self.content_image)
+                content_activations = vgg(content_tensor, content_layers)
+                content_targets = [A.detach() for A in content_activations]
+                targets += content_targets
+
+            if self.denoise:
+                content_layers = self.content_layers
+                content_masks = [torch.Tensor(0)]
+                masks += content_masks
+                loss_layers += content_layers
+                content_loss_fns = [entities.MSELoss()] # not using mask, but need to handle extra arg...
+                loss_fns += content_loss_fns
+                content_weights = [1.0]
+                weights += content_weights
+                content_targets = []
+
+                for layer in content_layers:
+                    layer_size = entities.VGG.layers[layer]['channels']
+
+                    b = 1
+                    c = layer_size
+                    w = entities.VGG.layers[layer]['x']
+                    h = entities.VGG.layers[layer]['x']
+
+                    new_np_array = np.zeros((b, c, w, h))
+                    for i in range(0, c):
+                        exr = 'cv_075/%s/v003/%04d/%s_v003_%04d_denoised.%04d.exr' % (layer, i+1, layer, i+1, self.frame)
+                        buf = oiio.ImageBuf(exr)
+                        ni = buf.get_pixels()
+
+                        for j in range(0, w):
+                            for k in range(0, h):
+                                new_np_array[0][i][j][k] = ni[j][k][0]
+
+                    new_tensor = torch.Tensor(new_np_array)
+                    device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+                    new_tensor = new_tensor.detach().to(device)
+                    # content_targets += [new_tensor]
+                    content_targets = [new_tensor]
+
+                targets += content_targets
 
         # use a clone of the content image as the optimisation image
         if self.from_content:
@@ -249,16 +306,16 @@ class StyleImager(object):
 
         def closure():
 
-            if self.engine == 'gpu':
-                if not self.unsafe:
-                    # pytorch may not be the only process using GPU ram.  Be a good GPU memory citizen
-                    # by checking, and abort if a treshold is met.  Opt out via --unsafe flag.
-                    smi_mem_used = ['nvidia-smi', '--query-gpu=memory.free', '--format=csv,noheader,nounits']
-                    used_gpu_memory = float(subprocess.check_output(smi_mem_used).rstrip(b'\n'))
-
-                    percent_gpu_usage = used_gpu_memory / TOTAL_GPU_MEMORY * 100
-                    if percent_gpu_usage > MAX_GPU_RAM_USAGE:
-                        raise RuntimeError("Ran out of GPU memory")
+            # if self.engine == 'gpu':
+            #     if not self.unsafe:
+            #         # pytorch may not be the only process using GPU ram.  Be a good GPU memory citizen
+            #         # by checking, and abort if a treshold is met.  Opt out via --unsafe flag.
+            #         smi_mem_used = ['nvidia-smi', '--query-gpu=memory.free', '--format=csv,noheader,nounits']
+            #         used_gpu_memory = float(subprocess.check_output(smi_mem_used).rstrip(b'\n'))
+            #
+            #         percent_gpu_usage = used_gpu_memory / TOTAL_GPU_MEMORY * 100
+            #         if percent_gpu_usage > MAX_GPU_RAM_USAGE:
+            #             raise RuntimeError("Ran out of GPU memory")
 
             optimizer.zero_grad()
 

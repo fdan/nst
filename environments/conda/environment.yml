@@ -7,4 +7,5 @@ dependencies:
   - matplotlib
   - torchvision
   - memory_profiler
+  - opencv
   - python=3

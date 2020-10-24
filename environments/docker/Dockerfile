@@ -42,7 +42,7 @@ RUN wget --quiet https://repo.anaconda.com/archive/Anaconda3-2020.07-Linux-x86_6
 
 RUN conda create -y --name pytorch
 RUN conda install -n pytorch -y pytorch=1.1.0 jupyterlab matplotlib torchvision
-RUN conda install -n pytorch -y -c anaconda memory_profiler
+RUN conda install -n pytorch -y -c anaconda memory_profiler opencv
 ENV PATH /opt/conda/envs/pytorch/bin:$PATH
 RUN echo "source activate pytorch" >> ~/.bashrc
 RUN echo "alias la='ls -lah'" >> ~/.bashrc
