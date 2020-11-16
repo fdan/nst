@@ -1,6 +1,7 @@
 """
 Repetitive utility functions that have nothing to do with style transfer
 """
+from . import entities
 
 import subprocess
 import shutil
@@ -16,6 +17,12 @@ from matplotlib import pyplot
 
 from PIL import ImageFont
 from PIL import ImageDraw
+
+
+def normalise_weights(style_layers):
+    for layer in style_layers:
+        channels = entities.VGG.layers[layer]['channels']
+        style_layers[layer]['weight'] = style_layers[layer]['weight'] * 1000.0 / channels ** 2
 
 
 def image_to_tensor(image, do_cuda):
