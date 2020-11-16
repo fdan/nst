@@ -128,9 +128,10 @@ def _doit(opts):
 
 class StyleImager(object):
 
-    def __init__(self, style_image=None, content_image=None, masks={}, frame=0, render_out=None, denoise=False):
+    def __init__(self, style_image=None, content_image=None, grad_mask=None, masks={}, frame=0, render_out=None, denoise=False):
         self.denoise = denoise
         self.masks = masks
+        self.grad_mask = grad_mask
         self.iterations = 500
         self.log_iterations = 20
         self.style_image = style_image
@@ -344,6 +345,27 @@ class StyleImager(object):
 
             loss = sum(layer_losses)
             loss.backward()
+
+            if self.grad_mask:
+                grad_mask = oiio.ImageBuf(self.grad_mask)
+                mask_x = grad_mask.oriented_width
+                mask_y = grad_mask.oriented_height
+
+                # oiio axis are flipped:
+                scaled_grad_mask = oiio.ImageBufAlgo.resize(grad_mask, roi=oiio.ROI(0, mask_y, 0, mask_x, 0, 1, 0, 3))
+                grad_mask_np = scaled_grad_mask.get_pixels()
+                x_, y_, z_ = grad_mask_np.shape
+                grad_mask_np = grad_mask_np[:, :, :1].reshape(x_, y_)
+                grad_mask_tensor = torch.Tensor(grad_mask_np).detach().to(torch.device("cuda:0"))
+
+                grad_b, grad_c, grad_w, grad_h = opt_tensor.grad.size()
+                masked_grad = opt_tensor.grad.clone()
+                for i in range(0, grad_c):
+                    masked_grad[0][i] *= grad_mask_tensor
+
+                opt_tensor.grad = masked_grad
+
+
             nice_loss = '{:,.0f}'.format(loss.item())
 
             if self.progressive:
