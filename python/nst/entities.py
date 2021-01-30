@@ -6,6 +6,26 @@ import torch.nn.functional as F
 
 from . import utils
 
+
+# gatys weights:
+gw = {}
+gw['r11'] = 0.244140625
+gw['r12'] = 0.244140625
+gw['r21'] = 0.06103515625
+gw['r22'] = 0.06103515625
+gw['r31'] = 0.0152587890625
+gw['r32'] = 0.0152587890625
+gw['r34'] = 0.0152587890625
+gw['r41'] = 0.003814697265625
+gw['r42'] = 0.003814697265625
+gw['r43'] = 0.003814697265625
+gw['r44'] = 0.003814697265625
+gw['r51'] = 0.003814697265625
+gw['r52'] = 0.003814697265625
+gw['r53'] = 0.003814697265625
+gw['r54'] = 0.003814697265625
+
+
 # vgg definition that conveniently let's you grab the outputs from any layer
 class VGG(nn.Module):
 

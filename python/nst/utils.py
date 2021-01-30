@@ -149,7 +149,11 @@ def graph_loss(loss_graph, output_dir):
     pyplot.savefig(loss_graph_filepath)
 
 
-def do_ffmpeg(output_dir, temp_dir):
+def do_ffmpeg(output_dir, temp_dir=None):
+
+    if not temp_dir:
+        temp_dir = '%s/tmp' % output_dir
+
     ffmpeg_cmd = []
     ffmpeg_cmd += ['ffmpeg', '-i', '%s/render.%%04d.png' % temp_dir]
     ffmpeg_cmd += ['-c:v', 'libx264', '-crf', '15', '-y']

@@ -26,6 +26,16 @@ import numpy as np
 import OpenImageIO as oiio
 from OpenImageIO import ImageBuf, ImageSpec, ROI
 
+# https://pytorch.org/docs/stable/notes/randomness.html
+import torch
+torch.manual_seed(0)
+torch.cuda.manual_seed(0)
+np.random.seed(0)
+random.seed(0)
+torch.backends.cudnn.deterministic = True
+torch.backends.cudnn.benchmark = False
+torch.backends.cudnn.enabled=False
+
 LOG = ''
 MAX_GPU_RAM_USAGE = 90
 DO_CUDA = False
@@ -128,7 +138,7 @@ def _doit(opts):
 
 class StyleImager(object):
 
-    def __init__(self, style_layers, style_image=None, content_image=None, style_importance_mask=None, grad_mask=None,
+    def __init__(self, style_layers=None, style_image=None, content_image=None, style_importance_mask=None, grad_mask=None,
                  frame=0, render_out=None, denoise=False):
         self.denoise = denoise
         self.style_imprtance_mask = style_importance_mask
@@ -149,13 +159,20 @@ class StyleImager(object):
         self.style_layers = style_layers
         self.content_layers = ['r42']
         self.content_weights = [1.0]
+        self.content_masks = [None]
         self.frame = frame
         self.render_out = render_out
+        self.raw_weights = False
+        self.optimisation_image = None
+        self.output_dir = '%s/output' % os.getcwd()
 
-        utils.normalise_weights(self.style_layers)
+        # if not self.raw_weights:
+        #     utils.normalise_weights(self.style_layers)
 
         if self.content_image:
             self.content_image_pil = Image.open(self.content_image)
+        else:
+            self.content_image_pil = None
 
     def generate_image(self):
         tensor = self.generate_tensor()
@@ -178,14 +195,18 @@ class StyleImager(object):
 
         vgg = prepare_engine(self.engine)
 
+        if not self.raw_weights:
+            utils.normalise_weights(self.style_layers)
+
         loss_layers = []
         loss_fns = []
         weights = []
         targets = []
         masks = []
 
-        style_layer_names = [x for x in self.style_layers]
-        style_layer_weights = [self.style_layers[x]['weight'] for x in self.style_layers]
+        if self.style_layers:
+            style_layer_names = [x for x in self.style_layers]
+            style_layer_weights = [self.style_layers[x]['weight'] for x in self.style_layers]
 
         if self.content_image_pil:
 
@@ -193,16 +214,28 @@ class StyleImager(object):
             content_masks = [torch.Tensor(0)]
             masks += content_masks
             loss_layers += content_layers
-            content_loss_fns = [entities.MSELoss()] # not using mask, but need to handle extra arg...
+            # content_loss_fns = [entities.MSELoss()] # not using mask, but need to handle extra arg...
+            content_loss_fns = [entities.MSELoss()] * len(content_layers)
             loss_fns += content_loss_fns
-            content_weights = [1.0]
+            content_weights = self.content_weights
             weights += content_weights
             content_tensor = prepare_content(self.content_image)
-            content_activations = vgg(content_tensor, content_layers)
+
+            content_activations = []
+            for x in vgg(content_tensor, content_layers):
+                content_activations.append(x)
+            # content_activations = vgg(content_tensor, content_layers)
+
             content_targets = [A.detach() for A in content_activations]
             targets += content_targets
 
-        opt_tensor = prepare_opt(clone=self.content_image)
+        if self.from_content:
+            opt_tensor = prepare_opt(clone=self.content_image)
+        elif self.optimisation_image:
+            opt_tensor = prepare_opt(clone=self.optimisation_image)
+        else:
+            #opt_tensor = prepare_opt(width=self.content_image_pil.size[0], height=self.content_image_pil.size[1])
+            opt_tensor = prepare_opt(width=512, height=512)
 
         if self.style_image:
             loss_layers += style_layer_names
@@ -225,6 +258,21 @@ class StyleImager(object):
         current_loss = [9999999]
 
         layer_masks = []
+
+        for cl in self.content_masks:
+            if not cl:
+                layer_masks.append(None)
+            else:
+                opt_x, opt_y = opt_tensor.size()[2], opt_tensor.size()[3]
+                mask = oiio.ImageBuf(cl)
+
+                # oiio axis are flipped:
+                scaled_mask = oiio.ImageBufAlgo.resize(mask, roi=oiio.ROI(0, opt_y, 0, opt_x, 0, 1, 0, 3))
+                mask_np = scaled_mask.get_pixels()
+                x, y, z = mask_np.shape
+                mask_np = mask_np[:, :, :1].reshape(x, y)
+                mask_tensor = torch.Tensor(mask_np).detach().to(torch.device("cuda:0"))
+                layer_masks.append(mask_tensor)
 
         for sl in style_layer_names:
             has_mask = True if 'mask' in self.style_layers[sl] else False
@@ -260,17 +308,59 @@ class StyleImager(object):
                 weighted_layer_loss.backward(retain_graph=True)
 
                 # don't apply mask for content loss
-                if counter != 0:
+                if True == True: # silly way to make this run on any layer, witout adjusting indentation, for easy rollback
+
                     loss += layer_loss
 
                     # if this style layer has a mask
-                    if layer_masks[counter-1] is not None:
-                        layer_mask = layer_masks[counter-1]
+                    if layer_masks[counter] is not None:
+
+                        layer_mask = layer_masks[counter]
                         b, c, w, h = opt_tensor.grad.size()
+
                         masked_grad = opt_tensor.grad.clone()
 
+                        # output gradient to disk for first epoch
+                        # if n_iter[0] == 3:
+                        #     ni = masked_grad.cpu().numpy().transpose()
+                        #
+                        #     x = ni.shape[1]
+                        #     y = ni.shape[0]
+                        #     z = ni.shape[2]
+                        #
+                        #     ni = np.reshape(ni, (x, y, z))
+                        #
+                        #     buf = ImageBuf(ImageSpec(x, y, z, oiio.FLOAT))
+                        #     buf.set_pixels(ROI(), ni.copy())
+                        #
+                        #     fp = 'grad_seq/%02d_%02d_grad.exr' % (n_iter[0], counter)
+                        #     print('writing gradient:', fp)
+                        #     buf.write(fp, oiio.FLOAT)
+                        #     print('done')
+
+                        # normalise: ensure mean activation remains same
+                        # mask_normalisation = (x * y) / layer_mask.sum()
+                        # weighted_mask_tensor = torch.div(layer_mask, mask_normalisation)
+
                         for i in range(0, c):
+                            # masked_grad[0][i] *= weighted_mask_tensor
                             masked_grad[0][i] *= layer_mask
+
+                        # if n_iter[0] == 3:
+                        #     ni = masked_grad.cpu().numpy().transpose()
+                        #
+                        #     x = ni.shape[1]
+                        #     y = ni.shape[0]
+                        #     z = ni.shape[2]
+                        #
+                        #     ni = np.reshape(ni, (x, y, z))
+                        #
+                        #     buf = ImageBuf(ImageSpec(x, y, z, oiio.FLOAT))
+                        #     buf.set_pixels(ROI(), ni.copy())
+                        #
+                        #     fp = 'grad_seq/%02d_%02d_grad_masked.exr' % (n_iter[0], counter)
+                        #     print('writing gradient:', fp)
+                        #     buf.write(fp, oiio.FLOAT)
 
                         layer_gradients.append(masked_grad)
 
@@ -288,8 +378,15 @@ class StyleImager(object):
                 output_layer_gradient += lg
 
             # average?  why?
-            # output_layer_gradient = (layer_gradients[0] + layer_gradients[1]) / 2.0
             opt_tensor.grad = output_layer_gradient
+
+            nice_loss = '{:,.0f}'.format(loss.item())
+            if self.progressive:
+                output_render = self.output_dir + '/render.%04d.png' % n_iter[0]
+                # print('doing render:', output_render)
+                # print(os.path.isdir(self.output_dir))
+                utils.render_image(opt_tensor, output_render, 'loss: %s\niteration: %s' % (nice_loss, n_iter[0]))
+                # print('finished render')
 
             nice_loss = '{:,.0f}'.format(loss.item())
             current_loss[0] = loss.item()
