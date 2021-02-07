@@ -47,7 +47,7 @@ echo "conda activate base" >> ~/.bashrc
 
 conda create -y --name pytorch
 conda install -n pytorch -y pytorch=1.1.0 jupyterlab matplotlib torchvision
-conda install -n pytorch -y -c anaconda memory_profiler
+conda install -n pytorch -y -c anaconda memory_profiler opencv
 PATH=/opt/conda/envs/pytorch/bin:$PATH
 echo "source activate pytorch" >> ~/.bashrc
 echo "alias la='ls -lah'" >> ~/.bashrc
@@ -61,8 +61,10 @@ cd /tmp && \
 wget https://github.com/OpenImageIO/oiio/archive/Release-2.1.17.0.tar.gz && \
 tar -xvf Release-2.1.17.0.tar.gz && \
 cd oiio-Release-2.1.17.0/ && \
-mkdir build && \
-cd build && \
+pwd && \
+ls -lah && \
+mkdir build_ && \
+cd build_ && \
 /usr/local/bin/cmake -DUSE_PYTHON=1 -DOIIO_BUILD_TESTS=0 -DOIIO_BUILD_TOOLS=0 -DPYTHON_VERSION=3.7 -DCMAKE_INSTALL_PREFIX=/opt/conda/envs/pytorch .. && \
 make -j12 && \
 make install -j12
@@ -70,6 +72,9 @@ make install -j12
 pip install protobuf
 
 %environment
+export PATH=/home/dan/git/nst/bin:$PATH
+export PYTHONPATH=/home/dan/git/nst/python:$PYTHONPATH
+export NST_VGG_MODEL=/home/dan/git/nst/bin/Models/vgg_conv.pth
 export LANG=C.UTF-8
 export LC_ALL=C.UTF-8
 export PATH=/opt/conda/bin:$PATH
@@ -78,3 +83,4 @@ export PATH=/opt/conda/envs/pytorch/bin:$PATH
 exec /bin/bash "$@"
 %startscript
 exec /bin/bash "$@"
+

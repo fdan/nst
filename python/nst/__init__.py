@@ -144,7 +144,7 @@ class StyleImager(object):
         self.style_imprtance_mask = style_importance_mask
         self.grad_mask = grad_mask
         self.iterations = 500
-        self.log_iterations = 20
+        self.log_iterations = 100
         self.style_image = style_image
         self.content_image = content_image
         self.random_style = False
@@ -162,7 +162,7 @@ class StyleImager(object):
         self.content_masks = [None]
         self.frame = frame
         self.render_out = render_out
-        self.raw_weights = False
+        self.raw_weights = True
         self.optimisation_image = None
         self.output_dir = '%s/output' % os.getcwd()
 
@@ -229,10 +229,10 @@ class StyleImager(object):
             content_targets = [A.detach() for A in content_activations]
             targets += content_targets
 
-        if self.from_content:
-            opt_tensor = prepare_opt(clone=self.content_image)
-        elif self.optimisation_image:
+        if self.optimisation_image:
             opt_tensor = prepare_opt(clone=self.optimisation_image)
+        elif self.from_content:
+            opt_tensor = prepare_opt(clone=self.content_image)
         else:
             #opt_tensor = prepare_opt(width=self.content_image_pil.size[0], height=self.content_image_pil.size[1])
             opt_tensor = prepare_opt(width=512, height=512)
