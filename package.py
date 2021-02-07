@@ -2,17 +2,15 @@
 
 name = 'nst'
 
-version = '0.0.12'
+version = '1.0.0'
 
 requires = [
-            'conda_pytorch',
             'tractor',
             'ffmpeg'
             ]
 
 build_requires = [
-                  'python',
-                  'nose'
+                  'python'
 ]
 
 def commands():

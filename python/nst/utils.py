@@ -1,6 +1,7 @@
 """
 Repetitive utility functions that have nothing to do with style transfer
 """
+from . import entities
 
 import subprocess
 import shutil
@@ -16,6 +17,110 @@ from matplotlib import pyplot
 
 from PIL import ImageFont
 from PIL import ImageDraw
+
+import cv2
+import OpenImageIO as oiio
+from OpenImageIO import ImageBuf, ImageSpec, ROI
+import os
+import numpy as np
+from operator import itemgetter
+
+
+def output_motion_mask(frame, render, motion_fore, render_denoised, dilate=50, no_dilate=False, debug_mask="", threshold_value=1,
+            threshold_max=10000):
+    # need to get thse programmatically
+    # render_x = 512
+    # render_y = 512
+    # to do: handle when motion vec is arbitrary dimensions.
+
+    # check if a render_denoised frame is available, use it if it is
+    render_prev_denoised = render_denoised.replace('*', '%04d' % (frame - 1))
+    if os.path.isfile(render_prev_denoised):
+        render_prev = render_prev_denoised
+    else:
+        render_prev = render.replace('*', '%04d' % (frame - 1))
+
+    if not os.path.isfile(render_prev):
+        print("no previous frame for frame %04d, skipping" % frame)
+        print(render_prev)
+        return
+
+    render = render.replace('*', '%04d' % frame)
+    # render_np = oiio.ImageBuf(render).get_pixels()
+
+    t_ = render_denoised.split('/')
+    t_.pop()
+    d_ = ('/'.join(t_))
+    if not os.path.isdir(d_):
+        os.makedirs(d_)
+
+    t_ = debug_mask.split('/')
+    t_.pop()
+    d_ = ('/'.join(t_))
+    if not os.path.isdir(d_):
+        os.makedirs(d_)
+
+    render_np_prev = oiio.ImageBuf(render_prev).get_pixels()
+    motion_fore = motion_fore.replace('*', '%04d' % (frame - 1))
+    motion_fore_np = oiio.ImageBuf(motion_fore).get_pixels()
+
+    x, y, z = render_np_prev.shape
+
+    # 1. warp prev frame into current, keep only pixels that have change
+    frame_mask = np.zeros((x, y, z))
+
+    pixels_to_warp = []
+
+    for old_x in range(0, x):
+        for old_y in range(0, y):
+            render_value = render_np_prev[old_x][old_y]
+            mx_, my_, _ = motion_fore_np[old_x][old_y]
+
+            # flip axes
+            mx = int(my_)
+            my = int(mx_)
+
+            # if mx == 0 and my == 0:
+            #     continue
+
+            nx = old_x + mx
+            ny = old_y + my
+
+            # move weakest moves first, strongest last.
+            render_mag = render_value[0] + render_value[1] + render_value[2]
+            pixels_to_warp.append(
+                (old_x, old_y, nx, ny, (render_value[0], render_value[1], render_value[2]), render_mag, mx_, my_))
+
+    sorted_pixels_to_warp = sorted(pixels_to_warp, key=itemgetter(5))
+
+    for sp in sorted_pixels_to_warp:
+        nx = sp[2]
+        ny = sp[3]
+        render_value = sp[4]
+
+        try:
+            frame_mask[nx][ny] = render_value
+        except IndexError:
+            continue
+
+    if not no_dilate:
+        kernel = np.ones((dilate, dilate), np.uint8)
+        frame_mask = cv2.dilate(frame_mask, kernel, iterations=1)
+        # _, frame_mask = cv2.threshold(frame_mask, threshold_value, threshold_max, cv2.THRESH_BINARY)
+        frame_mask = cv2.GaussianBlur(frame_mask, (5, 5), 0)
+
+    if debug_mask:
+        frame_mask_buf = oiio.ImageBuf(oiio.ImageSpec(x, y, 3, oiio.FLOAT))
+        frame_mask_buf.set_pixels(oiio.ROI(), frame_mask.copy())
+        debug_mask = debug_mask.replace("*", "%04d" % frame)
+        frame_mask_buf.write(debug_mask)
+
+    return
+
+def normalise_weights(style_layers):
+    for layer in style_layers:
+        channels = entities.VGG.layers[layer]['channels']
+        style_layers[layer]['weight'] = style_layers[layer]['weight'] * 1000.0 / channels ** 2
 
 
 def image_to_tensor(image, do_cuda):
@@ -142,7 +247,11 @@ def graph_loss(loss_graph, output_dir):
     pyplot.savefig(loss_graph_filepath)
 
 
-def do_ffmpeg(output_dir, temp_dir):
+def do_ffmpeg(output_dir, temp_dir=None):
+
+    if not temp_dir:
+        temp_dir = '%s/tmp' % output_dir
+
     ffmpeg_cmd = []
     ffmpeg_cmd += ['ffmpeg', '-i', '%s/render.%%04d.png' % temp_dir]
     ffmpeg_cmd += ['-c:v', 'libx264', '-crf', '15', '-y']
