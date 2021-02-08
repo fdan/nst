@@ -15,3 +15,7 @@ spython recipe Dockerfile Singularity
 
 # build a recipe
 singularity build nuke_ml_server.sif Singularity
+
+# shell with access to host filesystem
+singularity shell --nv --hoe /mnt/ala:/mnt/ala nst.sif
+

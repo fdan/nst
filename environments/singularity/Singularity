@@ -72,9 +72,6 @@ make install -j12
 pip install protobuf
 
 %environment
-export PATH=/home/dan/git/nst/bin:$PATH
-export PYTHONPATH=/home/dan/git/nst/python:$PYTHONPATH
-export NST_VGG_MODEL=/home/dan/git/nst/bin/Models/vgg_conv.pth
 export LANG=C.UTF-8
 export LC_ALL=C.UTF-8
 export PATH=/opt/conda/bin:$PATH
