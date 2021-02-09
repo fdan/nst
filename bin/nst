@@ -21,7 +21,10 @@ def main():
     --slayers r12:r21:r31:r34:r41:r42:r43 --sweights 0.2:0.02:0.02:0.02:0.2:0.02:0.02
     """
 
+    # to do - addd cli args for from_content (?)  why looks diff?
+
     p = OptionParser()
+    p.add_option("", "--from-content", dest='from_content', action='store_true')
     p.add_option("", "--style", dest='style', action='store')
     p.add_option("", "--content", dest='content', action='store')
     p.add_option("", "--mask", dest='mask', action='store')
@@ -47,8 +50,11 @@ def main():
     check_inputs(opts.style, [opts.content, opts.mask, opts.opt])
 
 
-    for frame in range(1038, 1049):
+    for frame in frames:
         mask_ = opts.mask.replace("####", "%04d" % frame)
+
+        print(123, mask_)
+
         content_ = opts.content.replace("####", "%04d" % frame)
         opt_image_ = opts.opt.replace("####", "%04d" % frame)
         output_image_ = opts.out.replace("####", "%04d" % frame)
@@ -59,8 +65,10 @@ def main():
             i = slayers.index(sl)
             style_layers[sl] = {'weight': sweights[i], 'mask': mask_}
 
+        pprint(style_layers)
+
         style_imager = nst.StyleImager(style_layers, style_image=opts.style, content_image=content_)
-        style_imager.from_content = False
+        style_imager.from_content = opts.from_content
         style_imager.iterations = 500
         style_imager.log_iterations = 100
         style_imager.content_weights = cweights
