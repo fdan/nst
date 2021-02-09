@@ -53,8 +53,6 @@ def main():
     for frame in frames:
         mask_ = opts.mask.replace("####", "%04d" % frame)
 
-        print(123, mask_)
-
         content_ = opts.content.replace("####", "%04d" % frame)
         opt_image_ = opts.opt.replace("####", "%04d" % frame)
         output_image_ = opts.out.replace("####", "%04d" % frame)
