@@ -36,6 +36,7 @@ def main():
     p.add_option("", "--cweights", dest='cweights', action='store')
     p.add_option("", "--slayers", dest='slayers', action='store')
     p.add_option("", "--sweights", dest='sweights', action='store')
+    p.add_option("", "--smasks", dest='smasks', action='store')
 
     opts, args = p.parse_args()
 
@@ -46,34 +47,59 @@ def main():
     sweights = [float(x) for x in opts.sweights.split(':')]
     slayers = opts.slayers.split(':')
 
-    check_outputs(opts.out)
-    check_inputs(opts.style, [opts.content, opts.mask, opts.opt])
+    if opts.smasks:
+        smasks = opts.smasks.split(':')
+
+    # check_outputs(opts.out)
+
+    inputs_to_check = []
+
+    if opts.opt:
+        inputs_to_check.append(opts.opt)
+    if opts.mask:
+        inputs_to_check.append(opts.mask)
+    if opts.content:
+        inputs_to_check.append(opts.content)
+
+    check_inputs(opts.style, inputs_to_check)
 
 
     for frame in frames:
-        mask_ = opts.mask.replace("####", "%04d" % frame)
 
-        content_ = opts.content.replace("####", "%04d" % frame)
-        opt_image_ = opts.opt.replace("####", "%04d" % frame)
+        if opts.smasks:
+            smasks = [x.replace("####", "%04d" % frame) if x else None for x in smasks]
+
+        if opts.content:
+            content_ = opts.content.replace("####", "%04d" % frame)
+
+        if opts.opt:
+            opt_image_ = opts.opt.replace("####", "%04d" % frame)
+
         output_image_ = opts.out.replace("####", "%04d" % frame)
 
         style_layers = {}
 
         for sl in slayers:
             i = slayers.index(sl)
-            style_layers[sl] = {'weight': sweights[i], 'mask': mask_}
+            if opts.smasks:
+                if smasks[i]:
+                    style_layers[sl] = {'weight': sweights[i], 'mask': smasks[i]}
+            else:
+                style_layers[sl] = {'weight': sweights[i]}
 
-        pprint(style_layers)
 
         style_imager = nst.StyleImager(style_layers, style_image=opts.style, content_image=content_)
         style_imager.from_content = opts.from_content
-        style_imager.iterations = 500
+        style_imager.iterations = opts.iterations
         style_imager.log_iterations = 100
         style_imager.content_weights = cweights
         style_imager.content_layers = clayers
         style_imager.content_masks = [None]
         style_imager.raw_weights = True
-        style_imager.optimisation_image = opt_image_
+
+        if opts.opt:
+            style_imager.optimisation_image = opt_image_
+
         img = style_imager.generate_image()
         img.save(output_image_)
 
@@ -90,6 +116,7 @@ def check_inputs(style, inputs):
 
 
 def check_outputs(output):
+    return
     op = os.path
     output_rel_dir = op.relpath(op.join(output, op.pardir))
     if not os.path.isdir(output_rel_dir):

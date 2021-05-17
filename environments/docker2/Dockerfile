@@ -1,4 +1,4 @@
-FROM nvidia/cuda:10.2-cudnn7-devel-ubuntu18.04
+FROM nvidia/cuda:11.0-cudnn8-devel-ubuntu18.04
 
 ENV LANG=C.UTF-8 LC_ALL=C.UTF-8
 ENV PATH /opt/conda/bin:$PATH
@@ -33,22 +33,20 @@ RUN cd /tmp && \
   make -j12 && \
   make install -j12
 
-RUN wget --quiet https://repo.anaconda.com/archive/Anaconda3-2020.07-Linux-x86_64.sh -O ~/anaconda.sh && \
+RUN wget --quiet https://repo.anaconda.com/archive/Anaconda3-2020.11-Linux-x86_64.sh -O ~/anaconda.sh && \
     /bin/bash ~/anaconda.sh -b -p /opt/conda && \
     rm ~/anaconda.sh && \
     ln -s /opt/conda/etc/profile.d/conda.sh /etc/profile.d/conda.sh && \
     echo ". /opt/conda/etc/profile.d/conda.sh" >> ~/.bashrc && \
     echo "conda activate base" >> ~/.bashrc
 
+RUN conda update -n base -c defaults conda
 RUN conda create -y --name pytorch
-RUN conda install -n pytorch -y pytorch=1.1.0 jupyterlab matplotlib torchvision
-RUN conda install -n pytorch -y -c anaconda memory_profiler opencv
+RUN conda install -n pytorch -y -c pytorch pytorch torchvision cudatoolkit=11 memory_profiler opencv matplotlib jupyterlab
 ENV PATH /opt/conda/envs/pytorch/bin:$PATH
 RUN echo "source activate pytorch" >> ~/.bashrc
 RUN echo "alias la='ls -lah'" >> ~/.bashrc
 RUN echo "alias ..='cd ..'" >> ~/.bashrc
-
-
 RUN /bin/bash -c "source activate pytorch"
 
 # compile OIIO pybindings using anaconda3 python
