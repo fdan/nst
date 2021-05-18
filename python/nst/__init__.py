@@ -192,7 +192,6 @@ class StyleImager(object):
 
     def generate_tensor(self):
         start = timer()
-
         vgg = prepare_engine(self.engine)
 
         if not self.raw_weights:
@@ -298,7 +297,7 @@ class StyleImager(object):
             output_tensors = vgg(opt_tensor, loss_layers)
             layer_gradients = []
 
-            loss = torch.zeros(1, requires_grad=False)
+            loss = torch.zeros(1, requires_grad=False).to(torch.device("cuda:0"))
 
             for counter, tensor in enumerate(output_tensors):
                 optimizer.zero_grad()
@@ -317,7 +316,6 @@ class StyleImager(object):
 
                         layer_mask = layer_masks[counter]
                         b, c, w, h = opt_tensor.grad.size()
-
                         masked_grad = opt_tensor.grad.clone()
 
                         # output gradient to disk for first epoch
@@ -392,7 +390,13 @@ class StyleImager(object):
             current_loss[0] = loss.item()
             n_iter[0] += 1
             if n_iter[0] % show_iter == (show_iter - 1):
-                max_mem_cached = torch.cuda.max_memory_cached(0) / 1000000
+
+                # to do: ideally find the actual version where this changed:
+                if torch.__version__ == '1.1.0':
+                    max_mem_cached = torch.cuda.max_memory_cached(0) / 1000000
+                elif torch.__version__ == '1.7.1':
+                    max_mem_cached = torch.cuda.max_memory_reserved(0) / 1000000
+
                 msg = ''
                 msg += 'Iteration: %d, ' % (n_iter[0])
                 msg += 'loss: %s, ' % (nice_loss)
@@ -426,7 +430,6 @@ class StyleImager(object):
 def prepare_engine(engine):
     vgg = entities.VGG()
     model_filepath = os.getenv('NST_VGG_MODEL')
-    vgg.load_state_dict(torch.load(model_filepath))
 
     for param in vgg.parameters():
         param.requires_grad = False
@@ -434,8 +437,11 @@ def prepare_engine(engine):
     global DO_CUDA
 
     if engine == 'gpu':
+        vgg.cuda()
+
+        vgg.load_state_dict(torch.load(model_filepath))
         global TOTAL_GPU_MEMORY
-        
+
         if torch.cuda.is_available():
             DO_CUDA = True
             smi_mem_total = ['nvidia-smi', '--query-gpu=memory.total', '--format=csv,noheader,nounits']
@@ -448,6 +454,7 @@ def prepare_engine(engine):
             raise RuntimeError(msg)
 
     elif engine == 'cpu':
+        vgg.load_state_dict(torch.load(model_filepath))
         global TOTAL_SYSTEM_MEMORY
         
         DO_CUDA = False
