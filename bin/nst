@@ -37,6 +37,7 @@ def main():
     p.add_option("", "--slayers", dest='slayers', action='store')
     p.add_option("", "--sweights", dest='sweights', action='store')
     p.add_option("", "--smasks", dest='smasks', action='store')
+    p.add_option("-f", "--farm", dest="farm", action='store_true')
 
     opts, args = p.parse_args()
 
@@ -63,6 +64,9 @@ def main():
 
     check_inputs(opts.style, inputs_to_check)
 
+    if opts.farm:
+        nst.farm.conda.doit(opts)
+        return
 
     for frame in frames:
 
