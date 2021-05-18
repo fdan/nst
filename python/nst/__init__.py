@@ -297,14 +297,11 @@ class StyleImager(object):
             output_tensors = vgg(opt_tensor, loss_layers)
             layer_gradients = []
 
-            # loss = torch.zeros(1, requires_grad=False)
             loss = torch.zeros(1, requires_grad=False).to(torch.device("cuda:0"))
-            # print(4.1, loss)
 
             for counter, tensor in enumerate(output_tensors):
                 optimizer.zero_grad()
                 layer_loss = loss_fns[counter](tensor, targets[counter])
-                # print(4.2, layer_loss)
                 layer_weight = weights[counter]
                 weighted_layer_loss = layer_weight * layer_loss
                 weighted_layer_loss.backward(retain_graph=True)
@@ -433,7 +430,6 @@ class StyleImager(object):
 def prepare_engine(engine):
     vgg = entities.VGG()
     model_filepath = os.getenv('NST_VGG_MODEL')
-    # vgg.load_state_dict(torch.load(model_filepath))
 
     for param in vgg.parameters():
         param.requires_grad = False

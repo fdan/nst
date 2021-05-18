@@ -116,7 +116,6 @@ def check_inputs(style, inputs):
 
 
 def check_outputs(output):
-    return
     op = os.path
     output_rel_dir = op.relpath(op.join(output, op.pardir))
     if not os.path.isdir(output_rel_dir):
