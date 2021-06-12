@@ -5,7 +5,7 @@ import os
 from pprint import pprint
 import glob
 
-import nst_farm
+import nst_farm.conda
 
 
 def main():

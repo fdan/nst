@@ -129,6 +129,7 @@ def _doit(opts):
 class StyleImager(object):
 
     def __init__(self, style_image=None, content_image=None, masks={}, style_importance_mask=None, grad_mask=None, frame=0, render_out=None, denoise=False):
+        print(1, style_image)
         self.denoise = denoise
         self.masks = masks
         self.style_imprtance_mask = style_importance_mask

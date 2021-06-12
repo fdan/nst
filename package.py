@@ -2,7 +2,7 @@
 
 name = 'nst'
 
-version = '2.0.1'
+version = '2.0.2'
 
 requires = [
             'tractor',

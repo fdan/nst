@@ -234,7 +234,10 @@ class RegionGramMSELoss(nn.Module):
         # idea 2:
         # make a 2x2 tensor of these values, return mean square (i.e. penalise greater loss)
         # lt = torch.zeros((2, 2))
-        # device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+
+        # cuda_device = 'cuda:%s' % torch.cuda.current_device()
+        # device = torch.device(cuda_device if torch.cuda.is_available() else "cpu")
+
         # lt = lt.detach().to(device)
         # # lt[0][0] = s1_d
         # # lt[0][1] = s2_d
@@ -377,7 +380,8 @@ class MaskedGramMSELoss(nn.Module):
         # values visualy match
         # then derive
 
-        # t_ = torch.Tensor(w, h).detach().to(torch.device("cuda:0"))
+        # cuda_device = 'cuda:%s' % torch.cuda.current_device()
+        # t_ = torch.Tensor(w, h).detach().to(torch.device(cuda_device))
         # t_.fill_(0.5)
         # tn_ = (w*h) / t_.sum()
         # tw_ = torch.mul(t_, tn_)

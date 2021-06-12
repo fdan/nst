@@ -1,4 +1,5 @@
 import sys
+import subprocess
 import random
 import traceback
 import uuid
@@ -20,8 +21,6 @@ from PIL import Image
 
 from . import entities
 from . import utils
-
-from nst_farm.singularity import NstFarm
 
 import numpy as np
 
@@ -49,93 +48,6 @@ def log(msg):
     global LOG
     LOG += msg + '\n'
     print(msg)
-
-
-def doit(opts):
-    try:
-        _doit(opts)
-    except:
-        print(traceback.print_exc())
-    finally:
-        if opts.farm:
-            env_cleanup = ['setup-conda-env', '-r']
-            subprocess.check_output(env_cleanup)
-
-
-def _doit(opts):
-    start = timer()
-
-    style = opts.style
-    if style:
-        style = utils.get_full_path(style)
-
-    content = opts.content
-    if content:
-        content = utils.get_full_path(content)
-
-    # user_style_layers = opts.style_layers
-    # if user_style_layers:
-    #     user_style_layers = [int(x) for x in user_style_layers.split(',')]
-
-    render_name = opts.render_name
-
-    output_dir = utils.get_full_path(opts.output_dir)
-    if not output_dir.endswith('/'):
-        output_dir += '/'
-
-    temp_dir = '/tmp/nst/%s' % str(uuid.uuid4())[:8:]
-    engine = opts.engine
-    iterations = opts.iterations
-    max_loss = opts.loss
-    unsafe = bool(opts.unsafe)
-    random_style = bool(opts.random_style)
-    progressive = bool(opts.progressive)
-
-    # if this fails, we want an exception:
-    os.makedirs(temp_dir)
-
-    # if this fails, dir probably exists already:
-    try:
-        os.makedirs(output_dir)
-    except:
-        pass
-
-    log('\nstyle input: %s' % style)
-    log('content input: %s' % content)
-    log('output dir: %s' % output_dir)
-    log('engine: %s' % engine)
-    log('iterations: %s' % iterations)
-    log('max_loss: %s' % max_loss)
-    log('unsafe: %s' % unsafe)
-    log('')
-
-    style_imager = StyleImager(style_image=style, content_image=content)
-    style_imager.output_dir = output_dir
-
-    if iterations:
-        style_imager.iterations = iterations
-
-    opt_tensor = style_imager.generate_tensor()
-
-    output_render_name = render_name or 'render.png'
-    output_render = output_dir + output_render_name
-    # output_render = output_dir + 'render.png'
-    utils.render_image(opt_tensor, output_render)
-
-    end = timer()
-
-    utils.graph_loss(style_imager.loss_graph, output_dir)
-
-    duration = "%.02f seconds" % float(end-start)
-    log('completed\n')
-    log("duration: %s" % duration)
-    log_filepath = output_dir + '/log.txt'
-
-    if progressive:
-        utils.do_ffmpeg(output_dir, temp_dir)
-
-    with open(log_filepath, 'w') as log_file:
-        log_file.write(LOG)
 
 
 class StyleImager(object):
@@ -168,69 +80,37 @@ class StyleImager(object):
         self.optimisation_image = None
         self.output_dir = '%s/output' % os.getcwd()
         self.cuda_device = None
-        self.out = None
-        self.init_cuda()
 
-    def init_cuda(self) -> None:
-        self.cuda_device = utils.get_cuda_device()
+        if self.content_image:
+            self.content_image_pil = Image.open(self.content_image)
+        else:
+            self.content_image_pil = None
+
+    def init_cuda(self):
+
+        if torch.cuda.is_available():
+            print('gpu is available')
+        else:
+            print('no gpu was found')
+            sys.exit(1)
+
+        result = subprocess.check_output(
+            [
+                'nvidia-smi', '--query-gpu=memory.used',
+                '--format=csv,nounits,noheader'
+            ], encoding='utf-8')
+        gpu_memory = [int(x) for x in result.strip().split('\n')]
+        gpu_memory_map = dict(zip(range(len(gpu_memory)), gpu_memory))
+        print(gpu_memory_map)
+
+        self.cuda_device = 'cuda:%s' % torch.cuda.current_device()
         print('cuda device:', self.cuda_device)
+        if not self.cuda_device:
+            print('no cuda device found')
+            sys.exit(1)
 
-    def send_to_farm(self, frames: str) -> None:
-        nfm = NstFarm()
-        nfm.from_content = self.from_content
-        nfm.style = self.style_image
-        nfm.content = self.content_image
-        nfm.out = self.out
-        nfm.frames = frames
-        nfm.slayers = [x for x in self.style_layers]
-        nfm.sweights = [self.style_layers[x]['weight'] for x in self.style_layers]
-        nfm.send_to_farm()
 
-    def render_to_disk(self):
-        img = self.generate_image()
-        img_path = self.render_out
-
-        t_ = img_path.split('/')
-        t_.pop()
-        d_ = ('/'.join(t_))
-        if not os.path.isdir(d_):
-            os.makedirs(d_)
-
-        img.save(img_path)
-
-    def generate_image(self, frame: int=None) -> Image:
-        tensor = self.generate_tensor(frame=frame)
-        return utils.tensor_to_image(tensor)
-
-    def generate_exr(self, frame=None) -> torch.Tensor:
-        if self.content_image:
-            if '####' in self.content_image and frame:
-                self._content_image = self.content_image.replace('####', '%04d' % frame)
-            else:
-                self._content_image = self.content_image
-
-            # instead of PIL, read content as exr
-            self.content_image_pil = Image.open(self._content_image)
-
-        else:
-            self.content_image_pil = None
-
-        tensor = self.generate_tensor()
-        return utils.tensor_to_exr(tensor)
-
-    def generate_tensor(self, frame: int=None) -> torch.Tensor:
-
-        if self.content_image:
-            if '####' in self.content_image and frame:
-                self._content_image = self.content_image.replace('####', '%04d' % frame)
-            else:
-                self._content_image = self.content_image
-
-            self.content_image_pil = Image.open(self._content_image)
-
-        else:
-            self.content_image_pil = None
-
+    def generate_tensor(self):
         start = timer()
         vgg = prepare_engine(self.engine)
 
@@ -258,7 +138,7 @@ class StyleImager(object):
             loss_fns += content_loss_fns
             content_weights = self.content_weights
             weights += content_weights
-            content_tensor = prepare_content(self._content_image)
+            content_tensor = prepare_content(self.content_image)
 
             content_activations = []
             for x in vgg(content_tensor, content_layers):
@@ -271,9 +151,9 @@ class StyleImager(object):
         if self.optimisation_image:
             opt_tensor = prepare_opt(clone=self.optimisation_image)
         elif self.from_content:
-            opt_tensor = prepare_opt(clone=self._content_image)
+            opt_tensor = prepare_opt(clone=self.content_image)
         else:
-            #opt_tensor = prepare_opt(width=self.content_image_pil.size[0], height=self.content_image_pil.size[1])
+            # opt_tensor = prepare_opt(width=self.content_image_pil.size[0], height=self.content_image_pil.size[1])
             opt_tensor = prepare_opt(width=512, height=512)
 
         if self.style_image:
@@ -336,6 +216,8 @@ class StyleImager(object):
         cuda_device = self.cuda_device
 
         def closure():
+            print('cuda device:', cuda_device)
+
             output_tensors = vgg(opt_tensor, loss_layers)
             layer_gradients = []
 
@@ -349,7 +231,7 @@ class StyleImager(object):
                 weighted_layer_loss.backward(retain_graph=True)
 
                 # don't apply mask for content loss
-                if True == True: # silly way to make this run on any layer, witout adjusting indentation, for easy rollback
+                if True == True:  # silly way to make this run on any layer, witout adjusting indentation, for easy rollback
 
                     loss += layer_loss
 
@@ -412,7 +294,7 @@ class StyleImager(object):
                     loss += layer_loss
                     layer_gradients.append(opt_tensor.grad.clone())
 
-            b, c, w, h = opt_tensor.grad.size() # not strictly necessary?
+            b, c, w, h = opt_tensor.grad.size()  # not strictly necessary?
             output_layer_gradient = torch.zeros((b, c, w, h)).detach().to(torch.device(cuda_device))
             for lg in layer_gradients:
                 output_layer_gradient += lg
@@ -497,7 +379,7 @@ def prepare_engine(engine):
     elif engine == 'cpu':
         vgg.load_state_dict(torch.load(model_filepath))
         global TOTAL_SYSTEM_MEMORY
-        
+
         DO_CUDA = False
         from psutil import virtual_memory
         TOTAL_SYSTEM_MEMORY = virtual_memory().total
@@ -505,17 +387,12 @@ def prepare_engine(engine):
 
     else:
         msg = "invalid arg for engine: valid options are cpu, gpu"
-        raise RuntimeError(msg) 
-    
+        raise RuntimeError(msg)
+
     return vgg
 
 
 def prepare_style(style, random_style, output_dir):
-    style_tensor = utils.image_to_tensor(style, DO_CUDA)
-    return style_tensor
-
-
-def prepare_style_old(style, random_style, output_dir):
     style_image = Image.open(style)
 
     if random_style:
@@ -527,23 +404,12 @@ def prepare_style_old(style, random_style, output_dir):
 
 
 def prepare_content(content):
-    content_tensor = utils.image_to_tensor(content, DO_CUDA)
-    return content_tensor
-
-
-def prepare_content_old(content):
     content_image = Image.open(content)
     content_tensor = utils.image_to_tensor(content_image, DO_CUDA)
     return content_tensor
 
+
 def prepare_opt(clone=None, width=500, height=500):
-    if clone:
-        content_tensor = utils.image_to_tensor(clone, DO_CUDA)
-        opt_tensor = Variable(content_tensor.data.clone(), requires_grad=True)
-        return opt_tensor
-
-
-def prepare_opt_old(clone=None, width=500, height=500):
     if clone:
         content_image = Image.open(clone)
         content_tensor = utils.image_to_tensor(content_image, DO_CUDA)
@@ -553,10 +419,10 @@ def prepare_opt_old(clone=None, width=500, height=500):
         o_height = height
         opt_image = Image.new("RGB", (o_width, o_height), 255)
         random_grid = map(lambda x: (
-                int(random.random() * 256),
-                int(random.random() * 256),
-                int(random.random() * 256)
-            ), [0] * o_width * o_height)
+            int(random.random() * 256),
+            int(random.random() * 256),
+            int(random.random() * 256)
+        ), [0] * o_width * o_height)
 
         # handle different map behaviour for python3
         if sys.version[0] == '3':
@@ -567,6 +433,4 @@ def prepare_opt_old(clone=None, width=500, height=500):
         opt_tensor = Variable(opt_tensor.data.clone(), requires_grad=True)
 
     return opt_tensor
-
-
 

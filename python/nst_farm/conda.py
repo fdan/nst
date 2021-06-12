@@ -13,10 +13,8 @@ def get_full_path(filename):
 
 
 def doit(opts):
-    cmds = get_batch_cmd(opts)
-
-    output_dir = get_full_path(opts.output_dir)
-    prog = opts.progressive
+    cmd = get_batch_cmd(opts)
+    frames = eval_frames(opts.frames)
 
     user = os.getenv('CREWNAME' or 'unknownUser')
     jobname = 'style_transfer_{0}'.format(user)
@@ -25,21 +23,21 @@ def doit(opts):
     job.title = jobname
 
     rez_package_version = os.getenv('REZ_NST_VERSION')
-    nst_package = 'nst-{0}'.format(rez_package_version)
+    nst_package = 'nst-{0} conda_pytorch'.format(rez_package_version)
     rez_packages = 'rez-pkgs={0}'.format(nst_package)
     job.envkey = [rez_packages]
 
-    job.service = 'Studio'
+    job.service = '(@.gpucount > 0)'
     job.tier = 'batch'
-    job.atmost = '56'
+    job.atmost = 56
 
-    for cmd in cmds:
-        task_name = jobname + '_task'
-        task = tractor.api.author.Task(title=task_name)
+    for frame in frames:
+        frame_cmd = cmd + ['--frames', str(frame)]
+        frame_task_name = jobname + '_%04d' % frame
+        task = tractor.api.author.Task(title=frame_task_name)
         task.newCommand(argv=['setup-conda-env', '-i'])
-        task.newCommand(argv=cmd)
+        task.newCommand(argv=frame_cmd)
         task.newCommand(argv=['setup-conda-env', '-r'])
-        print(job, task)
 
         job.addChild(task)
 
@@ -49,39 +47,61 @@ def doit(opts):
 
 
 def get_batch_cmd(opts):
-    cmds = []
-
-    style = opts.style
-    content = opts.content
-    output_dir = opts.output_dir
-    engine = opts.engine
-    iterations = opts.iterations
-    loss = opts.loss
-    unsafe = opts.unsafe
-    random = opts.random_style
-    progressive = opts.progressive
-
     cmd = []
     cmd += ['nst']
-    cmd += ['--content', content]
-    cmd += ['--style', style]
-    cmd += ['--output-dir', output_dir]
-    cmd += ['--unsafe', unsafe]
+    cmd += ['--style', opts.style]
+    cmd += ['--content', opts.content]
+    cmd += ['--out', opts.out]
+    cmd += ['--clayers', opts.clayers]
+    cmd += ['--cweights', opts.cweights]
+    cmd += ['--slayers', opts.slayers]
+    cmd += ['--sweights', opts.sweights]
 
-    if iterations:
-        cmd += ['--iterations', iterations]
-    elif loss:
-        cmd += ['--loss', loss]
+    if opts.iterations:
+        cmd += ['--iterations', opts.iterations]
 
-    if random:
-        cmd += ['--random', random]
+    if opts.from_content:
+        cmd += ['--from-content']
 
-    if progressive:
-        cmd += ['--progressive', progressive]
+    # cmd += ['--engine', engine, ';']
 
-    cmd += ['--engine', engine, ';']
+    return cmd
 
-    # cmd += ['setup-conda-env', '-r']
 
-    cmds.append(cmd)
-    return cmds
+def eval_frames(frames):
+    """
+    Return a list of all frame numbers to be rendered.
+    Step means every nth frame.
+    """
+    frames_ = []
+
+    for token1 in frames.split(';'):
+
+        # check for individual frames
+        try:
+            int(token1)
+            frames_.append(int(token1))
+
+        # check for frame ranges
+        except ValueError:
+            token2 = token1.split(':')
+            if len(token2) != 2:
+                continue
+            start = token2[0]
+            end = token2[1]
+            step = 1
+
+            token3 = end.split('%')
+            if len(token3) == 2:
+                end = token3[0]
+                step = token3[1]
+
+            frame_range = []
+            for i in range(int(start), int(end)+1):
+                frame_range.append(i)
+            frames_ += frame_range[::int(step)]
+
+    # remove any repeated frames
+    unique_frames = list(set(frames_))
+    unique_frames.sort()
+    return unique_frames
