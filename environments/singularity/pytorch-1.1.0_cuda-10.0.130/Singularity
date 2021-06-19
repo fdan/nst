@@ -52,8 +52,6 @@ PATH=/opt/conda/envs/pytorch/bin:$PATH
 echo "source activate pytorch" >> ~/.bashrc
 echo "alias la='ls -lah'" >> ~/.bashrc
 echo "alias ..='cd ..'" >> ~/.bashrc
-
-
 /bin/bash -c "source activate pytorch"
 
 # compile OIIO pybindings using anaconda3 python

@@ -1,0 +1,114 @@
+Bootstrap: docker
+From: nvidia/cuda:11.3.1-cudnn8-devel-ubuntu20.04
+Stage: spython-base
+
+%post
+
+export LANG=C.UTF-8
+export LC_ALL=C.UTF-8
+export PATH=/opt/conda/bin:$PATH
+export DEBIAN_FRONTEND=noninteractive
+
+apt-get update --fix-missing && apt-get install -y \
+  libopenjp2-7-dev \
+  libsquish-dev \
+  libraw-dev \
+  libjpeg-turbo8-dev \
+  libgif-dev \
+  libdcmtk-dev \
+  libtinyxml-dev \
+  liblcms2-dev \
+  libyaml-cpp-dev \
+  unzip \
+  wget \
+  software-properties-common \
+  cmake \
+  git
+#  libboost-all-dev \
+#  libturbojpeg0-dev \
+#  libopenjp2-7-dev \
+#  libjpeg-dev \
+#  libtiff-dev \
+#  libpng-dev \
+#  libilmbase-dev \
+#  libopenexr-dev \
+#  python-numpy \
+#  bzip2 \
+#  ca-certificates \
+#  libglib2.0-0 \
+#  libxext6 \
+#  libsm6 \
+#  libxrender1 \
+#  mercurial \
+#  emacs \
+#  subversion
+
+# wipe temp dir
+#rm -rf /tmp/pytorch_build
+#mkdir /tmp/pytorch_build
+#mkdir /opt/pytorch_build
+
+#wget --quiet https://repo.anaconda.com/archive/Anaconda3-2020.11-Linux-x86_64.sh -O ~/anaconda.sh && \
+#/bin/bash ~/anaconda.sh -b -p /opt/conda && \
+#rm ~/anaconda.sh && \
+#ln -s /opt/conda/etc/profile.d/conda.sh /etc/profile.d/conda.sh && \
+#echo ". /opt/conda/etc/profile.d/conda.sh" >> ~/.bashrc && \
+#echo "conda activate base" >> ~/.bashrc
+
+#conda update -n base -c defaults conda
+#conda create -y --name pytorch
+#conda install -n pytorch -y -c pytorch pytorch torchvision cudatoolkit=11 memory_profiler opencv matplotlib jupyterlab
+#conda install -n pytorch -y pybind11
+#PATH=/opt/conda/envs/pytorch/bin:$PATH
+#echo "source activate pytorch" >> ~/.bashrc
+#echo "alias la='ls -lah'" >> ~/.bashrc
+#echo "alias ..='cd ..'" >> ~/.bashrc
+#/bin/bash -c "source activate pytorch"
+
+# compile OCIO pybindings using anaconda3 python
+#cd /opt/pytorch_build
+#wget https://github.com/AcademySoftwareFoundation/OpenColorIO/archive/refs/heads/RB-1.1.zip
+#unzip RB-1.1.zip
+#cd OpenColorIO-RB-1.1
+#mkdir build
+#cd build
+#pwd
+#/usr/bin/cmake -DPYTHON_LIBRARY=/opt/conda/envs/pytorch/lib \
+#  -DPYTHON_INCLUDE_DIR=/opt/conda/envs/pytorch/include \ 
+#  -DOCIO_BUILD_TESTS=OFF -DOCIO_BUILD_DOCS=OFF -DOCIO_BUILD_APPS=OFF \ 
+#  -DUSE_EXTERNAL_YAML=ON -DUSE_EXTERNAL_TINYXML=ON -DUSE_EXTERNAL_LCMS=ON \
+#  -DCMAKE_INSTALL_PREFIX=/opt/ocio ..
+#make -j12
+#make install -j12
+
+# compile OIIO pybindings using anaconda3 python
+#cd /opt/pytorch_build && \
+#wget https://github.com/OpenImageIO/oiio/archive/refs/tags/v2.2.15.1.tar.gz && \
+#tar -xvf v2.2.15.1.tar.gz && \
+#cd oiio-2.2.15.1 && \  
+#mkdir build && \
+#cd build && \
+#/usr/local/bin/cmake -DUSE_PYTHON=1 -DOIIO_BUILD_TESTS=0 -DOIIO_BUILD_TOOLS=1 -DPYTHON_VERSION=3.7   
+#  -DCMAKE_INSTALL_PREFIX=/opt/oiio -DOPENCOLORIO_INCLUDE_PATH=/opt/ocio/include \
+#  -DOPENCOLORIO_LIBRARY_PATH=/opt/ocio/lib .. && \
+#make -j12 && \
+#make install -j12
+
+# cleanup temp dir
+#rm -rf /tmp/pytorch_build
+
+#pip install protobuf
+
+%environment
+#export LANG=C.UTF-8
+#export LC_ALL=C.UTF-8
+#export PATH=/opt/conda/bin:$PATH
+#export PATH=/opt/conda/envs/pytorch/bin:$PATH
+
+%runscript
+exec /bin/bash "$@"
+
+%startscript
+exec /bin/bash "$@"
+export OCIO=/workspace/git/OpenColorIO-Configs/aces_1.0.3/config.ocio
+export PYTHONPATH=/opt/oiio/lib/python3.7/site-packages:$PYTHONPATH

@@ -192,9 +192,21 @@ def image_to_tensor_old(image, do_cuda):
         return tensor.unsqueeze(0)
 
 
-def image_to_tensor(image: str, do_cuda: bool) -> torch.Tensor:
+def image_to_tensor(image: str, do_cuda: bool, resize:float=None, colorspace=None) -> torch.Tensor:
     # note: oiio implicitely converts to 0-1 floating point data here regardless of format:
     buf = ImageBuf(image)
+
+    o_width = buf.oriented_full_width
+    o_height = buf.oriented_full_height
+
+    if resize:
+        n_width = float(o_width) * resize
+        n_height = float(o_height) * resize
+        buf = oiio.ImageBufAlgo.resize(buf, roi=ROI(0, n_width, 0, n_height, 0, 1, 0, 3))
+
+    if colorspace:
+        buf = oiio.ImageBufAlgo.colorconvert(buf, colorspace, 'srgb_texture')
+
     return buf_to_tensor(buf, do_cuda)
 
 

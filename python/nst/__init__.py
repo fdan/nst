@@ -149,6 +149,10 @@ class StyleImager(object):
         self.log_iterations = 100
         self.style_image = style_image
         self.content_image = content_image
+        self.resize_content = 1.0
+        self.resize_style = 1.0
+        self.content_colorspace = 'srgb_texture'
+        self.style_colorspace = 'srgb_texture'
         self.random_style = False
         self.output_dir = None
         self.engine = 'gpu'

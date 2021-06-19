@@ -1,0 +1,22 @@
+Bootstrap: localimage
+From: /scratch/dan/simg/base.simg
+
+%post
+
+# make temp dir in container
+mkdir /opt/pytorch_build
+
+# compile OCIO pybindings using anaconda3 python
+cd /opt/pytorch_build
+wget https://github.com/AcademySoftwareFoundation/OpenColorIO/archive/refs/heads/RB-1.1.zip
+unzip RB-1.1.zip
+cd OpenColorIO-RB-1.1
+mkdir build
+cd build
+pwd
+ls -lah ..
+
+cmake -DPYTHON_LIBRARY=/opt/conda/envs/pytorch/lib -DPYTHON_INCLUDE_DIR=/opt/conda/envs/pytorch/include -DOCIO_BUILD_TESTS=OFF -DOCIO_BUILD_DOCS=OFF -DOCIO_BUILD_APPS=OFF -DUSE_EXTERNAL_YAML=ON -DUSE_EXTERNAL_TINYXML=ON -DUSE_EXTERNAL_LCMS=ON -DCMAKE_INSTALL_PREFIX=/opt/ocio ..
+
+#make -j12
+#make install -j12
