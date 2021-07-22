@@ -1,4 +1,4 @@
-FROM nvidia/cuda:11.0.3-cudnn8-devel-ubuntu20.04
+FROM nvidia/cuda:11.3.1-cudnn8-devel-ubuntu20.04
 
 ENV LANG=C.UTF-8 LC_ALL=C.UTF-8
 ENV PATH /opt/conda/bin:$PATH
@@ -44,7 +44,7 @@ RUN wget --quiet https://repo.anaconda.com/archive/Anaconda3-2020.11-Linux-x86_6
 
 RUN conda update -n base -c defaults conda
 RUN conda create -y --name pytorch
-RUN conda install -n pytorch -y -c pytorch pytorch torchvision cudatoolkit=11 memory_profiler opencv matplotlib jupyterlab scikit-learn scikit-image imageio
+RUN conda install -n pytorch -y -c pytorch pytorch torchvision cudatoolkit=11 memory_profiler opencv matplotlib jupyterlab
 RUN conda install -n pytorch -y pybind11
 ENV PATH /opt/conda/envs/pytorch/bin:$PATH
 RUN echo "source activate pytorch" >> ~/.bashrc
@@ -53,31 +53,21 @@ RUN echo "alias ..='cd ..'" >> ~/.bashrc
 RUN /bin/bash -c "source activate pytorch"
 
 # compile OCIO pybindings using anaconda3 python
-RUN cd /tmp && \
-  wget https://github.com/AcademySoftwareFoundation/OpenColorIO/archive/refs/heads/RB-1.1.zip && \
-  unzip RB-1.1.zip && cd OpenColorIO-RB-1.1 && \
-  mkdir build && \
-  cd build && \
-  /usr/bin/cmake -DPYTHON_LIBRARY=/opt/conda/envs/pytorch/lib -DPYTHON_INCLUDE_DIR=/opt/conda/envs/pytorch/include -DOCIO_BUILD_TESTS=OFF -DOCIO_BUILD_DOCS=OFF -DOCIO_BUILD_APPS=OFF -DCMAKE_INSTALL_PREFIX=/opt/ocio .. && \
-  make -j12 && \
-  make install -j12 && \
-  cd /tmp && \
-  rm -rf OpenColorIO-RB-1.1 && \
-  rm RB-1.1.zip
-  
+RUN cd /tmp && wget https://github.com/AcademySoftwareFoundation/OpenColorIO/archive/refs/heads/RB-1.1.zip && unzip RB-1.1.zip && cd OpenColorIO-RB-1.1 && mkdir build && cd build && /usr/bin/cmake -DPYTHON_LIBRARY=/opt/conda/envs/pytorch/lib #-DPYTHON_INCLUDE_DIR=/opt/conda/envs/pytorch/include -DOCIO_BUILD_TESTS=OFF -DOCIO_BUILD_DOCS=OFF -DOCIO_BUILD_APPS=OFF -DUSE_EXTERNAL_YAML=ON -DUSE_EXTERNAL_TINYXML=ON -DUSE_EXTERNAL_LCMS=ON -DCMAKE_INSTALL_PREFIX=/opt/ocio .. && make -j12 && make install -j12
+
 # compile OIIO pybindings using anaconda3 python
 RUN cd /tmp && \
   wget https://github.com/OpenImageIO/oiio/archive/refs/tags/v2.2.15.1.tar.gz && \
   tar -xvf v2.2.15.1.tar.gz && \
-  cd oiio-2.2.15.1 && \
+  cd oiio-2.2.15.1 && \  
   mkdir build && \
   cd build && \
-  /usr/bin/cmake -DUSE_PYTHON=1 -DOIIO_BUILD_TESTS=0 -DOIIO_BUILD_TOOLS=1 -DPYTHON_VERSION=3.7 -DCMAKE_INSTALL_PREFIX=/opt/oiio -DOPENCOLORIO_INCLUDE_PATH=/opt/ocio/include -DOPENCOLORIO_LIBRARY_PATH=/opt/ocio/lib .. && \
+  /usr/bin/cmake -DUSE_PYTHON=1 -DOIIO_BUILD_TESTS=0 -DOIIO_BUILD_TOOLS=1 -DPYTHON_VERSION=3.7 #-DCMAKE_INSTALL_PREFIX=/opt/oiio \
+  -DOPENCOLORIO_INCLUDE_PATH=/opt/ocio/include -DOPENCOLORIO_LIBRARY_PATH=/opt/ocio/lib .. && \
   make -j12 && \
   make install -j12 && \
   cd /tmp && \
-  rm -rf oiio-2.2.15.1 && \
-  rm v2.2.15.1.tar.gz
+  rm -rf oiio-2.2.15.1 v2.2.15.1.tar.gz
 
 #  for nuke-ML-server:
 RUN pip install protobuf
@@ -95,6 +85,4 @@ ENV PYTHONPATH /workspace/git/nst/python:/opt/oiio/lib/python3.7/site-packages:$
 ENV NST_VGG_MODEL /workspace/git/nst/bin/Models/vgg_conv.pth
 
 # set $OCIO
-ENV OCIO /workspace/git/OpenColorIO-Configs-master/aces_1.0.3/config.ocio
-
-ENV MPLCONFIGDIR /mnt/ala/tmp
+ENV OCIO ~/git/OpenColorIO-Configs-master/aces_1.0.3/config.ocio

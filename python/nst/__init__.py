@@ -7,7 +7,7 @@ import subprocess
 from timeit import default_timer as timer
 
 # import memory_profiler
-
+import OpenImageIO as oiio
 import torch
 from torch.autograd import Variable # deprecated - use Tensor
 import torch.nn as nn
@@ -173,11 +173,15 @@ class StyleImager(object):
         self.output_dir = '%s/output' % os.getcwd()
         self.cuda_device = None
         self.out = None
+        self.out_colorspace = 'acescg'
+        self.content_scale = 1.0
+        self.content_colorspace = 'acescg'
+        self.style_colorspace = 'srgb'
         self.init_cuda()
 
     def init_cuda(self) -> None:
         self.cuda_device = utils.get_cuda_device()
-        print('cuda device:', self.cuda_device)
+        # log('cuda device:', self.cuda_device)
 
     def send_to_farm(self, frames: str) -> None:
         nfm = NstFarm()
@@ -206,21 +210,29 @@ class StyleImager(object):
         tensor = self.generate_tensor(frame=frame)
         return utils.tensor_to_image(tensor)
 
-    def generate_exr(self, frame=None) -> torch.Tensor:
+    def write_exr(self, frame: int=None) -> None:
         if self.content_image:
             if '####' in self.content_image and frame:
                 self._content_image = self.content_image.replace('####', '%04d' % frame)
             else:
                 self._content_image = self.content_image
 
-            # instead of PIL, read content as exr
-            self.content_image_pil = Image.open(self._content_image)
+        if self.out:
+            if '####' in self.out and frame:
+                self._out = self.out.replace('####', '%04d' % frame)
+            else:
+                self._out = self.out
 
-        else:
-            self.content_image_pil = None
+        out_dir = os.path.abspath(os.path.join(self.out, os.path.pardir))
+        os.makedirs(out_dir, exist_ok=True)
 
-        tensor = self.generate_tensor()
-        return utils.tensor_to_exr(tensor)
+        tensor = self.generate_tensor(frame=frame)
+        buf = utils.tensor_to_buf(tensor)
+
+        if self.out_colorspace != 'srgb_texture':
+            buf = oiio.ImageBufAlgo.colorconvert(buf, 'srgb_texture', self.out_colorspace)
+
+        buf.write(self._out)
 
     def generate_tensor(self, frame: int=None) -> torch.Tensor:
 
@@ -230,13 +242,8 @@ class StyleImager(object):
             else:
                 self._content_image = self.content_image
 
-            self.content_image_pil = Image.open(self._content_image)
-
-        else:
-            self.content_image_pil = None
-
         start = timer()
-        vgg = prepare_engine(self.engine)
+        vgg = self._prepare_engine()
 
         if not self.raw_weights:
             utils.normalise_weights(self.style_layers)
@@ -251,8 +258,7 @@ class StyleImager(object):
             style_layer_names = [x for x in self.style_layers]
             style_layer_weights = [self.style_layers[x]['weight'] for x in self.style_layers]
 
-        if self.content_image_pil:
-
+        if self.content_image:
             content_layers = self.content_layers
             content_masks = [torch.Tensor(0)]
             masks += content_masks
@@ -262,27 +268,45 @@ class StyleImager(object):
             loss_fns += content_loss_fns
             content_weights = self.content_weights
             weights += content_weights
-            content_tensor = prepare_content(self._content_image)
-
+            content_tensor = self._prepare_content()
             content_activations = []
             for x in vgg(content_tensor, content_layers):
                 content_activations.append(x)
-            # content_activations = vgg(content_tensor, content_layers)
 
             content_targets = [A.detach() for A in content_activations]
             targets += content_targets
 
+        # if self.content_image_pil:
+        #
+        #     content_layers = self.content_layers
+        #     content_masks = [torch.Tensor(0)]
+        #     masks += content_masks
+        #     loss_layers += content_layers
+        #     # content_loss_fns = [entities.MSELoss()] # not using mask, but need to handle extra arg...
+        #     content_loss_fns = [entities.MSELoss()] * len(content_layers)
+        #     loss_fns += content_loss_fns
+        #     content_weights = self.content_weights
+        #     weights += content_weights
+        #     content_tensor = prepare_content(self._content_image, self.content_scale, self.content_colorspace)
+        #     content_activations = []
+        #     for x in vgg(content_tensor, content_layers):
+        #         content_activations.append(x)
+        #     # content_activations = vgg(content_tensor, content_layers)
+        #
+        #     content_targets = [A.detach() for A in content_activations]
+        #     targets += content_targets
+
         if self.optimisation_image:
-            opt_tensor = prepare_opt(clone=self.optimisation_image)
+            opt_tensor = self.prepare_opt(clone=self.optimisation_image)
         elif self.from_content:
-            opt_tensor = prepare_opt(clone=self._content_image)
-        else:
+            opt_tensor = self.prepare_opt(clone=self._content_image)
+        # else:
             #opt_tensor = prepare_opt(width=self.content_image_pil.size[0], height=self.content_image_pil.size[1])
-            opt_tensor = prepare_opt(width=512, height=512)
+            # opt_tensor = prepare_opt(width=512, height=512)
 
         if self.style_image:
             loss_layers += style_layer_names
-            style_tensor = prepare_style(self.style_image, self.random_style, self.output_dir)
+            style_tensor = self._prepare_style()
             style_activations = []
             for x in vgg(style_tensor, style_layer_names):
                 style_activations.append(x)
@@ -452,15 +476,15 @@ class StyleImager(object):
                 #     mem_usage = memory_profiler.memory_usage(proc=-1, interval=0.1, timeout=0.1)
                 #     msg += 'memory used: %.02f of %s Gb' % (mem_usage[0]/1000, TOTAL_SYSTEM_MEMORY/1000000000)
 
-                log(msg)
+                # log(msg)
             return loss
 
         if self.iterations:
             max_iter = int(self.iterations)
-            log('')
+            # log('')
             while n_iter[0] <= max_iter:
                 optimizer.step(closure)
-            log('')
+            # log('')
 
         if self.max_loss:
             while current_loss[0] > int(self.max_loss):
@@ -473,104 +497,57 @@ class StyleImager(object):
         return opt_tensor
 
 
-def prepare_engine(engine):
-    vgg = entities.VGG()
-    model_filepath = os.getenv('NST_VGG_MODEL')
+    def _prepare_engine(self):
+        vgg = entities.VGG()
+        model_filepath = os.getenv('NST_VGG_MODEL')
 
-    for param in vgg.parameters():
-        param.requires_grad = False
+        for param in vgg.parameters():
+            param.requires_grad = False
 
-    global DO_CUDA
+        global DO_CUDA
 
-    if engine == 'gpu':
-        vgg.cuda()
-
-        vgg.load_state_dict(torch.load(model_filepath))
-        global TOTAL_GPU_MEMORY
-
-        if torch.cuda.is_available():
-            DO_CUDA = True
-            smi_mem_total = ['nvidia-smi', '--query-gpu=memory.total', '--format=csv,noheader,nounits']
-            TOTAL_GPU_MEMORY = float(subprocess.check_output(smi_mem_total).rstrip(b'\n'))
+        if self.engine == 'gpu':
             vgg.cuda()
-            log("using cuda\navailable memory: %.0f Gb" % TOTAL_GPU_MEMORY)
+
+            vgg.load_state_dict(torch.load(model_filepath))
+            global TOTAL_GPU_MEMORY
+
+            if torch.cuda.is_available():
+                DO_CUDA = True
+                smi_mem_total = ['nvidia-smi', '--query-gpu=memory.total', '--format=csv,noheader,nounits']
+                TOTAL_GPU_MEMORY = float(subprocess.check_output(smi_mem_total).rstrip(b'\n'))
+                vgg.cuda()
+                # log("using cuda\navailable memory: %.0f Gb" % TOTAL_GPU_MEMORY)
+            else:
+                msg = "gpu mode was requested, but cuda is not available"
+                raise RuntimeError(msg)
+
+        elif self.engine == 'cpu':
+            vgg.load_state_dict(torch.load(model_filepath))
+            global TOTAL_SYSTEM_MEMORY
+
+            DO_CUDA = False
+            from psutil import virtual_memory
+            TOTAL_SYSTEM_MEMORY = virtual_memory().total
+            # log("using cpu\navailable memory: %s Gb" % (TOTAL_SYSTEM_MEMORY / 1000000000))
+
         else:
-            msg = "gpu mode was requested, but cuda is not available"
+            msg = "invalid arg for engine: valid options are cpu, gpu"
             raise RuntimeError(msg)
 
-    elif engine == 'cpu':
-        vgg.load_state_dict(torch.load(model_filepath))
-        global TOTAL_SYSTEM_MEMORY
-        
-        DO_CUDA = False
-        from psutil import virtual_memory
-        TOTAL_SYSTEM_MEMORY = virtual_memory().total
-        # log("using cpu\navailable memory: %s Gb" % (TOTAL_SYSTEM_MEMORY / 1000000000))
+        return vgg
 
-    else:
-        msg = "invalid arg for engine: valid options are cpu, gpu"
-        raise RuntimeError(msg) 
-    
-    return vgg
+    def _prepare_style(self):
+        style_tensor = utils.image_to_tensor(self.style_image, DO_CUDA)
+        return style_tensor
 
+    def _prepare_content(self):
+        content_tensor = utils.image_to_tensor(self._content_image, DO_CUDA, resize=self.content_scale,
+                                               colorspace=self.content_colorspace)
+        return content_tensor
 
-def prepare_style(style, random_style, output_dir):
-    style_tensor = utils.image_to_tensor(style, DO_CUDA)
-    return style_tensor
-
-
-def prepare_style_old(style, random_style, output_dir):
-    style_image = Image.open(style)
-
-    if random_style:
-        style_image = utils.random_crop_image(style_image)
-        style_image.save('%s/style.png' % output_dir)
-
-    style_tensor = utils.image_to_tensor(style_image, DO_CUDA)
-    return style_tensor
-
-
-def prepare_content(content):
-    content_tensor = utils.image_to_tensor(content, DO_CUDA)
-    return content_tensor
-
-
-def prepare_content_old(content):
-    content_image = Image.open(content)
-    content_tensor = utils.image_to_tensor(content_image, DO_CUDA)
-    return content_tensor
-
-def prepare_opt(clone=None, width=500, height=500):
-    if clone:
-        content_tensor = utils.image_to_tensor(clone, DO_CUDA)
-        opt_tensor = Variable(content_tensor.data.clone(), requires_grad=True)
-        return opt_tensor
-
-
-def prepare_opt_old(clone=None, width=500, height=500):
-    if clone:
-        content_image = Image.open(clone)
-        content_tensor = utils.image_to_tensor(content_image, DO_CUDA)
-        opt_tensor = Variable(content_tensor.data.clone(), requires_grad=True)
-    else:
-        o_width = width
-        o_height = height
-        opt_image = Image.new("RGB", (o_width, o_height), 255)
-        random_grid = map(lambda x: (
-                int(random.random() * 256),
-                int(random.random() * 256),
-                int(random.random() * 256)
-            ), [0] * o_width * o_height)
-
-        # handle different map behaviour for python3
-        if sys.version[0] == '3':
-            random_grid = list(random_grid)
-
-        opt_image.putdata(random_grid)
-        opt_tensor = utils.image_to_tensor(opt_image, DO_CUDA)
-        opt_tensor = Variable(opt_tensor.data.clone(), requires_grad=True)
-
-    return opt_tensor
-
-
-
+    def prepare_opt(self, clone):
+        if clone:
+            content_tensor = utils.image_to_tensor(clone, DO_CUDA, resize=self.content_scale, colorspace=self.content_colorspace)
+            opt_tensor = Variable(content_tensor.data.clone(), requires_grad=True)
+            return opt_tensor

@@ -27,96 +27,96 @@ import numpy as np
 from operator import itemgetter
 
 
-# def output_motion_mask(frame, render, motion_fore, render_denoised, dilate=50, no_dilate=False, debug_mask="", threshold_value=1,
-#             threshold_max=10000):
-#     # need to get thse programmatically
-#     # render_x = 512
-#     # render_y = 512
-#     # to do: handle when motion vec is arbitrary dimensions.
-#
-#     # check if a render_denoised frame is available, use it if it is
-#     render_prev_denoised = render_denoised.replace('*', '%04d' % (frame - 1))
-#     if os.path.isfile(render_prev_denoised):
-#         render_prev = render_prev_denoised
-#     else:
-#         render_prev = render.replace('*', '%04d' % (frame - 1))
-#
-#     if not os.path.isfile(render_prev):
-#         print("no previous frame for frame %04d, skipping" % frame)
-#         print(render_prev)
-#         return
-#
-#     render = render.replace('*', '%04d' % frame)
-#     # render_np = oiio.ImageBuf(render).get_pixels()
-#
-#     t_ = render_denoised.split('/')
-#     t_.pop()
-#     d_ = ('/'.join(t_))
-#     if not os.path.isdir(d_):
-#         os.makedirs(d_)
-#
-#     t_ = debug_mask.split('/')
-#     t_.pop()
-#     d_ = ('/'.join(t_))
-#     if not os.path.isdir(d_):
-#         os.makedirs(d_)
-#
-#     render_np_prev = oiio.ImageBuf(render_prev).get_pixels()
-#     motion_fore = motion_fore.replace('*', '%04d' % (frame - 1))
-#     motion_fore_np = oiio.ImageBuf(motion_fore).get_pixels()
-#
-#     x, y, z = render_np_prev.shape
-#
-#     # 1. warp prev frame into current, keep only pixels that have change
-#     frame_mask = np.zeros((x, y, z))
-#
-#     pixels_to_warp = []
-#
-#     for old_x in range(0, x):
-#         for old_y in range(0, y):
-#             render_value = render_np_prev[old_x][old_y]
-#             mx_, my_, _ = motion_fore_np[old_x][old_y]
-#
-#             # flip axes
-#             mx = int(my_)
-#             my = int(mx_)
-#
-#             # if mx == 0 and my == 0:
-#             #     continue
-#
-#             nx = old_x + mx
-#             ny = old_y + my
-#
-#             # move weakest moves first, strongest last.
-#             render_mag = render_value[0] + render_value[1] + render_value[2]
-#             pixels_to_warp.append(
-#                 (old_x, old_y, nx, ny, (render_value[0], render_value[1], render_value[2]), render_mag, mx_, my_))
-#
-#     sorted_pixels_to_warp = sorted(pixels_to_warp, key=itemgetter(5))
-#
-#     for sp in sorted_pixels_to_warp:
-#         nx = sp[2]
-#         ny = sp[3]
-#         render_value = sp[4]
-#
-#         try:
-#             frame_mask[nx][ny] = render_value
-#         except IndexError:
-#             continue
-#
-#     if not no_dilate:
-#         kernel = np.ones((dilate, dilate), np.uint8)
-#         frame_mask = cv2.dilate(frame_mask, kernel, iterations=1)
-#         # _, frame_mask = cv2.threshold(frame_mask, threshold_value, threshold_max, cv2.THRESH_BINARY)
-#         frame_mask = cv2.GaussianBlur(frame_mask, (5, 5), 0)
-#
-#     if debug_mask:
-#         frame_mask_buf = oiio.ImageBuf(oiio.ImageSpec(x, y, 3, oiio.FLOAT))
-#         frame_mask_buf.set_pixels(oiio.ROI(), frame_mask.copy())
-#         debug_mask = debug_mask.replace("*", "%04d" % frame)
-#         frame_mask_buf.write(debug_mask)
-#
-#     return
+def output_motion_mask(frame, render, motion_fore, render_denoised, dilate=50, no_dilate=False, debug_mask="", threshold_value=1,
+            threshold_max=10000):
+    # need to get thse programmatically
+    # render_x = 512
+    # render_y = 512
+    # to do: handle when motion vec is arbitrary dimensions.
+
+    # check if a render_denoised frame is available, use it if it is
+    render_prev_denoised = render_denoised.replace('*', '%04d' % (frame - 1))
+    if os.path.isfile(render_prev_denoised):
+        render_prev = render_prev_denoised
+    else:
+        render_prev = render.replace('*', '%04d' % (frame - 1))
+
+    if not os.path.isfile(render_prev):
+        print("no previous frame for frame %04d, skipping" % frame)
+        print(render_prev)
+        return
+
+    render = render.replace('*', '%04d' % frame)
+    # render_np = oiio.ImageBuf(render).get_pixels()
+
+    t_ = render_denoised.split('/')
+    t_.pop()
+    d_ = ('/'.join(t_))
+    if not os.path.isdir(d_):
+        os.makedirs(d_)
+
+    t_ = debug_mask.split('/')
+    t_.pop()
+    d_ = ('/'.join(t_))
+    if not os.path.isdir(d_):
+        os.makedirs(d_)
+
+    render_np_prev = oiio.ImageBuf(render_prev).get_pixels()
+    motion_fore = motion_fore.replace('*', '%04d' % (frame - 1))
+    motion_fore_np = oiio.ImageBuf(motion_fore).get_pixels()
+
+    x, y, z = render_np_prev.shape
+
+    # 1. warp prev frame into current, keep only pixels that have change
+    frame_mask = np.zeros((x, y, z))
+
+    pixels_to_warp = []
+
+    for old_x in range(0, x):
+        for old_y in range(0, y):
+            render_value = render_np_prev[old_x][old_y]
+            mx_, my_, _ = motion_fore_np[old_x][old_y]
+
+            # flip axes
+            mx = int(my_)
+            my = int(mx_)
+
+            # if mx == 0 and my == 0:
+            #     continue
+
+            nx = old_x + mx
+            ny = old_y + my
+
+            # move weakest moves first, strongest last.
+            render_mag = render_value[0] + render_value[1] + render_value[2]
+            pixels_to_warp.append(
+                (old_x, old_y, nx, ny, (render_value[0], render_value[1], render_value[2]), render_mag, mx_, my_))
+
+    sorted_pixels_to_warp = sorted(pixels_to_warp, key=itemgetter(5))
+
+    for sp in sorted_pixels_to_warp:
+        nx = sp[2]
+        ny = sp[3]
+        render_value = sp[4]
+
+        try:
+            frame_mask[nx][ny] = render_value
+        except IndexError:
+            continue
+
+    if not no_dilate:
+        kernel = np.ones((dilate, dilate), np.uint8)
+        frame_mask = cv2.dilate(frame_mask, kernel, iterations=1)
+        # _, frame_mask = cv2.threshold(frame_mask, threshold_value, threshold_max, cv2.THRESH_BINARY)
+        frame_mask = cv2.GaussianBlur(frame_mask, (5, 5), 0)
+
+    if debug_mask:
+        frame_mask_buf = oiio.ImageBuf(oiio.ImageSpec(x, y, 3, oiio.FLOAT))
+        frame_mask_buf.set_pixels(oiio.ROI(), frame_mask.copy())
+        debug_mask = debug_mask.replace("*", "%04d" % frame)
+        frame_mask_buf.write(debug_mask)
+
+    return
 
 def normalise_weights(style_layers):
     for layer in style_layers:
@@ -193,21 +193,21 @@ def image_to_tensor_old(image, do_cuda):
 
 
 def image_to_tensor(image: str, do_cuda: bool, resize:float=None, colorspace=None) -> torch.Tensor:
-    # note: oiio implicitely converts to 0-1 floating point data here regardless of format:
-    buf = ImageBuf(image)
+        # note: oiio implicitely converts to 0-1 floating point data here regardless of format:
+        buf = ImageBuf(image)
 
-    o_width = buf.oriented_full_width
-    o_height = buf.oriented_full_height
+        o_width = buf.oriented_full_width
+        o_height = buf.oriented_full_height
 
-    if resize:
-        n_width = float(o_width) * resize
-        n_height = float(o_height) * resize
-        buf = oiio.ImageBufAlgo.resize(buf, roi=ROI(0, n_width, 0, n_height, 0, 1, 0, 3))
+        if resize:
+            n_width = int(float(o_width) * resize)
+            n_height = int(float(o_height) * resize)
+            buf = oiio.ImageBufAlgo.resize(buf, roi=ROI(0, n_width, 0, n_height, 0, 1, 0, 3))
 
-    if colorspace:
-        buf = oiio.ImageBufAlgo.colorconvert(buf, colorspace, 'srgb_texture')
+        if colorspace:
+            buf = oiio.ImageBufAlgo.colorconvert(buf, colorspace, 'srgb_texture')
 
-    return buf_to_tensor(buf, do_cuda)
+        return buf_to_tensor(buf, do_cuda)
 
 
 def buf_to_tensor(buf: oiio.ImageBuf, do_cuda: bool) -> torch.Tensor:
