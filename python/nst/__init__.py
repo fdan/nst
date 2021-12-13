@@ -149,10 +149,10 @@ class StyleImager(object):
         self.log_iterations = 100
         self.style_image = style_image
         self.content_image = content_image
-        self.resize_content = 1.0
-        self.resize_style = 1.0
-        self.content_colorspace = 'srgb_texture'
-        self.style_colorspace = 'srgb_texture'
+        # self.resize_content = 1.0
+        # self.resize_style = 1.0
+        # self.content_colorspace = 'srgb_texture'
+        # self.style_colorspace = 'srgb_texture'
         self.random_style = False
         self.output_dir = None
         self.engine = 'gpu'
@@ -175,6 +175,7 @@ class StyleImager(object):
         self.out = None
         self.out_colorspace = 'acescg'
         self.content_scale = 1.0
+        self.style_scale = 1.0
         self.content_colorspace = 'acescg'
         self.style_colorspace = 'srgb'
         self.init_cuda()
@@ -441,7 +442,12 @@ class StyleImager(object):
                     layer_gradients.append(opt_tensor.grad.clone())
 
             b, c, w, h = opt_tensor.grad.size() # not strictly necessary?
-            output_layer_gradient = torch.zeros((b, c, w, h)).detach().to(torch.device(cuda_device))
+
+            # todo: this assumes the engine is gpu.
+            if self.engine == "gpu":
+                output_layer_gradient = torch.zeros((b, c, w, h)).detach().to(torch.device(cuda_device))
+            else:
+                output_layer_gradient = torch.zeros((b, c, w, h)).detach()
             for lg in layer_gradients:
                 output_layer_gradient += lg
 
@@ -476,7 +482,7 @@ class StyleImager(object):
                 #     mem_usage = memory_profiler.memory_usage(proc=-1, interval=0.1, timeout=0.1)
                 #     msg += 'memory used: %.02f of %s Gb' % (mem_usage[0]/1000, TOTAL_SYSTEM_MEMORY/1000000000)
 
-                # log(msg)
+                log(msg)
             return loss
 
         if self.iterations:
@@ -538,7 +544,8 @@ class StyleImager(object):
         return vgg
 
     def _prepare_style(self):
-        style_tensor = utils.image_to_tensor(self.style_image, DO_CUDA)
+        style_tensor = utils.image_to_tensor(self.style_image, DO_CUDA, resize=self.style_scale,
+                                             colorspace=self.style_colorspace)
         return style_tensor
 
     def _prepare_content(self):

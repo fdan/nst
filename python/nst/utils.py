@@ -205,7 +205,8 @@ def image_to_tensor(image: str, do_cuda: bool, resize:float=None, colorspace=Non
             buf = oiio.ImageBufAlgo.resize(buf, roi=ROI(0, n_width, 0, n_height, 0, 1, 0, 3))
 
         if colorspace:
-            buf = oiio.ImageBufAlgo.colorconvert(buf, colorspace, 'srgb_texture')
+            if colorspace != 'srgb_texture':
+                buf = oiio.ImageBufAlgo.colorconvert(buf, colorspace, 'srgb_texture')
 
         return buf_to_tensor(buf, do_cuda)
 
