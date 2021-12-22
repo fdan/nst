@@ -1,3 +1,0 @@
-Bootstrap: docker
-Registry: http://localhost:5000
-From: pytorch:latest

@@ -6,6 +6,7 @@ Stage: spython-base
 
 export LANG=C.UTF-8
 export LC_ALL=C.UTF-8
+export PATH=/opt/conda/bin:$PATH
 export DEBIAN_FRONTEND=noninteractive
 
 apt-get update --fix-missing && apt-get install -y \
@@ -87,13 +88,16 @@ make install -j50
 # remove build dir
 rm -rf /opt/pytorch_build
 
+chmod -R 777 /opt
+chmod -R 777 /root
+
 %environment
 export PATH=/opt/conda/bin:$PATH
 export PATH=/opt/conda/envs/pytorch/bin:$PATH
 export PATH=/workspace/git/nst/bin:$PATH
 export PYTHONPATH=/workspace/git/nst/python:/opt/oiio/lib/python3.7/site-packages:$PYTHONPATH
 export NST_VGG_MODEL=/workspace/git/nst/bin/Models/vgg_conv.pth
-export OCIO ~/git/OpenColorIO-Configs-master/aces_1.0.3/config.ocio
+export OCIO=/workspace/git/OpenColorIO-Configs-master/aces_1.0.3/config.ocio
 
-#%startscript
-#conda activate pytorch
+%startscript
+conda activate pytorch
