@@ -26,7 +26,7 @@ class NstFarm(object):
         self.smasks = []
 
     def send_to_farm(self):
-        smi_cmd = ['nvidia-smi', '--query-gpu=persistence_mode,display_mode,display_active', '--format=csv,noheader,nounits']
+        # smi_cmd = ['nvidia-smi', '--query-gpu=persistence_mode,display_mode,display_active', '--format=csv,noheader,nounits']
 
         cmd = []
         cmd += ['singularity']
@@ -38,10 +38,11 @@ class NstFarm(object):
         cmd += ['/mnt/ala/research/danielf/2021/git/nst/bin/nst']
         cmd += ['--from-content', self.from_content]
         cmd += ['--style', self.style]
-        # cmd += ['--content', self.content]
+        cmd += ['--engine', self.engine]
+        cmd += ['--content', self.content]
         # if self.opt:
         #     cmd += ['--opt', self.opt]
-        # cmd += ['--out', self.out]
+        cmd += ['--out', self.out]
         cmd += ['--iterations', self.iterations]
         cmd += ['--clayers', ':'.join([str(x) for x in self.clayers])]
         cmd += ['--cweights', ':'.join([str(x) for x in self.cweights])]

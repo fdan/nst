@@ -210,6 +210,28 @@ def image_to_tensor(image: str, do_cuda: bool, resize:float=None, colorspace=Non
 
         return buf_to_tensor(buf, do_cuda)
 
+def PIL_to_tensor(image, do_cuda):
+    """
+    :param [PIL.Image]
+    :return: [torch.Tensor]
+    """
+    # deprecated: don't perform a resize
+
+    tforms = transforms.Compose([
+                               transforms.ToTensor(),
+                               transforms.Lambda(lambda x: x[torch.LongTensor([2, 1, 0])]),  # turn to BGR
+                               transforms.Normalize(mean=[0.40760392, 0.45795686, 0.48501961],  # subtract imagenet mean
+                                                    std=[1, 1, 1]),
+                               transforms.Lambda(lambda x: x.mul_(255)),
+                               ])
+
+    tensor = tforms(image)
+
+    if do_cuda:
+        return tensor.unsqueeze(0).cuda()
+    else:
+        return tensor.unsqueeze(0)
+
 
 def buf_to_tensor(buf: oiio.ImageBuf, do_cuda: bool) -> torch.Tensor:
 

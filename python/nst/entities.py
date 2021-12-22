@@ -29,57 +29,59 @@ gw['r54'] = 0.003814697265625
 # vgg definition that conveniently let's you grab the outputs from any layer
 class VGG(nn.Module):
 
-    layers = {}
-    layers['r11'] = {'channels': 64, 'x': 512}
-    layers['r12'] = {'channels': 64, 'x': 512}
-    layers['r21'] = {'channels': 128, 'x': 256}
-    layers['r22'] = {'channels': 128, 'x': 256}
-    layers['r31'] = {'channels': 256, 'x': 128}
-    layers['r32'] = {'channels': 256, 'x': 128}
-    layers['r34'] = {'channels': 256, 'x': 128}
-    layers['r41'] = {'channels': 512, 'x': 64}
-    layers['r42'] = {'channels': 512, 'x': 64}
-    layers['r43'] = {'channels': 512, 'x': 64}
-    layers['r44'] = {'channels': 512, 'x': 64}
-    layers['r51'] = {'channels': 512, 'x': 32}
-    layers['r52'] = {'channels': 512, 'x': 32}
-    layers['r53'] = {'channels': 512, 'x': 32}
-    layers['r54'] = {'channels': 512, 'x': 32}
+    # layers = {}
+    # layers['r11'] = {'channels': 64, 'x': 512}
+    # layers['r12'] = {'channels': 64, 'x': 512}
+    # layers['r21'] = {'channels': 128, 'x': 256}
+    # layers['r22'] = {'channels': 128, 'x': 256}
+    # layers['r31'] = {'channels': 256, 'x': 128}
+    # layers['r32'] = {'channels': 256, 'x': 128}
+    # layers['r34'] = {'channels': 256, 'x': 128}
+    # layers['r41'] = {'channels': 512, 'x': 64}
+    # layers['r42'] = {'channels': 512, 'x': 64}
+    # layers['r43'] = {'channels': 512, 'x': 64}
+    # layers['r44'] = {'channels': 512, 'x': 64}
+    # layers['r51'] = {'channels': 512, 'x': 32}
+    # layers['r52'] = {'channels': 512, 'x': 32}
+    # layers['r53'] = {'channels': 512, 'x': 32}
+    # layers['r54'] = {'channels': 512, 'x': 32}
 
-    def __init__(self, pool='max'):
+    def __init__(self, pool='max', conv_kernel_size=3, conv_kernel_padding=1, pool_kernel_size=2, pool_stride=2):
+
         super(VGG, self).__init__()
         # vgg modules
 
         # note: first two args of Conv2d are in channels, out channels
         # where is the x and y dimensions of each filter defined?
-        self.conv1_1 = nn.Conv2d(3, 64, kernel_size=3, padding=1)
-        self.conv1_2 = nn.Conv2d(64, 64, kernel_size=3, padding=1)
-        self.conv2_1 = nn.Conv2d(64, 128, kernel_size=3, padding=1)
-        self.conv2_2 = nn.Conv2d(128, 128, kernel_size=3, padding=1)
-        self.conv3_1 = nn.Conv2d(128, 256, kernel_size=3, padding=1)
-        self.conv3_2 = nn.Conv2d(256, 256, kernel_size=3, padding=1)
-        self.conv3_3 = nn.Conv2d(256, 256, kernel_size=3, padding=1)
-        self.conv3_4 = nn.Conv2d(256, 256, kernel_size=3, padding=1)
-        self.conv4_1 = nn.Conv2d(256, 512, kernel_size=3, padding=1)
-        self.conv4_2 = nn.Conv2d(512, 512, kernel_size=3, padding=1)
-        self.conv4_3 = nn.Conv2d(512, 512, kernel_size=3, padding=1)
-        self.conv4_4 = nn.Conv2d(512, 512, kernel_size=3, padding=1)
-        self.conv5_1 = nn.Conv2d(512, 512, kernel_size=3, padding=1)
-        self.conv5_2 = nn.Conv2d(512, 512, kernel_size=3, padding=1)
-        self.conv5_3 = nn.Conv2d(512, 512, kernel_size=3, padding=1)
-        self.conv5_4 = nn.Conv2d(512, 512, kernel_size=3, padding=1)
+        # a: it's not defined, they come from the input tensor size
+        self.conv1_1 = nn.Conv2d(3, 64, kernel_size=conv_kernel_size, padding=conv_kernel_padding)
+        self.conv1_2 = nn.Conv2d(64, 64, kernel_size=conv_kernel_size, padding=conv_kernel_padding)
+        self.conv2_1 = nn.Conv2d(64, 128, kernel_size=conv_kernel_size, padding=conv_kernel_padding)
+        self.conv2_2 = nn.Conv2d(128, 128, kernel_size=conv_kernel_size, padding=conv_kernel_padding)
+        self.conv3_1 = nn.Conv2d(128, 256, kernel_size=conv_kernel_size, padding=conv_kernel_padding)
+        self.conv3_2 = nn.Conv2d(256, 256, kernel_size=conv_kernel_size, padding=conv_kernel_padding)
+        self.conv3_3 = nn.Conv2d(256, 256, kernel_size=conv_kernel_size, padding=conv_kernel_padding)
+        self.conv3_4 = nn.Conv2d(256, 256, kernel_size=conv_kernel_size, padding=conv_kernel_padding)
+        self.conv4_1 = nn.Conv2d(256, 512, kernel_size=conv_kernel_size, padding=conv_kernel_padding)
+        self.conv4_2 = nn.Conv2d(512, 512, kernel_size=conv_kernel_size, padding=conv_kernel_padding)
+        self.conv4_3 = nn.Conv2d(512, 512, kernel_size=conv_kernel_size, padding=conv_kernel_padding)
+        self.conv4_4 = nn.Conv2d(512, 512, kernel_size=conv_kernel_size, padding=conv_kernel_padding)
+        self.conv5_1 = nn.Conv2d(512, 512, kernel_size=conv_kernel_size, padding=conv_kernel_padding)
+        self.conv5_2 = nn.Conv2d(512, 512, kernel_size=conv_kernel_size, padding=conv_kernel_padding)
+        self.conv5_3 = nn.Conv2d(512, 512, kernel_size=conv_kernel_size, padding=conv_kernel_padding)
+        self.conv5_4 = nn.Conv2d(512, 512, kernel_size=conv_kernel_size, padding=conv_kernel_padding)
         if pool == 'max':
-            self.pool1 = nn.MaxPool2d(kernel_size=2, stride=2)
-            self.pool2 = nn.MaxPool2d(kernel_size=2, stride=2)
-            self.pool3 = nn.MaxPool2d(kernel_size=2, stride=2)
-            self.pool4 = nn.MaxPool2d(kernel_size=2, stride=2)
-            self.pool5 = nn.MaxPool2d(kernel_size=2, stride=2)
+            self.pool1 = nn.MaxPool2d(kernel_size=pool_kernel_size, stride=pool_stride) #stride is how much it jumps
+            self.pool2 = nn.MaxPool2d(kernel_size=pool_kernel_size, stride=pool_stride)
+            self.pool3 = nn.MaxPool2d(kernel_size=pool_kernel_size, stride=pool_stride)
+            self.pool4 = nn.MaxPool2d(kernel_size=pool_kernel_size, stride=pool_stride)
+            self.pool5 = nn.MaxPool2d(kernel_size=pool_kernel_size, stride=pool_stride)
         elif pool == 'avg':
-            self.pool1 = nn.AvgPool2d(kernel_size=2, stride=2)
-            self.pool2 = nn.AvgPool2d(kernel_size=2, stride=2)
-            self.pool3 = nn.AvgPool2d(kernel_size=2, stride=2)
-            self.pool4 = nn.AvgPool2d(kernel_size=2, stride=2)
-            self.pool5 = nn.AvgPool2d(kernel_size=2, stride=2)
+            self.pool1 = nn.AvgPool2d(kernel_size=pool_kernel_size, stride=pool_stride)
+            self.pool2 = nn.AvgPool2d(kernel_size=pool_kernel_size, stride=pool_stride)
+            self.pool3 = nn.AvgPool2d(kernel_size=pool_kernel_size, stride=pool_stride)
+            self.pool4 = nn.AvgPool2d(kernel_size=pool_kernel_size, stride=pool_stride)
+            self.pool5 = nn.AvgPool2d(kernel_size=pool_kernel_size, stride=pool_stride)
 
     def forward(self, tensor, out_keys):
         """
@@ -142,6 +144,7 @@ class GramMatrix(nn.Module):
     def forward(self, input):
         b, c, h, w = input.size()
         F = input.view(b, c, h * w)
+        # print(2.1, F.size(), F.transpose(1,2).size())
         G = torch.bmm(F, F.transpose(1, 2))
         G.div_(h * w)
         return G
@@ -262,8 +265,12 @@ class GramMSELoss(nn.Module):
     """
     # def forward(self, input, target, mask):
     def forward(self, input, target):
+
         # homebrew MSE loss, matches nn.MSELoss():
         a_ = torch.sub(GramMatrix()(input), target)
+
+        # print(input.size(), target.size(), a_.size())
+
         b_ = torch.pow(a_, 2)
         c_ = torch.mean(b_)
         return c_

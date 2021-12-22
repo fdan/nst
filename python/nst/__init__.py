@@ -149,6 +149,11 @@ class StyleImager(object):
         self.log_iterations = 100
         self.style_image = style_image
         self.content_image = content_image
+        self.style_image_2 = None
+        self.style_image_3 = None
+        self.style_image_4 = None
+        self.style_image_5 = None
+        self.style_image_6 = None
         # self.resize_content = 1.0
         # self.resize_style = 1.0
         # self.content_colorspace = 'srgb_texture'
@@ -163,6 +168,13 @@ class StyleImager(object):
         self.lr = 1
         self.loss_graph = ([], [])
         self.style_layers = style_layers
+        self.style_layers_2 = None
+        self.style_layers_3 = None
+        self.style_layers_4 = None
+        self.style_layers_5 = None
+        self.style_layers_6 = None
+        self.opt_x = 512
+        self.opt_y = 512
         self.content_layers = ['r42']
         self.content_weights = [1.0]
         self.content_masks = [None]
@@ -177,7 +189,7 @@ class StyleImager(object):
         self.content_scale = 1.0
         self.style_scale = 1.0
         self.content_colorspace = 'acescg'
-        self.style_colorspace = 'srgb'
+        self.style_colorspace = 'srgb_texture'
         self.init_cuda()
 
     def init_cuda(self) -> None:
@@ -190,6 +202,7 @@ class StyleImager(object):
         nfm.style = self.style_image
         nfm.content = self.content_image
         nfm.out = self.out
+        nfm.engine = self.engine
         nfm.frames = frames
         nfm.slayers = [x for x in self.style_layers]
         nfm.sweights = [self.style_layers[x]['weight'] for x in self.style_layers]
@@ -259,6 +272,26 @@ class StyleImager(object):
             style_layer_names = [x for x in self.style_layers]
             style_layer_weights = [self.style_layers[x]['weight'] for x in self.style_layers]
 
+        if self.style_layers_2:
+            style_layer_names_2 = [x for x in self.style_layers_2]
+            style_layer_weights_2 = [self.style_layers_2[x]['weight'] for x in self.style_layers_2]
+
+        if self.style_layers_3:
+            style_layer_names_3 = [x for x in self.style_layers_3]
+            style_layer_weights_3 = [self.style_layers_3[x]['weight'] for x in self.style_layers_3]
+
+        if self.style_layers_4:
+            style_layer_names_4 = [x for x in self.style_layers_4]
+            style_layer_weights_4 = [self.style_layers_4[x]['weight'] for x in self.style_layers_4]
+
+        if self.style_layers_5:
+            style_layer_names_5 = [x for x in self.style_layers_5]
+            style_layer_weights_5 = [self.style_layers_5[x]['weight'] for x in self.style_layers_5]
+
+        if self.style_layers_6:
+            style_layer_names_6 = [x for x in self.style_layers_6]
+            style_layer_weights_6 = [self.style_layers_6[x]['weight'] for x in self.style_layers_6]
+
         if self.content_image:
             content_layers = self.content_layers
             content_masks = [torch.Tensor(0)]
@@ -301,20 +334,92 @@ class StyleImager(object):
             opt_tensor = self.prepare_opt(clone=self.optimisation_image)
         elif self.from_content:
             opt_tensor = self.prepare_opt(clone=self._content_image)
-        # else:
-            #opt_tensor = prepare_opt(width=self.content_image_pil.size[0], height=self.content_image_pil.size[1])
-            # opt_tensor = prepare_opt(width=512, height=512)
+        else:
+            opt_tensor = self.prepare_opt()
 
+        # how would we handle multiple style images?
         if self.style_image:
             loss_layers += style_layer_names
-            style_tensor = self._prepare_style()
+            style_tensor = utils.image_to_tensor(self.style_image, DO_CUDA, resize=self.style_scale, colorspace=self.style_colorspace)
+
             style_activations = []
             for x in vgg(style_tensor, style_layer_names):
                 style_activations.append(x)
+
             style_loss_fns = [entities.GramMSELoss()] * len(style_layer_names)
             loss_fns += style_loss_fns
             weights += style_layer_weights
             style_targets = [entities.GramMatrix()(A).detach() for A in style_activations]
+            targets += style_targets
+
+        if self.style_image_2:
+            loss_layers += style_layer_names_2
+            style_tensor_2 = utils.image_to_tensor(self.style_image_2, DO_CUDA, resize=self.style_scale, colorspace=self.style_colorspace)
+
+            style_activations_2 = []
+            for x in vgg(style_tensor_2, style_layer_names_2):
+                style_activations_2.append(x)
+
+            style_loss_fns_2 = [entities.GramMSELoss()] * len(style_layer_names_2)
+            loss_fns += style_loss_fns_2
+            weights += style_layer_weights_2
+            style_targets = [entities.GramMatrix()(A).detach() for A in style_activations_2]
+            targets += style_targets
+
+        if self.style_image_3:
+            loss_layers += style_layer_names_3
+            style_tensor_3 = utils.image_to_tensor(self.style_image_3, DO_CUDA, resize=self.style_scale, colorspace=self.style_colorspace)
+
+            style_activations_3 = []
+            for x in vgg(style_tensor_3, style_layer_names_3):
+                style_activations_3.append(x)
+
+            style_loss_fns_3 = [entities.GramMSELoss()] * len(style_layer_names_3)
+            loss_fns += style_loss_fns_3
+            weights += style_layer_weights_3
+            style_targets = [entities.GramMatrix()(A).detach() for A in style_activations_3]
+            targets += style_targets
+
+        if self.style_image_4:
+            loss_layers += style_layer_names_4
+            style_tensor_4 = utils.image_to_tensor(self.style_image_4, DO_CUDA, resize=self.style_scale, colorspace=self.style_colorspace)
+
+            style_activations_4 = []
+            for x in vgg(style_tensor_4, style_layer_names_4):
+                style_activations_4.append(x)
+
+            style_loss_fns_4 = [entities.GramMSELoss()] * len(style_layer_names_4)
+            loss_fns += style_loss_fns_4
+            weights += style_layer_weights_4
+            style_targets = [entities.GramMatrix()(A).detach() for A in style_activations_4]
+            targets += style_targets
+
+        if self.style_image_5:
+            loss_layers += style_layer_names_5
+            style_tensor_5 = utils.image_to_tensor(self.style_image_5, DO_CUDA, resize=self.style_scale, colorspace=self.style_colorspace)
+
+            style_activations_5 = []
+            for x in vgg(style_tensor_5, style_layer_names_5):
+                style_activations_5.append(x)
+
+            style_loss_fns_5 = [entities.GramMSELoss()] * len(style_layer_names_5)
+            loss_fns += style_loss_fns_5
+            weights += style_layer_weights_5
+            style_targets = [entities.GramMatrix()(A).detach() for A in style_activations_5]
+            targets += style_targets
+
+        if self.style_image_6:
+            loss_layers += style_layer_names_6
+            style_tensor_6 = utils.image_to_tensor(self.style_image_6, DO_CUDA, resize=self.style_scale, colorspace=self.style_colorspace)
+
+            style_activations_6 = []
+            for x in vgg(style_tensor_6, style_layer_names_6):
+                style_activations_6.append(x)
+
+            style_loss_fns_6 = [entities.GramMSELoss()] * len(style_layer_names_6)
+            loss_fns += style_loss_fns_6
+            weights += style_layer_weights_6
+            style_targets = [entities.GramMatrix()(A).detach() for A in style_activations_6]
             targets += style_targets
 
         if DO_CUDA:
@@ -348,6 +453,59 @@ class StyleImager(object):
             if not has_mask:
                 layer_masks.append(None)
                 continue
+
+        layer_masks.append(None)
+        layer_masks.append(None)
+        layer_masks.append(None)
+        layer_masks.append(None)
+        layer_masks.append(None)
+        layer_masks.append(None)
+        layer_masks.append(None)
+        layer_masks.append(None)
+        layer_masks.append(None)
+        layer_masks.append(None)
+        layer_masks.append(None)
+        layer_masks.append(None)
+        layer_masks.append(None)
+        layer_masks.append(None)
+        layer_masks.append(None)
+        layer_masks.append(None)
+        layer_masks.append(None)
+        layer_masks.append(None)
+        layer_masks.append(None)
+        layer_masks.append(None)
+        layer_masks.append(None)
+        layer_masks.append(None)
+        layer_masks.append(None)
+        layer_masks.append(None)
+        layer_masks.append(None)
+        layer_masks.append(None)
+        layer_masks.append(None)
+        layer_masks.append(None)
+        layer_masks.append(None)
+        layer_masks.append(None)
+        layer_masks.append(None)
+        layer_masks.append(None)
+        layer_masks.append(None)
+        layer_masks.append(None)
+        layer_masks.append(None)
+        layer_masks.append(None)
+        layer_masks.append(None)
+        layer_masks.append(None)
+        layer_masks.append(None)
+        layer_masks.append(None)
+        layer_masks.append(None)
+        layer_masks.append(None)
+        layer_masks.append(None)
+        layer_masks.append(None)
+        layer_masks.append(None)
+        layer_masks.append(None)
+        layer_masks.append(None)
+        layer_masks.append(None)
+        layer_masks.append(None)
+        layer_masks.append(None)
+        layer_masks.append(None)
+        layer_masks.append(None)
 
             # mask_file = self.style_layers[sl]['mask']
             #
@@ -504,7 +662,9 @@ class StyleImager(object):
 
 
     def _prepare_engine(self):
+
         vgg = entities.VGG()
+
         model_filepath = os.getenv('NST_VGG_MODEL')
 
         for param in vgg.parameters():
@@ -543,18 +703,30 @@ class StyleImager(object):
 
         return vgg
 
-    def _prepare_style(self):
-        style_tensor = utils.image_to_tensor(self.style_image, DO_CUDA, resize=self.style_scale,
-                                             colorspace=self.style_colorspace)
-        return style_tensor
-
     def _prepare_content(self):
         content_tensor = utils.image_to_tensor(self._content_image, DO_CUDA, resize=self.content_scale,
                                                colorspace=self.content_colorspace)
         return content_tensor
 
-    def prepare_opt(self, clone):
+    def prepare_opt(self, clone=None):
         if clone:
             content_tensor = utils.image_to_tensor(clone, DO_CUDA, resize=self.content_scale, colorspace=self.content_colorspace)
             opt_tensor = Variable(content_tensor.data.clone(), requires_grad=True)
-            return opt_tensor
+
+        else:
+            o_width = self.opt_x
+            o_height = self.opt_y
+            opt_image = Image.new("RGB", (o_width, o_height), 255)
+            random_grid = map(lambda x: (
+                    int(random.random() * 256),
+                    int(random.random() * 256),
+                    int(random.random() * 256)
+                ), [0] * o_width * o_height)
+
+            random_grid = list(random_grid)
+
+            opt_image.putdata(random_grid)
+            opt_tensor = utils.PIL_to_tensor(opt_image, DO_CUDA)
+            opt_tensor = Variable(opt_tensor.data.clone(), requires_grad=True)
+
+        return opt_tensor
