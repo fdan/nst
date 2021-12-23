@@ -196,14 +196,15 @@ class StyleImager(object):
         self.cuda_device = utils.get_cuda_device()
         # log('cuda device:', self.cuda_device)
 
-    def send_to_farm(self, frames: str) -> None:
+    def send_to_farm(self, frames: str=None) -> None:
         nfm = NstFarm()
         nfm.from_content = self.from_content
         nfm.style = self.style_image
         nfm.content = self.content_image
         nfm.out = self.out
         nfm.engine = self.engine
-        nfm.frames = frames
+        if frames:
+            nfm.frames = frames
         nfm.slayers = [x for x in self.style_layers]
         nfm.sweights = [self.style_layers[x]['weight'] for x in self.style_layers]
         nfm.send_to_farm()
