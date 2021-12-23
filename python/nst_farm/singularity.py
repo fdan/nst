@@ -64,37 +64,41 @@ class NstFarm(object):
         job.tier = 'batch'
         job.atmost = 56
 
-        ffmpeg_out = self.out.replace('####', '%%04d')
-        out_dir = os.path.abspath(os.path.join(self.out, os.path.pardir))
-        ffmpeg_cmd = ['ffmpeg', '-start_number', '1001', '-i', ffmpeg_out, '-c:v', 'libx264', '-crf', '1', '-y']
-        ffmpeg_cmd += ['%s/nst.mp4' % out_dir]
-        ffmpeg_task = job.newTask(title='h264_gen', argv=ffmpeg_cmd)
+        if not self.frames:
+            job.newTask(title="style transfer", argv=cmd)
 
-        processed_frames = self.eval_frames()
-        for frame in processed_frames:
+        else:
+            ffmpeg_out = self.out.replace('####', '%%04d')
+            out_dir = os.path.abspath(os.path.join(self.out, os.path.pardir))
+            ffmpeg_cmd = ['ffmpeg', '-start_number', '1001', '-i', ffmpeg_out, '-c:v', 'libx264', '-crf', '1', '-y']
+            ffmpeg_cmd += ['%s/nst.mp4' % out_dir]
+            ffmpeg_task = job.newTask(title='h264_gen', argv=ffmpeg_cmd)
 
-            cmd_ = deepcopy(cmd)
+            processed_frames = self.eval_frames()
+            for frame in processed_frames:
 
-            if self.smasks:
-                self.smasks = [x.replace("####", "%04d" % frame) if x else None for x in self.smasks]
-                cmd_ += ['--smasks', ':'.join([str(x) for x in self.smasks])]
+                cmd_ = deepcopy(cmd)
 
-            if self.content:
-                self.content_ = self.content.replace("####", "%04d" % frame)
-                cmd_ += ['--content', self.content]
+                if self.smasks:
+                    self.smasks = [x.replace("####", "%04d" % frame) if x else None for x in self.smasks]
+                    cmd_ += ['--smasks', ':'.join([str(x) for x in self.smasks])]
 
-            if self.opt:
-                self.opt_image_ = self.opt.replace("####", "%04d" % frame)
-                cmd_ += ['--opt', self.opt]
+                if self.content:
+                    self.content_ = self.content.replace("####", "%04d" % frame)
+                    cmd_ += ['--content', self.content]
 
-            out_ = self.out.replace("####", "%04d" % frame)
-            cmd_ += ['--out', out_]
+                if self.opt:
+                    self.opt_image_ = self.opt.replace("####", "%04d" % frame)
+                    cmd_ += ['--opt', self.opt]
 
-            frame_cmd = cmd_ + ['--frames', frame]
-            frame_task_name = jobname + '_%04d' % frame
+                out_ = self.out.replace("####", "%04d" % frame)
+                cmd_ += ['--out', out_]
 
-            frame_task = job.newTask(title=frame_task_name, argv=frame_cmd)
-            ffmpeg_task.addChild(frame_task)
+                frame_cmd = cmd_ + ['--frames', frame]
+                frame_task_name = jobname + '_%04d' % frame
+
+                frame_task = job.newTask(title=frame_task_name, argv=frame_cmd)
+                ffmpeg_task.addChild(frame_task)
 
         try:
             job.spool()
