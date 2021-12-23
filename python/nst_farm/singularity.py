@@ -34,7 +34,7 @@ class NstFarm(object):
         cmd += ['--nv']
         cmd += ['--bind']
         cmd += ['/mnt/ala']
-        cmd += ['/mnt/ala/research/danielf/2021/git/nst/environments/singularity/pytorch-1.7.1_cuda-11.0/nst.sif']
+        cmd += ['/mnt/ala/research/danielf/2021/git/nst/environments/singularity/pytorch-1.10_cuda-11.4/nst.sif']
         cmd += ['/mnt/ala/research/danielf/2021/git/nst/bin/nst']
         cmd += ['--from-content', self.from_content]
         cmd += ['--style', self.style]
@@ -60,7 +60,7 @@ class NstFarm(object):
         envkey += ['setenv NST_VGG_MODEL=/mnt/ala/research/danielf/models/gatys_nst_vgg/vgg_conv.pth']
 
         job.envkey = envkey
-        job.service = '(@.gpucount > 0) && !(%s)' % ' || '.join(self.bad_nodes)
+        # job.service = '(@.gpucount > 0) && !(%s)' % ' || '.join(self.bad_nodes)
         job.tier = 'batch'
         job.atmost = 56
 
