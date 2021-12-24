@@ -141,7 +141,7 @@ def _doit(opts):
 class StyleImager(object):
 
     def __init__(self, style_layers=None, style_image=None, content_image=None, style_importance_mask=None, grad_mask=None,
-                 frame=0, render_out=None, denoise=False):
+                 frame=0, render_out=None, denoise=False, engine='gpu'):
         self.denoise = denoise
         self.style_importance_mask = style_importance_mask
         self.grad_mask = grad_mask
@@ -160,7 +160,7 @@ class StyleImager(object):
         # self.style_colorspace = 'srgb_texture'
         self.random_style = False
         self.output_dir = None
-        self.engine = 'gpu'
+        self.engine = engine
         self.from_content = True
         self.unsafe = False
         self.progressive = False
@@ -190,7 +190,9 @@ class StyleImager(object):
         self.style_scale = 1.0
         self.content_colorspace = 'acescg'
         self.style_colorspace = 'srgb_texture'
-        self.init_cuda()
+        print('engine:', self.engine)
+        if self.engine == 'gpu':
+            self.init_cuda()
 
     def init_cuda(self) -> None:
         self.cuda_device = utils.get_cuda_device()
@@ -330,6 +332,8 @@ class StyleImager(object):
         #
         #     content_targets = [A.detach() for A in content_activations]
         #     targets += content_targets
+
+        print('from content:', self.from_content, self.from_content.__class__)
 
         if self.optimisation_image:
             opt_tensor = self.prepare_opt(clone=self.optimisation_image)
@@ -527,7 +531,10 @@ class StyleImager(object):
             output_tensors = vgg(opt_tensor, loss_layers)
             layer_gradients = []
 
-            loss = torch.zeros(1, requires_grad=False).to(torch.device(cuda_device))
+            if cuda_device:
+                loss = torch.zeros(1, requires_grad=False).to(torch.device(cuda_device))
+            else:
+                loss = torch.zeros(1, requires_grad=False)
 
             for counter, tensor in enumerate(output_tensors):
                 optimizer.zero_grad()

@@ -31,7 +31,7 @@ def main():
     # to do - addd cli args for from_content (?)  why looks diff?
 
     p = OptionParser()
-    p.add_option("", "--from-content", dest='from_content', action='store_true')
+    p.add_option("", "--from-content", dest='from_content', action='store')
     p.add_option("", "--style", dest='style', action='store')
     p.add_option("", "--content", dest='content', action='store')
     p.add_option("", "--mask", dest='mask', action='store')
@@ -48,9 +48,13 @@ def main():
 
     opts, args = p.parse_args()
 
-    frames = eval_frames(opts.frames)
+    from_content = eval(opts.from_content)
+
+    if opts.frames:
+        frames = eval_frames(opts.frames)
 
     engine = opts.engine
+    print(20.1, engine)
 
     cweights = [float(x) for x in opts.cweights.split(':')]
     clayers = opts.clayers.split(':')
@@ -64,11 +68,13 @@ def main():
 
     inputs_to_check = []
 
+    content = eval(opts.content)
+
     if opts.opt:
         inputs_to_check.append(opts.opt)
     if opts.mask:
         inputs_to_check.append(opts.mask)
-    if opts.content:
+    if content:
         inputs_to_check.append(opts.content)
 
     check_inputs(opts.style, inputs_to_check)
@@ -84,14 +90,45 @@ def main():
     #     nst.farm.conda.doit(opts)
     #     return
     #
-    for frame in frames:
-        if opts.smasks:
-            smasks = [x.replace("####", "%04d" % frame) if x else None for x in smasks]
-        if opts.content:
-            content_ = opts.content.replace("####", "%04d" % frame)
-        if opts.opt:
-            opt_image_ = opts.opt.replace("####", "%04d" % frame)
-        output_image_ = opts.out.replace("####", "%04d" % frame)
+
+    if opts.frames:
+        for frame in frames:
+            if opts.smasks:
+                smasks = [x.replace("####", "%04d" % frame) if x else None for x in smasks]
+            if content:
+                content_ = opts.content.replace("####", "%04d" % frame)
+            if opts.opt:
+                opt_image_ = opts.opt.replace("####", "%04d" % frame)
+            output_image_ = opts.out.replace("####", "%04d" % frame)
+    
+            style_layers = {}
+    
+            for sl in slayers:
+                i = slayers.index(sl)
+                if opts.smasks:
+                    smasks = opts.smasks.split(':')
+                    if smasks[i]:
+                        style_layers[sl] = {'weight': sweights[i], 'mask': smasks[i]}
+                else:
+                    style_layers[sl] = {'weight': sweights[i]}
+    
+            style_imager = nst.StyleImager(style_layers, style_image=opts.style, content_image=content_)
+            style_imager.from_content = from_content
+            style_imager.iterations = opts.iterations
+            style_imager.log_iterations = 100
+            style_imager.content_weights = cweights
+            style_imager.content_layers = clayers
+            style_imager.content_masks = [None]
+            style_imager.out = output_image_
+            style_imager.engine = engine
+    
+            if opts.opt:
+                style_imager.optimisation_image = opt_image_
+    
+            style_imager.write_exr(frame=frame)
+
+    else:
+        output_image_ = opts.out
 
         style_layers = {}
 
@@ -104,20 +141,31 @@ def main():
             else:
                 style_layers[sl] = {'weight': sweights[i]}
 
-        style_imager = nst.StyleImager(style_layers, style_image=opts.style, content_image=content_)
-        style_imager.from_content = opts.from_content
+        if content:
+            print(1.1)
+            style_imager = nst.StyleImager(style_layers, style_image=opts.style, content_image=opts.content)
+            style_imager.content_weights = cweights
+            style_imager.content_layers = clayers
+            style_imager.content_masks = [None]
+        else:
+            print(1.23, engine)
+            style_imager = nst.StyleImager(style_layers, style_image=opts.style, engine=engine)
+            style_imager.opt_x = 858
+            style_imager.opt_y = 858
+
+        print('foobar')
+
+        print(123, from_content, engine)
+        style_imager.from_content = from_content
         style_imager.iterations = opts.iterations
         style_imager.log_iterations = 100
-        style_imager.content_weights = cweights
-        style_imager.content_layers = clayers
-        style_imager.content_masks = [None]
         style_imager.out = output_image_
-        style_imager.engine = engine
 
         if opts.opt:
             style_imager.optimisation_image = opt_image_
 
-        style_imager.write_exr(frame=frame)
+        style_imager.write_exr()
+
 
 
 def check_inputs(style, inputs):

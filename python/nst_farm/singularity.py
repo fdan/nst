@@ -49,6 +49,8 @@ class NstFarm(object):
         cmd += ['--slayers', ':'.join([str(x) for x in self.slayers])]
         cmd += ['--sweights', ':'.join([str(x) for x in self.sweights])]
 
+        print(10.1, self.engine)
+
         user = os.getenv('USER')
         jobname = 'style_transfer_{0}'.format(user)
 
@@ -56,13 +58,24 @@ class NstFarm(object):
         job.title = jobname
 
         envkey = []
-        envkey += ['setenv PYTHONPATH=/mnt/ala/research/danielf/2021/git/nst/python']
-        envkey += ['setenv NST_VGG_MODEL=/mnt/ala/research/danielf/models/gatys_nst_vgg/vgg_conv.pth']
+#        envkey += ['setenv PYTHONPATH=/mnt/ala/research/danielf/2021/git/nst/python']
+#        envkey += ['setenv NST_VGG_MODEL=/mnt/ala/research/danielf/models/gatys_nst_vgg/vgg_conv.pth']
+
+#        envkey += ['setenv PATH=/home/13448206/git/nst/bin:$PATH']
+        envkey += ['setenv PYTHONPATH=/home/13448206/git/nst/python:/home/13448206/git/tractor/python:/opt/oiio/lib/python3.7/site-packages:$PYTHONPATH']
+        envkey += ['setenv TRACTOR_ENGINE=frank:5600']
+        envkey += ['setenv NST_VGG_MODEL=/home/13448206/git/nst/bin/Models/vgg_conv.pth']
+        envkey += ['setenv OCIO=/home/13448206/git/OpenColorIO-Configs-master/aces_1.0.3/config.ocio']
 
         job.envkey = envkey
-        # job.service = '(@.gpucount > 0) && !(%s)' % ' || '.join(self.bad_nodes)
+
+        if self.engine == 'gpu':
+#            job.service = '(@.gpucount > 0) && !(%s)' % ' || '.join(self.bad_nodes)
+            job.service = '(whale || starfish)'
+        else:
+            job.service = 'lighting'
         job.tier = 'batch'
-        job.atmost = 56
+        job.atmost = 32
 
         if not self.frames:
             job.newTask(title="style transfer", argv=cmd)
