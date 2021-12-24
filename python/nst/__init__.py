@@ -196,7 +196,7 @@ class StyleImager(object):
 
     def init_cuda(self) -> None:
         self.cuda_device = utils.get_cuda_device()
-        # log('cuda device:', self.cuda_device)
+        # log('cuda device:', self.cuda_device);
 
     def send_to_farm(self, frames: str=None) -> None:
         nfm = NstFarm()

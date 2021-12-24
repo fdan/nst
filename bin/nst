@@ -45,10 +45,18 @@ def main():
     p.add_option("", "--sweights", dest='sweights', action='store')
     p.add_option("", "--smasks", dest='smasks', action='store')
     p.add_option("", "--engine", dest='engine', action='store')
+    p.add_option("", "--style-scale", dest='style_scale', action='store')
+    p.add_option("", "--opt-x", dest='opt_x', action='store')
+    p.add_option("", "--opt-y", dest='opt_y', action='store')
 
     opts, args = p.parse_args()
 
     from_content = eval(opts.from_content)
+
+    try:
+        style_scale = float(opts.style_scale)
+    except TypeError:
+        style_scale = 1.
 
     if opts.frames:
         frames = eval_frames(opts.frames)
@@ -121,6 +129,7 @@ def main():
             style_imager.content_masks = [None]
             style_imager.out = output_image_
             style_imager.engine = engine
+            style_imager.style_scale = style_scale
     
             if opts.opt:
                 style_imager.optimisation_image = opt_image_
@@ -160,6 +169,7 @@ def main():
         style_imager.iterations = opts.iterations
         style_imager.log_iterations = 100
         style_imager.out = output_image_
+        style_imager.style_scale = style_scale
 
         if opts.opt:
             style_imager.optimisation_image = opt_image_
