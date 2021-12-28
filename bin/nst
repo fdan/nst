@@ -64,10 +64,13 @@ def main():
     engine = opts.engine
     print(20.1, engine)
 
-    cweights = [float(x) for x in opts.cweights.split(':')]
-    clayers = opts.clayers.split(':')
-    sweights = [float(x) for x in opts.sweights.split(':')]
-    slayers = opts.slayers.split(':')
+    if opts.content:
+        cweights = [float(x) for x in opts.cweights.split(':')]
+        clayers = opts.clayers.split(':')
+
+    if opts.style:
+        sweights = [float(x) for x in opts.sweights.split(':')]
+        slayers = opts.slayers.split(':')
 
     # if opts.smasks:
     #     smasks = opts.smasks.split(':')
@@ -76,7 +79,7 @@ def main():
 
     inputs_to_check = []
 
-    content = eval(opts.content)
+    content = opts.content
 
     if opts.opt:
         inputs_to_check.append(opts.opt)
@@ -120,7 +123,7 @@ def main():
                 else:
                     style_layers[sl] = {'weight': sweights[i]}
     
-            style_imager = nst.StyleImager(style_layers, style_image=opts.style, content_image=content_)
+            style_imager = nst.StyleImager(style_layers, style_image=opts.style, content_image=content_, engine=engine)
             style_imager.from_content = from_content
             style_imager.iterations = opts.iterations
             style_imager.log_iterations = 100
@@ -128,7 +131,6 @@ def main():
             style_imager.content_layers = clayers
             style_imager.content_masks = [None]
             style_imager.out = output_image_
-            style_imager.engine = engine
             style_imager.style_scale = style_scale
     
             if opts.opt:
@@ -152,7 +154,7 @@ def main():
 
         if content:
             print(1.1)
-            style_imager = nst.StyleImager(style_layers, style_image=opts.style, content_image=opts.content)
+            style_imager = nst.StyleImager(style_layers, style_image=opts.style, content_image=opts.content, engine=engine)
             style_imager.content_weights = cweights
             style_imager.content_layers = clayers
             style_imager.content_masks = [None]
@@ -193,7 +195,7 @@ def check_outputs(output):
     op = os.path
     output_rel_dir = op.relpath(op.join(output, op.pardir))
     if not os.path.isdir(output_rel_dir):
-        os.makedirs(output_rel_dir)
+        os.makedirs(output_rel_dir, exist_ok=True)
 
 
 def eval_frames(frames_list):
