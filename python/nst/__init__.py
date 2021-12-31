@@ -268,13 +268,6 @@ class StyleImager(object):
         targets = []
         masks = []
 
-
-
-        # # todo: do this for each mip
-        # if self.style_layers:
-        #     style_layer_names = [x for x in self.style_layers]
-        #     style_layer_weights = [self.style_layers[x]['weight'] for x in self.style_layers]
-
         if self.content_image:
             content_layers = self.content_layers
             content_masks = [torch.Tensor(0)]
@@ -300,9 +293,6 @@ class StyleImager(object):
         else:
             opt_tensor = self.prepare_opt()
 
-
-
-
         if self.style.image:
             for mip in self.style.mips:
                 if mip.layers:
@@ -310,7 +300,9 @@ class StyleImager(object):
                     style_layer_weights = [mip.layers[x] for x in mip.layers]
 
                     loss_layers += style_layer_names
-                    style_tensor = utils.image_to_tensor(self.style.image, DO_CUDA, resize=self.style_scale, colorspace=self.style_colorspace)
+
+                    style_tensor = utils.image_to_tensor(self.style.image, DO_CUDA, resize=self.style_scale,
+                                                         colorspace=self.style_colorspace, resize_sharpen=True)
 
                     style_activations = []
                     for x in vgg(style_tensor, style_layer_names):
