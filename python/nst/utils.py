@@ -204,12 +204,11 @@ def image_to_tensor(image: str, do_cuda: bool, resize:float=None, colorspace=Non
         if resize:
             n_width = int(float(o_width) * resize)
             n_height = int(float(o_height) * resize)
-
-
-
             buf = oiio.ImageBufAlgo.resize(buf, roi=ROI(0, n_width, 0, n_height, 0, 1, 0, 3))
 
         if sharpen:
+            buf = oiio.ImageBufAlgo.unsharp_mask(buf, kernel="gaussian", width=50.0, contrast=1.0, threshold=0.0, roi=oiio.ROI.All, nthreads=0)
+
             # based on the reduction in size, set an appropriate sharpening level for style transfer
             # "good" sharpen values
             #
