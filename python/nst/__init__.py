@@ -295,14 +295,16 @@ class StyleImager(object):
 
         if self.style.image:
             for mip in self.style.mips:
+
                 if mip.layers:
                     style_layer_names = [x for x in mip.layers]
                     style_layer_weights = [mip.layers[x] for x in mip.layers]
 
+                    print(1.0, 'mip scale:', mip.scale, style_layer_names, style_layer_weights)
+
                     loss_layers += style_layer_names
 
-                    style_tensor = utils.image_to_tensor(self.style.image, DO_CUDA, resize=self.style_scale,
-                                                         colorspace=self.style_colorspace, resize_sharpen=True)
+                    style_tensor = utils.image_to_tensor(self.style.image, DO_CUDA, resize=mip.scale, colorspace=self.style_colorspace)
 
                     style_activations = []
                     for x in vgg(style_tensor, style_layer_names):
