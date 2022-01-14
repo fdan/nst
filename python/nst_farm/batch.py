@@ -1,4 +1,8 @@
+from collections import ChainMap
+import json
+
 from nst import StyleImager
+import nst
 
 try:
     import tractor.api.author
@@ -6,7 +10,106 @@ except ImportError:
     pass
 
 
-def style_contact_sheeet(style_image, x, y, mips, iterations, engine, outdir):
+
+def lerp(start, end, step):
+    diff = abs(start - end)
+    incr = diff / float(step-1)
+    steps = []
+    value = start
+    for x in range(0, step):
+        steps.append(value)
+        value -= incr
+    return steps
+
+
+def make_tractor_job(title='style_transfer', service='Studio', atmost=28):
+    job = tractor.api.author.Job()
+    job.title = title
+    envkey = []
+    envkey += ['setenv PYTHONPATH=/home/13448206/git/nst/python:/home/13448206/git/tractor/python:/opt/oiio/lib/python3.7/site-packages:$PYTHONPATH']
+    envkey += ['setenv TRACTOR_ENGINE=frank:5600']
+    envkey += ['setenv NST_VGG_MODEL=/home/13448206/git/nst/bin/Models/vgg_conv.pth']
+    envkey += ['setenv OCIO=/home/13448206/git/OpenColorIO-Configs-master/aces_1.0.3/config.ocio']
+    job.envkey = envkey
+    job.service = service
+    job.tier = 'batch'
+    job.atmost = atmost
+    return job
+
+
+def make_singularity_cmd():
+    cmd = []
+    cmd += ['singularity']
+    cmd += ['exec']
+    cmd += ['--nv']
+    cmd += ['--bind']
+    cmd += ['/mnt/ala']
+    cmd += ['/mnt/ala/research/danielf/2021/git/nst/environments/singularity/pytorch-1.10_cuda-11.4/nst.sif']
+    cmd += ['/mnt/ala/research/danielf/2021/git/nst/bin/nst']
+    return cmd
+
+
+def wedge(style_image, content, mips, varying_mips, start, end, step, out_dir):
+    style_image_name = style_image.split('/')[-1]
+
+    job = make_tractor_job(title='style_transfer_wedge_%s' % style_image_name)
+
+    for weight in lerp(start, end, step):
+
+        for vm in varying_mips.keys():
+            vm.layers['r31'] = weight
+
+        style = nst.Style(style_image, mips)
+
+        cmd = make_singularity_cmd()
+        cmd += ['--from-content', True]
+        cmd += ['--style', style.image]
+        cmd += ['--engine', 'cpu']
+        cmd += ['--content', content]
+        cmd += ['--out', '%s/out_%s.exr' % (out_dir, weight)]
+
+        mds = [mip.as_dict() for mip in style.mips]
+        md = dict(ChainMap(*mds))
+        cmd += ['--mips', json.dumps(md)]
+
+        job.newTask(title="style_transfer_wedge_%s_%s" % (style_image_name, weight), argv=cmd)
+
+    try:
+        job.spool()
+    except TypeError:
+        pass
+
+
+def nst_job(style_image, content, mips, out_dir, opt=None):
+    style_image_name = style_image.split('/')[-1]
+
+    job = make_tractor_job(title='style_transfer_wedge_%s' % style_image_name)
+
+    style = nst.Style(style_image, mips)
+
+    cmd = make_singularity_cmd()
+    cmd += ['--from-content', True]
+    cmd += ['--style', style.image]
+    cmd += ['--engine', 'cpu']
+    cmd += ['--content', content]
+    cmd += ['--out', '%s/out.exr' % (out_dir)]
+
+    if opt:
+        cmd += ['--opt', opt]
+
+    mds = [mip.as_dict() for mip in style.mips]
+    md = dict(ChainMap(*mds))
+    cmd += ['--mips', json.dumps(md)]
+
+    job.newTask(title="style_transfer_wedge_%s" % (style_image_name), argv=cmd)
+
+    try:
+        job.spool()
+    except TypeError:
+        pass
+
+
+def style_contact_sheet(style_image, x, y, mips, iterations, engine, outdir, version='v001', service="Studio"):
     """
     Given a style image, create a bunch of farm tasks for each vgg layer,
     halving the style resolution via mip mapping.
@@ -25,7 +128,7 @@ def style_contact_sheeet(style_image, x, y, mips, iterations, engine, outdir):
     envkey += ['setenv OCIO=/home/13448206/git/OpenColorIO-Configs-master/aces_1.0.3/config.ocio']
 
     job.envkey = envkey
-    job.service = 'lighting'
+    job.service = service
     job.tier = 'batch'
     job.atmost = 28
 
@@ -44,18 +147,14 @@ def style_contact_sheeet(style_image, x, y, mips, iterations, engine, outdir):
             cmd += ['--from-content', False]
             cmd += ['--style', style_image]
             cmd += ['--engine', engine]
-            cmd += ['--out', "%s/%s/mip%s/%s.exr" % (outdir, style_image_filename, mip, layer)]
+            cmd += ['--out', "%s/%s/%s/style/mip%s/%s.exr" % (outdir, style_image_filename, version, mip, layer)]
             cmd += ['--iterations', iterations]
-            cmd += ['--slayers', layer]
-            cmd += ['--sweights', 1.0]
+            cmd += ['--mips', "{\"%s\": {\"%s\": 1.0}}" % (scale, layer)]
             cmd += ['--style-scale', scale]
             cmd += ['--opt-x', x]
             cmd += ['--opt-y', y]
 
             job.newTask(title="%s_mip_%s_layer_%s" % (style_image_filename, mip, layer), argv=cmd)
-
-        gatys_layers = ['r11', 'r21', 'r31', 'r41', 'r51']
-        gatys_weights = [0.244140625, 0.06103515625, 0.0152587890625, 0.003814697265625, 0.003814697265625]
 
         cmd = []
         cmd += ['singularity']
@@ -68,10 +167,9 @@ def style_contact_sheeet(style_image, x, y, mips, iterations, engine, outdir):
         cmd += ['--from-content', False]
         cmd += ['--style', style_image]
         cmd += ['--engine', engine]
-        cmd += ['--out', "%s/%s/mip%s/%s.exr" % (outdir, style_image_filename, mip, 'gatys_layers')]
+        cmd += ['--out', "%s/%s/%s/style/mip%s/%s.exr" % (outdir, style_image_filename, version, mip, 'gatys_layers')]
         cmd += ['--iterations', iterations]
-        cmd += ['--slayers', ':'.join([str(x) for x in gatys_layers])]
-        cmd += ['--sweights', ':'.join([str(x) for x in gatys_weights])]
+        cmd += ['--mips', "{\"%s\": {\"r11\": 0.244140625, \"r21\": 0.06103515625, \"r31\": 0.0152587890625, \"r41\": 0.003814697265625, \"r51\": 0.003814697265625}}" % (scale)]
         cmd += ['--style-scale', scale]
         cmd += ['--opt-x', x]
         cmd += ['--opt-y', y]        
@@ -85,7 +183,7 @@ def style_contact_sheeet(style_image, x, y, mips, iterations, engine, outdir):
     #print(job.asTcl())
 
 
-def nst_contact_sheeet(style_image, content_image, mips, iterations, engine, outdir):
+def nst_contact_sheet(style_image, content_image, mips, iterations, engine, outdir, version='v001', service="Studio", opt=None):
     """
     Given a style image, create a bunch of farm tasks for each vgg layer,
     halving the style resolution via mip mapping.
@@ -104,7 +202,7 @@ def nst_contact_sheeet(style_image, content_image, mips, iterations, engine, out
     envkey += ['setenv OCIO=/home/13448206/git/OpenColorIO-Configs-master/aces_1.0.3/config.ocio']
 
     job.envkey = envkey
-    job.service = 'lighting'
+    job.service = service
     job.tier = 'batch'
     job.atmost = 28
 
@@ -124,18 +222,18 @@ def nst_contact_sheeet(style_image, content_image, mips, iterations, engine, out
             cmd += ['--style', style_image]
             cmd += ['--content', content_image]
             cmd += ['--engine', engine]
-            cmd += ['--out', "%s/%s/mip%s/%s.exr" % (outdir, style_image_filename, mip, layer)]
+
+            if opt:
+                cmd += ['--opt', opt]
+
+            cmd += ['--out', "%s/%s/%s/nst/mip%s/%s.exr" % (outdir, style_image_filename, version, mip, layer)]
             cmd += ['--iterations', iterations]
-            cmd += ['--slayers', layer]
-            cmd += ['--sweights', 1.0]
+            cmd += ['--mips', "{\"%s\": {\"%s\": 1.0}}" % (scale, layer)]
             cmd += ['--style-scale', scale]
             cmd += ['--clayers', layer]
             cmd += ['--cweights', 1.0]
 
             job.newTask(title="%s_mip_%s_layer_%s" % (style_image_filename, mip, layer), argv=cmd)
-
-        gatys_layers = ['r11', 'r21', 'r31', 'r41', 'r51']
-        gatys_weights = [0.244140625, 0.06103515625, 0.0152587890625, 0.003814697265625, 0.003814697265625]
 
         cmd = []
         cmd += ['singularity']
@@ -149,11 +247,10 @@ def nst_contact_sheeet(style_image, content_image, mips, iterations, engine, out
         cmd += ['--style', style_image]
         cmd += ['--content', content_image]
         cmd += ['--engine', engine]
-        cmd += ['--out', "%s/%s/mip%s/%s.exr" % (outdir, style_image_filename, mip, 'gatys_layers')]
+        cmd += ['--out', "%s/%s/%s/nst/mip%s/%s.exr" % (outdir, style_image_filename, version, mip, 'gatys_layers')]
         cmd += ['--iterations', iterations]
         cmd += ['--style-scale', scale]
-        cmd += ['--slayers', ':'.join([str(x) for x in gatys_layers])]
-        cmd += ['--sweights', ':'.join([str(x) for x in gatys_weights])]
+        cmd += ['--mips', "{\"%s\": {\"r11\": 0.244140625, \"r21\": 0.06103515625, \"r31\": 0.0152587890625, \"r41\": 0.003814697265625, \"r51\": 0.003814697265625}}" % (scale)]
         cmd += ['--clayers', 'r41']
         cmd += ['--cweights', 1.0]
         job.newTask(title="%s_mip_%s_gatysLayers" % (style_image_filename, mip), argv=cmd)

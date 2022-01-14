@@ -3,6 +3,7 @@ import random
 import traceback
 import uuid
 import os
+import json
 import subprocess
 from timeit import default_timer as timer
 
@@ -138,14 +139,17 @@ def _doit(opts):
         log_file.write(LOG)
 
 
-
-
 class StyleMip(object):
     def __init__(self, scale, layers, out_mask=None):
         self.scale = scale
         self.out_mask = out_mask
         self.layers = layers
 
+    def as_json(self):
+        return json.dumps(self.as_dict())
+
+    def as_dict(self):
+        return {self.scale: self.layers}
 
 class Style(object):
     def __init__(self, image, mips, in_mask=None, out_mask=None):

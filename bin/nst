@@ -28,7 +28,7 @@ def main():
     --slayers r12:r21:r31:r34:r41:r42:r43 --sweights 0.2:0.02:0.02:0.02:0.2:0.02:0.02
     """
 
-    # to do - addd cli args for from_content (?)  why looks diff?
+    # to do - add cli args for from_content (?)  why looks diff?
 
     p = OptionParser()
     p.add_option("", "--from-content", dest='from_content', action='store')
@@ -41,13 +41,11 @@ def main():
     p.add_option("", "--iterations", dest='iterations', action='store')
     p.add_option("", "--clayers", dest='clayers', action='store')
     p.add_option("", "--cweights", dest='cweights', action='store')
-    p.add_option("", "--slayers", dest='slayers', action='store')
-    p.add_option("", "--sweights", dest='sweights', action='store')
-    p.add_option("", "--smasks", dest='smasks', action='store')
     p.add_option("", "--engine", dest='engine', action='store')
     p.add_option("", "--style-scale", dest='style_scale', action='store')
     p.add_option("", "--opt-x", dest='opt_x', action='store')
     p.add_option("", "--opt-y", dest='opt_y', action='store')
+    p.add_option("", "--mips", dest='mips', action='store')
 
     opts, args = p.parse_args()
 
@@ -58,27 +56,12 @@ def main():
     except TypeError:
         style_scale = 1.
 
-    if opts.frames:
-        frames = eval_frames(opts.frames)
-
     engine = opts.engine
-    print(20.1, engine)
 
-    if opts.content:
-        cweights = [float(x) for x in opts.cweights.split(':')]
-        clayers = opts.clayers.split(':')
-
-    if opts.style:
-        sweights = [float(x) for x in opts.sweights.split(':')]
-        slayers = opts.slayers.split(':')
-
-    # if opts.smasks:
-    #     smasks = opts.smasks.split(':')
-
+    import json
+    mips = json.loads(opts.mips)
     check_outputs(opts.out)
-
     inputs_to_check = []
-
     content = opts.content
 
     if opts.opt:
@@ -97,43 +80,53 @@ def main():
         if e.errno != errno.EEXIST:
             raise
         pass
-    # if opts.farm:
-    #     nst.farm.conda.doit(opts)
-    #     return
-    #
+
+    iterations = opts.iterations or 500
+
+    if opts.clayers:
+        clayers = opts.clayers.split(':')
+    else:
+        clayers = ['r41']
+
+    if opts.cweights:
+        cweights = [float(x) for x in opts.cweights.split(':')]
+    else:
+        cweights = [1.0]
+
 
     if opts.frames:
+        frames = eval_frames(opts.frames)
         for frame in frames:
-            if opts.smasks:
-                smasks = [x.replace("####", "%04d" % frame) if x else None for x in smasks]
+            # if opts.smasks:
+            #     smasks = [x.replace("####", "%04d" % frame) if x else None for x in smasks]
             if content:
                 content_ = opts.content.replace("####", "%04d" % frame)
-            if opts.opt:
-                opt_image_ = opts.opt.replace("####", "%04d" % frame)
+            else:
+                content_ = None
+
             output_image_ = opts.out.replace("####", "%04d" % frame)
-    
-            style_layers = {}
-    
-            for sl in slayers:
-                i = slayers.index(sl)
-                if opts.smasks:
-                    smasks = opts.smasks.split(':')
-                    if smasks[i]:
-                        style_layers[sl] = {'weight': sweights[i], 'mask': smasks[i]}
-                else:
-                    style_layers[sl] = {'weight': sweights[i]}
-    
-            style_imager = nst.StyleImager(style_layers, style_image=opts.style, content_image=content_, engine=engine)
+
+            mip_objects = []
+            for mip in mips.keys():
+                mip_objects.append(nst.StyleMip(float(mip), mips[mip]))
+            style_obj = nst.Style(opts.style, mip_objects)
+
+            style_imager = nst.StyleImager(style_obj, content_image=content_, engine=engine)
+
             style_imager.from_content = from_content
-            style_imager.iterations = opts.iterations
+            style_imager.iterations = iterations
             style_imager.log_iterations = 100
-            style_imager.content_weights = cweights
-            style_imager.content_layers = clayers
+
+            if opts.content:
+                style_imager.content_weights = cweights
+                style_imager.content_layers = clayers
+
             style_imager.content_masks = [None]
             style_imager.out = output_image_
             style_imager.style_scale = style_scale
     
             if opts.opt:
+                opt_image_ = opts.opt.replace("####", "%04d" % frame)
                 style_imager.optimisation_image = opt_image_
     
             style_imager.write_exr(frame=frame)
@@ -141,40 +134,29 @@ def main():
     else:
         output_image_ = opts.out
 
-        style_layers = {}
-
-        for sl in slayers:
-            i = slayers.index(sl)
-            if opts.smasks:
-                smasks = opts.smasks.split(':')
-                if smasks[i]:
-                    style_layers[sl] = {'weight': sweights[i], 'mask': smasks[i]}
-            else:
-                style_layers[sl] = {'weight': sweights[i]}
+        mip_objects = []
+        for mip in mips.keys():
+            mip_objects.append(nst.StyleMip(float(mip), mips[mip]))
+        style_obj = nst.Style(opts.style, mip_objects)
 
         if content:
-            print(1.1)
-            style_imager = nst.StyleImager(style_layers, style_image=opts.style, content_image=opts.content, engine=engine)
+            style_imager = nst.StyleImager(style_obj, content_image=opts.content, engine=engine)
             style_imager.content_weights = cweights
             style_imager.content_layers = clayers
             style_imager.content_masks = [None]
         else:
-            print(1.23, engine)
-            style_imager = nst.StyleImager(style_layers, style_image=opts.style, engine=engine)
+            style_imager = nst.StyleImager(style_obj, engine=engine)
             style_imager.opt_x = 858
             style_imager.opt_y = 858
 
-        print('foobar')
-
-        print(123, from_content, engine)
         style_imager.from_content = from_content
-        style_imager.iterations = opts.iterations
+        style_imager.iterations = iterations
         style_imager.log_iterations = 100
         style_imager.out = output_image_
         style_imager.style_scale = style_scale
 
         if opts.opt:
-            style_imager.optimisation_image = opt_image_
+            style_imager.optimisation_image = opts.opt
 
         style_imager.write_exr()
 

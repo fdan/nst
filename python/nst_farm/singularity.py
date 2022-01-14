@@ -1,5 +1,7 @@
 import os
 from copy import deepcopy
+from collections import ChainMap
+import json
 
 try:
     import tractor.api.author
@@ -11,22 +13,23 @@ class NstFarm(object):
 
     bad_nodes = ['cicada', 'meerkat', 'leech']
 
-    def __init__(self):
+    def __init__(self, style, content_image=None):
         self.from_content = True
-        self.style = ''
-        self.content = ''
+        self.style = style
+        self.content = content_image
         self.opt = ''
         self.out = ''
         self.frames = ''
+        self.engine = 'cpu'
         self.iterations = 500
+        self.log_iterations = 100
+        self.title = 'style_transfer_{0}'.format(os.getenv('USER'))
         self.clayers = ['r41']
         self.cweights = ['1.0']
-        self.slayers = []
-        self.sweights = []
         self.smasks = []
+        self.service = 'Studio'
 
     def send_to_farm(self):
-        # smi_cmd = ['nvidia-smi', '--query-gpu=persistence_mode,display_mode,display_active', '--format=csv,noheader,nounits']
 
         cmd = []
         cmd += ['singularity']
@@ -37,7 +40,7 @@ class NstFarm(object):
         cmd += ['/mnt/ala/research/danielf/2021/git/nst/environments/singularity/pytorch-1.10_cuda-11.4/nst.sif']
         cmd += ['/mnt/ala/research/danielf/2021/git/nst/bin/nst']
         cmd += ['--from-content', self.from_content]
-        cmd += ['--style', self.style]
+        cmd += ['--style', self.style.image]
         cmd += ['--engine', self.engine]
         cmd += ['--content', self.content]
         # if self.opt:
@@ -46,22 +49,15 @@ class NstFarm(object):
         cmd += ['--iterations', self.iterations]
         cmd += ['--clayers', ':'.join([str(x) for x in self.clayers])]
         cmd += ['--cweights', ':'.join([str(x) for x in self.cweights])]
-        cmd += ['--slayers', ':'.join([str(x) for x in self.slayers])]
-        cmd += ['--sweights', ':'.join([str(x) for x in self.sweights])]
 
-        print(10.1, self.engine)
-
-        user = os.getenv('USER')
-        jobname = 'style_transfer_{0}'.format(user)
+        mds = [mip.as_dict() for mip in self.style.mips]
+        md = dict(ChainMap(*mds))
+        cmd += ['--mips', json.dumps(md)]
 
         job = tractor.api.author.Job()
-        job.title = jobname
+        job.title = self.title
 
         envkey = []
-#        envkey += ['setenv PYTHONPATH=/mnt/ala/research/danielf/2021/git/nst/python']
-#        envkey += ['setenv NST_VGG_MODEL=/mnt/ala/research/danielf/models/gatys_nst_vgg/vgg_conv.pth']
-
-#        envkey += ['setenv PATH=/home/13448206/git/nst/bin:$PATH']
         envkey += ['setenv PYTHONPATH=/home/13448206/git/nst/python:/home/13448206/git/tractor/python:/opt/oiio/lib/python3.7/site-packages:$PYTHONPATH']
         envkey += ['setenv TRACTOR_ENGINE=frank:5600']
         envkey += ['setenv NST_VGG_MODEL=/home/13448206/git/nst/bin/Models/vgg_conv.pth']
@@ -73,9 +69,9 @@ class NstFarm(object):
 #            job.service = '(@.gpucount > 0) && !(%s)' % ' || '.join(self.bad_nodes)
             job.service = '(whale || starfish)'
         else:
-            job.service = 'lighting'
+            job.service = self.service
         job.tier = 'batch'
-        job.atmost = 32
+        job.atmost = 28
 
         if not self.frames:
             job.newTask(title="style transfer", argv=cmd)
@@ -108,7 +104,7 @@ class NstFarm(object):
                 cmd_ += ['--out', out_]
 
                 frame_cmd = cmd_ + ['--frames', frame]
-                frame_task_name = jobname + '_%04d' % frame
+                frame_task_name = self.title + '_%04d' % frame
 
                 frame_task = job.newTask(title=frame_task_name, argv=frame_cmd)
                 ffmpeg_task.addChild(frame_task)
