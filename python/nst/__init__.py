@@ -151,14 +151,13 @@ class StyleMip(object):
     def as_dict(self):
         return {self.scale: self.layers}
 
+
 class Style(object):
     def __init__(self, image, mips, in_mask=None, out_mask=None):
         self.image = image
         self.in_mask = in_mask
         self.out_mask = out_mask
         self.mips = mips
-
-
 
 
 class StyleImager(object):
@@ -478,20 +477,19 @@ class StyleImager(object):
             # average?  why?
             opt_tensor.grad = output_layer_gradient
 
+            # output opt_tensor as an image seq here
+
             nice_loss = '{:,.0f}'.format(loss.item())
             if self.progressive:
                 output_render = self.output_dir + '/render.%04d.png' % n_iter[0]
-                # print('doing render:', output_render)
-                # print(os.path.isdir(self.output_dir))
                 utils.render_image(opt_tensor, output_render, 'loss: %s\niteration: %s' % (nice_loss, n_iter[0]))
-                # print('finished render')
 
             nice_loss = '{:,.0f}'.format(loss.item())
             current_loss[0] = loss.item()
             n_iter[0] += 1
             if n_iter[0] % show_iter == (show_iter - 1):
 
-                # to do: ideally find the actual version where this changed:
+
                 if torch.__version__ == '1.1.0':
                     max_mem_cached = torch.cuda.max_memory_cached(0) / 1000000
                 elif torch.__version__ == '1.7.1':
@@ -511,14 +509,12 @@ class StyleImager(object):
 
         if self.iterations:
             max_iter = int(self.iterations)
-            # log('')
             while n_iter[0] <= max_iter:
                 optimizer.step(closure)
-            # log('')
 
-        if self.max_loss:
-            while current_loss[0] > int(self.max_loss):
-                optimizer.step(closure)
+        # if we did per-iteration gradient outputs, do an ffmpeg on the sequence:
+
+        # if we did per-iteration opt outputs, do an ffmpeg on the sequence:
 
         end = timer()
         duration = "%.02f seconds" % float(end - start)

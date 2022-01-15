@@ -10,6 +10,8 @@ except ImportError:
     pass
 
 
+VGG_LAYERS = ['r11', 'r12', 'r21', 'r22', 'r31', 'r32', 'r33', 'r34', 'r41', 'r42', 'r43', 'r44', 'r51', 'r52', 'r53', 'r54']
+
 
 def lerp(start, end, step):
     diff = abs(start - end)
@@ -109,13 +111,11 @@ def nst_job(style_image, content, mips, out_dir, opt=None):
         pass
 
 
-def style_contact_sheet(style_image, x, y, mips, iterations, engine, outdir, version='v001', service="Studio"):
+def style_contact_sheet(style_image, x, y, mips, iterations, engine, outdir, version='v001', service="Studio", vgg_layers=VGG_LAYERS):
     """
     Given a style image, create a bunch of farm tasks for each vgg layer,
     halving the style resolution via mip mapping.
     """
-    vgg_layers = ['r11', 'r12', 'r21', 'r22', 'r31', 'r32', 'r33', 'r34', 'r41', 'r42', 'r43', 'r44', 'r51', 'r52', 'r53', 'r54']
-
     style_image_filename = style_image.split('/')[-1]
 
     job = tractor.api.author.Job()
@@ -183,13 +183,11 @@ def style_contact_sheet(style_image, x, y, mips, iterations, engine, outdir, ver
     #print(job.asTcl())
 
 
-def nst_contact_sheet(style_image, content_image, mips, iterations, engine, outdir, version='v001', service="Studio", opt=None):
+def nst_contact_sheet(style_image, content_image, mips, iterations, engine, outdir, version='v001', service="Studio", opt=None, vgg_layers=VGG_LAYERS):
     """
     Given a style image, create a bunch of farm tasks for each vgg layer,
     halving the style resolution via mip mapping.
     """
-    vgg_layers = ['r11', 'r12', 'r21', 'r22', 'r31', 'r32', 'r33', 'r34', 'r41', 'r42', 'r43', 'r44', 'r51', 'r52', 'r53', 'r54']
-
     style_image_filename = style_image.split('/')[-1]
 
     job = tractor.api.author.Job()
