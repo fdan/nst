@@ -1,5 +1,6 @@
 #! /usr/bin/env python
 
+import json
 import errno
 from optparse import OptionParser
 import os
@@ -43,6 +44,7 @@ def main():
     p.add_option("", "--cweights", dest='cweights', action='store')
     p.add_option("", "--engine", dest='engine', action='store')
     p.add_option("", "--style-scale", dest='style_scale', action='store')
+    p.add_option("", "--content-scale", dest='content_scale', action='store')
     p.add_option("", "--opt-x", dest='opt_x', action='store')
     p.add_option("", "--opt-y", dest='opt_y', action='store')
     p.add_option("", "--mips", dest='mips', action='store')
@@ -58,7 +60,6 @@ def main():
 
     engine = opts.engine
 
-    import json
     mips = json.loads(opts.mips)
     check_outputs(opts.out)
     inputs_to_check = []
@@ -143,6 +144,7 @@ def main():
             style_imager = nst.StyleImager(style_obj, content_image=opts.content, engine=engine)
             style_imager.content_weights = cweights
             style_imager.content_layers = clayers
+            style_imager.content_scale = opts.content_scale or 1.0
             style_imager.content_masks = [None]
         else:
             style_imager = nst.StyleImager(style_obj, engine=engine)
