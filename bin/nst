@@ -144,7 +144,7 @@ def main():
             style_imager = nst.StyleImager(style_obj, content_image=opts.content, engine=engine)
             style_imager.content_weights = cweights
             style_imager.content_layers = clayers
-            style_imager.content_scale = opts.content_scale or 1.0
+            style_imager.content_scale = float(opts.content_scale) or 1.0
             style_imager.content_masks = [None]
         else:
             style_imager = nst.StyleImager(style_obj, engine=engine)
