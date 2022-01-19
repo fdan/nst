@@ -82,7 +82,7 @@ def wedge(style_image, content, mips, varying_mips, start, end, step, out_dir):
         pass
 
 
-def nst_job(style_image, content, mips, out_dir, content_scale=1.0, opt=None, content_layers=('r41'), content_weights=(1.0)):
+def nst_job(style_image, content, mips, out_dir, content_scale=1.0, opt=None, content_layers='r41', content_weights='1.0'):
     style_image_name = style_image.split('/')[-1]
 
     job = make_tractor_job(title='style_transfer_wedge_%s' % style_image_name)
