@@ -88,7 +88,6 @@ class NstFarm(object):
 
             processed_frames = self.eval_frames()
             for frame in processed_frames:
-                print(1, frame)
 
                 cmd_ = deepcopy(cmd)
 
