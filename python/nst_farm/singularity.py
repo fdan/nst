@@ -42,10 +42,13 @@ class NstFarm(object):
         cmd += ['--from-content', self.from_content]
         cmd += ['--style', self.style.image]
         cmd += ['--engine', self.engine]
-        cmd += ['--content', self.content]
+
+        # cmd += ['--content', self.content]
+
         # if self.opt:
         #     cmd += ['--opt', self.opt]
-        cmd += ['--out', self.out]
+        # cmd += ['--out', self.out]
+
         cmd += ['--iterations', self.iterations]
         cmd += ['--clayers', ':'.join([str(x) for x in self.clayers])]
         cmd += ['--cweights', ':'.join([str(x) for x in self.cweights])]
