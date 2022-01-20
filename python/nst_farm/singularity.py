@@ -88,6 +88,7 @@ class NstFarm(object):
 
             processed_frames = self.eval_frames()
             for frame in processed_frames:
+                print(1, frame)
 
                 cmd_ = deepcopy(cmd)
 
@@ -97,19 +98,21 @@ class NstFarm(object):
 
                 if self.content:
                     self.content_ = self.content.replace("####", "%04d" % frame)
-                    cmd_ += ['--content', self.content]
+                    print(1.1, self.content_)
+                    cmd_ += ['--content', self.content_]
 
                 if self.opt:
                     self.opt_image_ = self.opt.replace("####", "%04d" % frame)
-                    cmd_ += ['--opt', self.opt]
+                    cmd_ += ['--opt', self.opt_image_]
 
                 out_ = self.out.replace("####", "%04d" % frame)
                 cmd_ += ['--out', out_]
 
-                frame_cmd = cmd_ + ['--frames', frame]
+                # frame_cmd = cmd_ + ['--frames', frame]
                 frame_task_name = self.title + '_%04d' % frame
 
-                frame_task = job.newTask(title=frame_task_name, argv=frame_cmd)
+                # frame_task = job.newTask(title=frame_task_name, argv=frame_cmd)
+                frame_task = job.newTask(title=frame_task_name, argv=cmd_)
                 ffmpeg_task.addChild(frame_task)
 
         try:
