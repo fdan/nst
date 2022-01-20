@@ -98,7 +98,6 @@ class NstFarm(object):
 
                 if self.content:
                     self.content_ = self.content.replace("####", "%04d" % frame)
-                    print(1.1, self.content_)
                     cmd_ += ['--content', self.content_]
 
                 if self.opt:
