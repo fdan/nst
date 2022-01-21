@@ -186,7 +186,7 @@ def style_contact_sheet(style_image, x, y, mips, iterations, engine, outdir, ver
     #print(job.asTcl())
 
 
-def nst_contact_sheet(style_image, content_image, mips, iterations, engine, outdir, version='v001', service="Studio", opt=None, vgg_layers=VGG_LAYERS):
+def nst_contact_sheet(style_image, content_image, mips, iterations, engine, outdir, version='v001', service="Studio", opt=None, vgg_layers=VGG_LAYERS, do_gatys=True):
     """
     Given a style image, create a bunch of farm tasks for each vgg layer,
     halving the style resolution via mip mapping.
@@ -236,25 +236,26 @@ def nst_contact_sheet(style_image, content_image, mips, iterations, engine, outd
 
             job.newTask(title="%s_mip_%s_layer_%s" % (style_image_filename, mip, layer), argv=cmd)
 
-        cmd = []
-        cmd += ['singularity']
-        cmd += ['exec']
-        cmd += ['--nv']
-        cmd += ['--bind']
-        cmd += ['/mnt/ala']
-        cmd += ['/mnt/ala/research/danielf/2021/git/nst/environments/singularity/pytorch-1.10_cuda-11.4/nst.sif']
-        cmd += ['/mnt/ala/research/danielf/2021/git/nst/bin/nst']
-        cmd += ['--from-content', True]
-        cmd += ['--style', style_image]
-        cmd += ['--content', content_image]
-        cmd += ['--engine', engine]
-        cmd += ['--out', "%s/%s/%s/nst/mip%s/%s.exr" % (outdir, style_image_filename, version, mip, 'gatys_layers')]
-        cmd += ['--iterations', iterations]
-        cmd += ['--style-scale', scale]
-        cmd += ['--mips', "{\"%s\": {\"r11\": 0.244140625, \"r21\": 0.06103515625, \"r31\": 0.0152587890625, \"r41\": 0.003814697265625, \"r51\": 0.003814697265625}}" % (scale)]
-        cmd += ['--clayers', 'r41']
-        cmd += ['--cweights', 1.0]
-        job.newTask(title="%s_mip_%s_gatysLayers" % (style_image_filename, mip), argv=cmd)
+        if do_gatys:
+            cmd = []
+            cmd += ['singularity']
+            cmd += ['exec']
+            cmd += ['--nv']
+            cmd += ['--bind']
+            cmd += ['/mnt/ala']
+            cmd += ['/mnt/ala/research/danielf/2021/git/nst/environments/singularity/pytorch-1.10_cuda-11.4/nst.sif']
+            cmd += ['/mnt/ala/research/danielf/2021/git/nst/bin/nst']
+            cmd += ['--from-content', True]
+            cmd += ['--style', style_image]
+            cmd += ['--content', content_image]
+            cmd += ['--engine', engine]
+            cmd += ['--out', "%s/%s/%s/nst/mip%s/%s.exr" % (outdir, style_image_filename, version, mip, 'gatys_layers')]
+            cmd += ['--iterations', iterations]
+            cmd += ['--style-scale', scale]
+            cmd += ['--mips', "{\"%s\": {\"r11\": 0.244140625, \"r21\": 0.06103515625, \"r31\": 0.0152587890625, \"r41\": 0.003814697265625, \"r51\": 0.003814697265625}}" % (scale)]
+            cmd += ['--clayers', 'r41']
+            cmd += ['--cweights', 1.0]
+            job.newTask(title="%s_mip_%s_gatysLayers" % (style_image_filename, mip), argv=cmd)
 
     try:
         job.spool()
