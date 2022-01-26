@@ -258,6 +258,33 @@ class RegionGramMSELoss(nn.Module):
         # return __
 
 
+class MipGramMSELoss(nn.Module):
+    """
+    MSE = Mean Squared Error
+    https://pytorch.org/docs/stable/nn.html#mseloss
+    """
+    def forward(self, input, target, scale, layer, vgg):
+
+        # note: doesn't matter if the dimensions of the input and ungrammed target
+        # match - as long as they are close.  once grammed they are the same size.
+        input_ = F.interpolate(input, scale_factor=scale, mode='bilinear')
+        input_activations = vgg(input_, [layer])
+
+        # the principle of what we're doing here, is to apply the same scale factor
+        # to the optimisation image as we are to the style image.  i.e. we are scaling
+        # the style into various mips to exploit how the various vgg layers will be activated
+        # from this scaling.  eg: r41 is not well activated by 4k images, but is well
+        # activated by 512sq images.
+        #
+        # if we don't scale the opt tensor, we have a problem in that the 2k opt tensor
+        # itself will not be able to activate higher layers well.
+
+        a_ = torch.sub(GramMatrix()(input_activations), target)
+        b_ = torch.pow(a_, 2)
+        c_ = torch.mean(b_)
+        return c_
+
+
 class GramMSELoss(nn.Module):
     """
     MSE = Mean Squared Error

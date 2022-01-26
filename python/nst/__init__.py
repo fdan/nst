@@ -13,6 +13,7 @@ import torch
 from torch.autograd import Variable # deprecated - use Tensor
 import torch.nn as nn
 from torch import optim
+import torch.nn.functional as F
 
 from PIL import Image
 
@@ -270,6 +271,7 @@ class StyleImager(object):
         weights = []
         targets = []
         masks = []
+        scales = []
 
         if self.content_image:
             content_layers = self.content_layers
@@ -288,6 +290,8 @@ class StyleImager(object):
 
             content_targets = [A.detach() for A in content_activations]
             targets += content_targets
+
+            scales += [1.0]
 
         if self.optimisation_image:
             opt_tensor = self.prepare_opt(clone=self.optimisation_image)
@@ -313,11 +317,16 @@ class StyleImager(object):
                     for x in vgg(style_tensor, style_layer_names):
                         style_activations.append(x)
 
-                    style_loss_fns = [entities.GramMSELoss()] * len(style_layer_names)
+                    # style_loss_fns = [entities.GramMSELoss()] * len(style_layer_names)
+                    style_loss_fns = [entities.MipGramMSELoss()] * len(style_layer_names)
                     loss_fns += style_loss_fns
                     weights += style_layer_weights
+
+                    # do not calculate the gram here - we need to know the mip dimensions in the loss fn
                     style_targets = [entities.GramMatrix()(A).detach() for A in style_activations]
                     targets += style_targets
+
+                    scales += [float(mip.scale)]
 
         # # todo: do this for each mip
         # if self.style_image:
@@ -385,7 +394,7 @@ class StyleImager(object):
         cuda_device = self.cuda_device
 
         def closure():
-            output_tensors = vgg(opt_tensor, loss_layers)
+            # output_tensors = vgg(opt_tensor, loss_layers)
             layer_gradients = []
 
             if cuda_device:
@@ -393,9 +402,16 @@ class StyleImager(object):
             else:
                 loss = torch.zeros(1, requires_grad=False)
 
-            for counter, tensor in enumerate(output_tensors):
+            # for counter, tensor in enumerate(output_tensors):
+            for counter, layer in enumerate(loss_layers):
                 optimizer.zero_grad()
+
+                input_ = F.interpolate(input, scale_factor=scales[counter], mode='bilinear')
+                tensor = vgg(input_, [layer])
+
                 layer_loss = loss_fns[counter](tensor, targets[counter])
+
+                # layer_loss = loss_fns[counter](opt_tensor, targets[counter], scales[counter], layer, vgg)
                 layer_weight = weights[counter]
                 weighted_layer_loss = layer_weight * layer_loss
                 weighted_layer_loss.backward(retain_graph=True)
