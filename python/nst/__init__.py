@@ -279,7 +279,8 @@ class StyleImager(object):
             masks += content_masks
             loss_layers += content_layers
             # content_loss_fns = [entities.MSELoss()] # not using mask, but need to handle extra arg...
-            content_loss_fns = [entities.MSELoss()] * len(content_layers)
+            # content_loss_fns = [entities.MSELoss()] * len(content_layers)
+            content_loss_fns = [entities.MipMSELoss()] * len(content_layers)
             loss_fns += content_loss_fns
             content_weights = self.content_weights
             weights += content_weights
@@ -303,12 +304,17 @@ class StyleImager(object):
         if self.style.image:
             for mip in self.style.mips:
 
+                # todo: in adopting the gaussian pyramid approach, we need to package the data up differently.
+                # currently in the closure, we index everything by loss layer, and below we have a loss layer for
+                # each mip.
+                #
+                # we need to change that, such that the style_targets holds gram activations for all mips in a layer.
+                # so that's a change to the entity relationsip: instead of mips holding layers, layers hold mips.
+
                 if mip.layers:
                     style_layer_names = [x for x in mip.layers]
                     style_layer_weights = [mip.layers[x] for x in mip.layers]
-
-                    print(1.0, 'mip scale:', mip.scale, style_layer_names, style_layer_weights)
-
+                    # print(1.0, 'mip scale:', mip.scale, style_layer_names, style_layer_weights)
                     loss_layers += style_layer_names
 
                     style_tensor = utils.image_to_tensor(self.style.image, DO_CUDA, resize=mip.scale, colorspace=self.style_colorspace)
@@ -323,6 +329,7 @@ class StyleImager(object):
                     weights += style_layer_weights
 
                     # do not calculate the gram here - we need to know the mip dimensions in the loss fn
+                    # style_targets = style_activations
                     style_targets = [entities.GramMatrix()(A).detach() for A in style_activations]
                     targets += style_targets
 
@@ -406,10 +413,12 @@ class StyleImager(object):
             for counter, layer in enumerate(loss_layers):
                 optimizer.zero_grad()
 
-                input_ = F.interpolate(input, scale_factor=scales[counter], mode='bilinear')
-                tensor = vgg(input_, [layer])
+                # # is it a problem that the loss function doesn't receive the opt tensor?  will that affect grad?
+                # input_ = F.interpolate(input, scale_factor=scales[counter], mode='bilinear')
+                # tensor = vgg(input_, [layer])
+                # layer_loss = loss_fns[counter](tensor, targets[counter])
 
-                layer_loss = loss_fns[counter](tensor, targets[counter])
+                layer_loss = loss_fns[counter](opt_tensor, targets[counter], scales[counter], layer, vgg)
 
                 # layer_loss = loss_fns[counter](opt_tensor, targets[counter], scales[counter], layer, vgg)
                 layer_weight = weights[counter]

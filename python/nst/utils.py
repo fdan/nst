@@ -204,7 +204,7 @@ def image_to_tensor(image: str, do_cuda: bool, resize:float=None, colorspace=Non
         if resize:
             n_width = int(float(o_width) * resize)
             n_height = int(float(o_height) * resize)
-            print(2.0, image, resize, n_width, n_height)
+            # print(2.0, image, resize, n_width, n_height)
             buf = oiio.ImageBufAlgo.resize(buf, roi=ROI(0, n_width, 0, n_height, 0, 1, 0, 3))
         #
         # if sharpen:

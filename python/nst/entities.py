@@ -1,4 +1,7 @@
 import math
+import random
+
+import numpy as np
 
 import torch
 import torch.nn as nn
@@ -258,17 +261,60 @@ class RegionGramMSELoss(nn.Module):
         # return __
 
 
+class MipMSELoss(nn.Module):
+    def forward(self, input, target, scale, layer, vgg):
+        input_activations = vgg(input, [layer])[0]
+        a_ = torch.sub(input_activations, target)
+        b_ = torch.pow(a_, 2)
+        c_ = torch.mean(b_)
+        return c_
+
+
+class MipGramMSELoss01(nn.Module):
+    def forward(self, input, target):
+        pass
+
+        # input is a tensor holding the activations for a vgg layer, as measured across several blurred mips
+        # this is pre-calculated to avoid unecessary overhead.
+        #
+        # input is the optimisation tensor.  here we need to do the following:
+        # blur and downsample it into mips, matching the mip levels of the style
+
+
+
 class MipGramMSELoss(nn.Module):
     """
     MSE = Mean Squared Error
     https://pytorch.org/docs/stable/nn.html#mseloss
     """
     def forward(self, input, target, scale, layer, vgg):
+        # print(input.size(), target.size(), scale, layer)
+
+        # randomly create scale between values of 1.0 and 1./6.
+        # scale = float(torch.FloatTensor(1).uniform_(0.25, 1.0)[0])
+
+        # to do: apply a gaussian blur before downsampling [3] https://wxs.ca/research/multiscale-neural-synthesis/Snelgrove-multiscale-texture-synthesis.pdf
+        # if I'm understanding this correctly, this involve the target not being the activations for a single mip,
+        # but rather a tensor holding the activations for all the mips for a layer (blurring them before downsampling).
+        # we would then also have to create blurred downsampled mips of the optimisation image to calculate loss against.
+
+        # todo: randomly jitter scale within a range
+        variation = 0.001
+        scale = float(torch.FloatTensor(1).uniform_(scale-variation, scale+variation)[0])
+
+        # todo: try the same, but upscaling the target instead of downsampling the input
+        # this would mean the loss fn gets both the opt and target tensors without
+        # any mip level or rescaling applied.
+        # target_ = F.interpolate(target, scale_factor=1./scale, mode='nearest')
+
+        # todo: try interpolating the layer activations themselves]]
 
         # note: doesn't matter if the dimensions of the input and ungrammed target
         # match - as long as they are close.  once grammed they are the same size.
-        input_ = F.interpolate(input, scale_factor=scale, mode='bilinear')
-        input_activations = vgg(input_, [layer])
+        input_ = F.interpolate(input, scale_factor=scale, mode='bilinear', align_corners=True)
+        # input_ = F.interpolate(input, scale_factor=scale, mode='nearest')
+        input_activations = vgg(input_, [layer])[0]
+        # input_activations = vgg(input, [layer])[0]
 
         # the principle of what we're doing here, is to apply the same scale factor
         # to the optimisation image as we are to the style image.  i.e. we are scaling
@@ -279,6 +325,10 @@ class MipGramMSELoss(nn.Module):
         # if we don't scale the opt tensor, we have a problem in that the 2k opt tensor
         # itself will not be able to activate higher layers well.
 
+        # g = GramMatrix()(input_activations)
+        # print(g.size())
+
+        # a_ = torch.sub(GramMatrix()(input_activations), target_)
         a_ = torch.sub(GramMatrix()(input_activations), target)
         b_ = torch.pow(a_, 2)
         c_ = torch.mean(b_)
