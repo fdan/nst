@@ -267,7 +267,7 @@ class StyleImager(object):
             loss_layers += content_layers
             content_loss_fns = [entities.MipMSELoss()] * len(content_layers)
             loss_fns += content_loss_fns
-            content_weights = [x.weights for x in self.content.layers]
+            content_weights = [x.weight for x in self.content.layers]
             weights += content_weights
             content_tensor = self._prepare_content()
 
@@ -307,7 +307,7 @@ class StyleImager(object):
 
             style_loss_fns = [entities.MipGramMSELoss01()] * len(self.style.layers)
             loss_fns += style_loss_fns
-            weights += self.style_weights
+            weights += [x.weight for x in self.style.layers]
 
             style_targets = []
             for layer_activation_pyramid in style_activations:
