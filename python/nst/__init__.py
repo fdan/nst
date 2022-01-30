@@ -194,6 +194,10 @@ class StyleImager(object):
         self.style_scale = 1.0
         self.content_colorspace = 'acescg'
         self.style_colorspace = 'srgb_texture'
+        self.style_weights = [1.0]
+        self.style_layers = ['r41']
+        self.mips = 5
+        self.mip_weights = [1.0] * self.mips
 
         if engine == 'gpu':
             self.init_cuda()
@@ -271,28 +275,30 @@ class StyleImager(object):
         weights = []
         targets = []
         masks = []
-        scales = []
 
         if self.content_image:
             content_layers = self.content_layers
             content_masks = [torch.Tensor(0)]
             masks += content_masks
             loss_layers += content_layers
-            # content_loss_fns = [entities.MSELoss()] # not using mask, but need to handle extra arg...
-            # content_loss_fns = [entities.MSELoss()] * len(content_layers)
             content_loss_fns = [entities.MipMSELoss()] * len(content_layers)
             loss_fns += content_loss_fns
             content_weights = self.content_weights
             weights += content_weights
             content_tensor = self._prepare_content()
+
             content_activations = []
-            for x in vgg(content_tensor, content_layers):
-                content_activations.append(x)
+            for layer_activation_pyramid in vgg([content_tensor], content_layers):
+                content_activations.append(layer_activation_pyramid)
 
-            content_targets = [A.detach() for A in content_activations]
+            content_targets = []
+            for layer_activation_pyramid in content_activations:
+                thing = []
+                for tensor in layer_activation_pyramid:
+                    thing += [tensor.detach()]
+                content_targets += thing
+
             targets += content_targets
-
-            scales += [1.0]
 
         if self.optimisation_image:
             opt_tensor = self.prepare_opt(clone=self.optimisation_image)
@@ -301,39 +307,63 @@ class StyleImager(object):
         else:
             opt_tensor = self.prepare_opt()
 
-        if self.style.image:
-            for mip in self.style.mips:
+        if self.style:
+            loss_layers += self.style_layers
 
-                # todo: in adopting the gaussian pyramid approach, we need to package the data up differently.
-                # currently in the closure, we index everything by loss layer, and below we have a loss layer for
-                # each mip.
-                #
-                # we need to change that, such that the style_targets holds gram activations for all mips in a layer.
-                # so that's a change to the entity relationsip: instead of mips holding layers, layers hold mips.
+            style_tensor = utils.image_to_tensor(self.style, DO_CUDA, colorspace=self.style_colorspace)
+            style_pyramid = utils.Pyramid.make_pyramid(style_tensor, cuda=DO_CUDA, mips=self.mips)
 
-                if mip.layers:
-                    style_layer_names = [x for x in mip.layers]
-                    style_layer_weights = [mip.layers[x] for x in mip.layers]
-                    # print(1.0, 'mip scale:', mip.scale, style_layer_names, style_layer_weights)
-                    loss_layers += style_layer_names
+            style_activations = []
+            for layer_activation_pyramid in vgg(style_pyramid, self.style_layers):
+                style_activations.append(layer_activation_pyramid)
 
-                    style_tensor = utils.image_to_tensor(self.style.image, DO_CUDA, resize=mip.scale, colorspace=self.style_colorspace)
+            style_loss_fns = [entities.MipGramMSELoss01()] * len(self.style_layers)
+            loss_fns += style_loss_fns
+            weights += self.style_weights
 
-                    style_activations = []
-                    for x in vgg(style_tensor, style_layer_names):
-                        style_activations.append(x)
+            style_targets = []
+            for layer_activation_pyramid in style_activations:
+                gram_pyramid = []
+                for tensor in layer_activation_pyramid:
+                    gram = entities.GramMatrix()(tensor).detach()
+                    gram_pyramid += [gram]
+                style_targets += [gram_pyramid]
 
-                    # style_loss_fns = [entities.GramMSELoss()] * len(style_layer_names)
-                    style_loss_fns = [entities.MipGramMSELoss()] * len(style_layer_names)
-                    loss_fns += style_loss_fns
-                    weights += style_layer_weights
+            targets += style_targets
 
-                    # do not calculate the gram here - we need to know the mip dimensions in the loss fn
-                    # style_targets = style_activations
-                    style_targets = [entities.GramMatrix()(A).detach() for A in style_activations]
-                    targets += style_targets
-
-                    scales += [float(mip.scale)]
+        # if self.style.image:
+        #     for mip in self.style.mips:
+        #
+        #         # todo: in adopting the gaussian pyramid approach, we need to package the data up differently.
+        #         # currently in the closure, we index everything by loss layer, and below we have a loss layer for
+        #         # each mip.
+        #         #
+        #         # we need to change that, such that the style_targets holds gram activations for all mips in a layer.
+        #         # so that's a change to the entity relationsip: instead of mips holding layers, layers hold mips.
+        #
+        #         if mip.layers:
+        #             style_layer_names = [x for x in mip.layers]
+        #             style_layer_weights = [mip.layers[x] for x in mip.layers]
+        #             # print(1.0, 'mip scale:', mip.scale, style_layer_names, style_layer_weights)
+        #             loss_layers += style_layer_names
+        #
+        #             style_tensor = utils.image_to_tensor(self.style.image, DO_CUDA, resize=mip.scale, colorspace=self.style_colorspace)
+        #
+        #             style_activations = []
+        #             for x in vgg(style_tensor, style_layer_names):
+        #                 style_activations.append(x)
+        #
+        #             # style_loss_fns = [entities.GramMSELoss()] * len(style_layer_names)
+        #             style_loss_fns = [entities.MipGramMSELoss()] * len(style_layer_names)
+        #             loss_fns += style_loss_fns
+        #             weights += style_layer_weights
+        #
+        #             # do not calculate the gram here - we need to know the mip dimensions in the loss fn
+        #             # style_targets = style_activations
+        #             style_targets = [entities.GramMatrix()(A).detach() for A in style_activations]
+        #             targets += style_targets
+        #
+        #             scales += [float(mip.scale)]
 
         # # todo: do this for each mip
         # if self.style_image:
@@ -401,7 +431,12 @@ class StyleImager(object):
         cuda_device = self.cuda_device
 
         def closure():
-            # output_tensors = vgg(opt_tensor, loss_layers)
+            opt_pyramid = utils.Pyramid.make_pyramid(opt_tensor, cuda=DO_CUDA, mips=self.mips)
+            opt_activations = []
+
+            for opt_layer_activation_pyramid in vgg(opt_pyramid, loss_layers):
+                opt_activations.append(opt_layer_activation_pyramid)
+
             layer_gradients = []
 
             if cuda_device:
@@ -409,19 +444,11 @@ class StyleImager(object):
             else:
                 loss = torch.zeros(1, requires_grad=False)
 
-            # for counter, tensor in enumerate(output_tensors):
-            for counter, layer in enumerate(loss_layers):
+            for index, opt_layer_activation_pyramid in enumerate(opt_activations):
                 optimizer.zero_grad()
-
-                # # is it a problem that the loss function doesn't receive the opt tensor?  will that affect grad?
-                # input_ = F.interpolate(input, scale_factor=scales[counter], mode='bilinear')
-                # tensor = vgg(input_, [layer])
-                # layer_loss = loss_fns[counter](tensor, targets[counter])
-
-                layer_loss = loss_fns[counter](opt_tensor, targets[counter], scales[counter], layer, vgg)
-
-                # layer_loss = loss_fns[counter](opt_tensor, targets[counter], scales[counter], layer, vgg)
-                layer_weight = weights[counter]
+                target_layer_activation_pyramid = targets[index]
+                layer_loss = loss_fns[index](opt_layer_activation_pyramid, target_layer_activation_pyramid, self.mip_weights)
+                layer_weight = weights[index]
                 weighted_layer_loss = layer_weight * layer_loss
                 weighted_layer_loss.backward(retain_graph=True)
 
@@ -431,9 +458,9 @@ class StyleImager(object):
                     loss += layer_loss
 
                     # if this style layer has a mask
-                    if layer_masks[counter] is not None:
+                    if layer_masks[index] is not None:
 
-                        layer_mask = layer_masks[counter]
+                        layer_mask = layer_masks[index]
                         b, c, w, h = opt_tensor.grad.size()
                         masked_grad = opt_tensor.grad.clone()
 

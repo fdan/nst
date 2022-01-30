@@ -86,58 +86,69 @@ class VGG(nn.Module):
             self.pool4 = nn.AvgPool2d(kernel_size=pool_kernel_size, stride=pool_stride)
             self.pool5 = nn.AvgPool2d(kernel_size=pool_kernel_size, stride=pool_stride)
 
-    def forward(self, tensor, out_keys):
+    def forward(self, tensor_pyramid, out_keys):
         """
-        :param tensor: torch.Tensor
         :param out_keys: [str]
         :return: [torch.Tensor]
         """
         out_path = '/mnt/ala/research/danielf/nst/experiments/output/temp14/'
-
         out = {}
+        out['r11'] = []
+        out['r12'] = []
+        out['p1'] = []
+        out['r21'] = []
+        out['r22'] = []
+        out['p2'] = []
+        out['r31'] = []
+        out['r32'] = []
+        out['r33'] = []
+        out['r34'] = []
+        out['p3'] = []
+        out['r41'] = []
+        out['r42'] = []
+        out['r43'] = []
+        out['r44'] = []
+        out['p4'] = []
+        out['r51'] = []
+        out['r52'] = []
+        out['r53'] = []
+        out['r54'] = []
+        out['p5'] = []
 
-        out['r11'] = F.relu(self.conv1_1(tensor))
-        # print(out['r11'].size(), out['r11'].dim())
-        # layer_out = out_path + 'layer_r11.png'
-        # utils.render_image(tensor, layer_out)
+        result = []
 
-        out['r12'] = F.relu(self.conv1_2(out['r11']))
-        out['p1'] = self.pool1(out['r12'])
+        for tensor_index in range(0, len(tensor_pyramid)):
+            tensor = tensor_pyramid[tensor_index]
+            # print(1.1, tensor.size())
 
-        out['r21'] = F.relu(self.conv2_1(out['p1']))
-        # layer_out = out_path + 'layer_r21.png'
-        # utils.render_image(tensor, layer_out)
+            out['r11'] += [F.relu(self.conv1_1(tensor))]
+            out['r12'] += [F.relu(self.conv1_2(out['r11'][tensor_index]))]
+            out['p1'] += [self.pool1(out['r12'][tensor_index])]
+            out['r21'] += [F.relu(self.conv2_1(out['p1'][tensor_index]))]
+            out['r22'] += [F.relu(self.conv2_2(out['r21'][tensor_index]))]
+            out['p2'] += [self.pool2(out['r22'][tensor_index])]
+            out['r31'] += [F.relu(self.conv3_1(out['p2'][tensor_index]))]
+            out['r32'] += [F.relu(self.conv3_2(out['r31'][tensor_index]))]
+            out['r33'] += [F.relu(self.conv3_3(out['r32'][tensor_index]))]
+            out['r34'] += [F.relu(self.conv3_4(out['r33'][tensor_index]))]
+            out['p3'] += [self.pool3(out['r34'][tensor_index])]
+            out['r41'] += [F.relu(self.conv4_1(out['p3'][tensor_index]))]
+            out['r42'] += [F.relu(self.conv4_2(out['r41'][tensor_index]))]
+            out['r43'] += [F.relu(self.conv4_3(out['r42'][tensor_index]))]
+            out['r44'] += [F.relu(self.conv4_4(out['r43'][tensor_index]))]
+            out['p4'] += [self.pool4(out['r44'][tensor_index])]
+            out['r51'] += [F.relu(self.conv5_1(out['p4'][tensor_index]))]
+            out['r52'] += [F.relu(self.conv5_2(out['r51'][tensor_index]))]
+            out['r53'] += [F.relu(self.conv5_3(out['r52'][tensor_index]))]
+            out['r54'] += [F.relu(self.conv5_4(out['r53'][tensor_index]))]
+            out['p5'] += [self.pool5(out['r54'][tensor_index])]
 
-        out['r22'] = F.relu(self.conv2_2(out['r21']))
-        out['p2'] = self.pool2(out['r22'])
-
-        out['r31'] = F.relu(self.conv3_1(out['p2']))
-        # layer_out = out_path + 'layer_r31.png'
-        # utils.render_image(tensor, layer_out)
-
-        out['r32'] = F.relu(self.conv3_2(out['r31']))
-        out['r33'] = F.relu(self.conv3_3(out['r32']))
-        out['r34'] = F.relu(self.conv3_4(out['r33']))
-        out['p3'] = self.pool3(out['r34'])
-
-        out['r41'] = F.relu(self.conv4_1(out['p3']))
-        # layer_out = out_path + 'layer_r41.png'
-        # utils.render_image(tensor, layer_out)
-
-        out['r42'] = F.relu(self.conv4_2(out['r41']))
-        out['r43'] = F.relu(self.conv4_3(out['r42']))
-        out['r44'] = F.relu(self.conv4_4(out['r43']))
-        out['p4'] = self.pool4(out['r44'])
-
-        out['r51'] = F.relu(self.conv5_1(out['p4']))
-        # layer_out = out_path + 'layer_r51.png'
-        # utils.render_image(tensor, layer_out)
-
-        out['r52'] = F.relu(self.conv5_2(out['r51']))
-        out['r53'] = F.relu(self.conv5_3(out['r52']))
-        out['r54'] = F.relu(self.conv5_4(out['r53']))
-        out['p5'] = self.pool5(out['r54'])
+        # a list of activation pyramids indexed by layer
+        # issue: need to also use tensor_index otherwise the elements are lists not tensors?
         result = [out[key] for key in out_keys]
+
+        # print(10.1, len(result))
+
         return result
 
 
@@ -262,24 +273,45 @@ class RegionGramMSELoss(nn.Module):
 
 
 class MipMSELoss(nn.Module):
-    def forward(self, input, target, scale, layer, vgg):
-        input_activations = vgg(input, [layer])[0]
-        a_ = torch.sub(input_activations, target)
-        b_ = torch.pow(a_, 2)
-        c_ = torch.mean(b_)
-        return c_
+    def forward(self, input, target, mip_weights):
+        """
+        input and target are both layer activation pyramids, i.e. a list of mip tensors
+        """
+        opt_layer_activation_pyramid = input
+        target_layer_activation_pyramid = target
+        loss = 0
+
+        # the target may be smaller length than input, i.e. content loss is not pyramid.  iterate through target
+        # or just assume single layer
+        for index, target_activations in enumerate(target_layer_activation_pyramid):
+            opt_activations = opt_layer_activation_pyramid[index]
+            a_ = torch.sub(opt_activations, target_activations)
+            b_ = torch.pow(a_, 2)
+            c_ = torch.mean(b_)
+            loss += c_
+
+        return loss
 
 
 class MipGramMSELoss01(nn.Module):
-    def forward(self, input, target):
-        pass
+    def forward(self, input, target, mip_weights):
+        opt_layer_activation_pyramid = input
+        target_layer_gram_pyramid = target
+        loss = 0
 
-        # input is a tensor holding the activations for a vgg layer, as measured across several blurred mips
-        # this is pre-calculated to avoid unecessary overhead.
-        #
-        # input is the optimisation tensor.  here we need to do the following:
-        # blur and downsample it into mips, matching the mip levels of the style
+        for index, target_gram in enumerate(target_layer_gram_pyramid):
+            mip_weight = mip_weights[index]
+            opt_activations = opt_layer_activation_pyramid[index]
+            opt_gram = GramMatrix()(opt_activations)
+            a_ = torch.sub(opt_gram, target_gram)
+            b_ = torch.pow(a_, 2)
+            c_ = torch.mean(b_)
+            c_ *= mip_weight
 
+            # not entirely sure we're meant to sum the pyramid loss?
+            loss += c_
+
+        return loss
 
 
 class MipGramMSELoss(nn.Module):

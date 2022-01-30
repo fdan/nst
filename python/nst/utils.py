@@ -10,6 +10,8 @@ import random
 
 import torch
 from torchvision import transforms
+import torch.nn.functional as F
+from torch.autograd import Variable
 
 # import matplotlib
 # matplotlib.use('Agg')
@@ -409,3 +411,89 @@ def do_ffmpeg(output_dir, temp_dir=None):
     ffmpeg_cmd += ['%s/prog.mp4' % output_dir]
     subprocess.check_output(ffmpeg_cmd)
     shutil.rmtree(temp_dir)
+
+
+#####################################################################################################
+# This code was mostly ruthlessly appropriated from tyneumann's "Minimal PyTorch implementation of Generative Latent Optimization" https://github.com/tneumann/minimal_glo. Thank the lord for clever germans.
+
+class Pyramid(object):
+
+    @classmethod
+    def make_pyramid(cls, img, mips=5, cuda=True):
+        kernel = cls._build_gauss_kernel(cuda)
+        gp = cls._gaussian_pyramid(img, kernel, cuda, max_levels=mips)
+        # dgp = cls._downsample_gaussian_pyramid(gp, cuda)
+        dgp = gp
+        # print('done')
+        return dgp
+
+    @staticmethod
+    def _build_gauss_kernel(cuda, size=5, sigma=1.0, n_channels=3):
+        if size % 2 != 1:
+            raise ValueError("kernel size must be uneven")
+        grid = np.float32(np.mgrid[0:size,0:size].T)
+        gaussian = lambda x: np.exp((x - size//2)**2/(-2*sigma**2))**2
+        kernel = np.sum(gaussian(grid), axis=2)
+        kernel /= np.sum(kernel)
+        kernel = np.tile(kernel, (n_channels, 1, 1))
+        kernel = torch.FloatTensor(kernel[:, None, :, :])
+
+        if cuda:
+            kernel = kernel.cuda()
+
+        return Variable(kernel, requires_grad=False)
+
+    @staticmethod
+    def _conv_gauss(img, kernel, cuda):
+        """ convolve img with a gaussian kernel that has been built with build_gauss_kernel """
+        n_channels, _, kw, kh = kernel.shape
+        img = F.pad(img, (kw//2, kh//2, kw//2, kh//2), mode='replicate')
+        result = F.conv2d(img, kernel, groups=n_channels)
+
+        if cuda:
+            result = result.detach().to(torch.device(get_cuda_device()))
+
+        return result
+
+    @classmethod
+    def _gaussian_pyramid(cls, img, kernel, cuda, max_levels):
+        current = img
+        # print(1.1, current.size())
+
+        pyr = [current]
+
+        for level in range(1, max_levels+1):
+            # print('level:', level)
+            filtered = cls._conv_gauss(current, kernel, cuda)
+            # scale = 1./float(level) # this is compounding in a way i don't want
+            scale = 0.8
+            # print('scale:', scale)
+            current = F.interpolate(filtered, scale_factor=scale)
+            # print(1.2, current.size())
+            # current = F.avg_pool2d(filtered, 2) # this kernel size param seems to halve the resolution?
+            # print('pyramid item size:', filtered.size(), current.size())
+
+            if cuda:
+                current = current.detach().to(torch.device(get_cuda_device()))
+
+            pyr.append(current)
+
+        return pyr
+
+    @staticmethod
+    def _downsample_gaussian_pyramid(pyr, cuda):
+
+        for index, tensor in pyr:
+            p = pyr[index]
+            scale = 1./float(index+1)
+            scaled_p = F.interpolate(p, scale_factor=scale, mode='bilinear', align_corners=True)
+
+            if cuda:
+                scaled_p = scaled_p.detach().to(torch.device(get_cuda_device()))
+
+            pyr[index] = scaled_p
+
+        return pyr
+
+
+#####################################################################################################
