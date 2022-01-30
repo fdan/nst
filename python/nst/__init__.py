@@ -148,24 +148,25 @@ class VGGLayer(object):
 
 
 class Style(object):
-    def __init__(self, image, layers, in_mask=None, out_mask=None):
+    def __init__(self, image, layers, in_mask=None, out_mask=None, mips=5):
         self.image = image
         self.in_mask = in_mask
         self.out_mask = out_mask
         self.layers = layers
         self.scale = 1.0
-        self.mips = 5
+        self.mips = mips
         self.colorspace = 'srgb_texture'
 
 
 class Content(object):
-    def __init__(self, image, layers, in_mask=None, out_mask=None):
+    def __init__(self, image, layers, in_mask=None, out_mask=None, mips=1):
         self.image = image
         self.in_mask = in_mask
         self.out_mask = out_mask
         self.layers = layers
         self.colorspace = 'acescg'
         self.scale = 1.0
+        self.mips = mips
 
 
 class StyleImager(object):
