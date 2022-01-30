@@ -383,7 +383,7 @@ class StyleImager(object):
 
         layer_masks = []
 
-        for cl in self.content_masks:
+        for cl in self.content.out_masks:
             if not cl:
                 layer_masks.append(None)
         #     else:
