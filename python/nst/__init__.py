@@ -299,7 +299,7 @@ class StyleImager(object):
         if self.style:
             loss_layers += self.style.layers
 
-            style_tensor = utils.image_to_tensor(self.style, DO_CUDA, colorspace=self.style.colorspace)
+            style_tensor = utils.image_to_tensor(self.style.image, DO_CUDA, colorspace=self.style.colorspace)
             style_pyramid = utils.Pyramid.make_pyramid(style_tensor, cuda=DO_CUDA, mips=self.style.mips)
 
             style_activations = []
