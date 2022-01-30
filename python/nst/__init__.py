@@ -272,7 +272,8 @@ class StyleImager(object):
             content_tensor = self._prepare_content()
 
             content_activations = []
-            for layer_activation_pyramid in vgg([content_tensor], content_layers):
+            content_layer_names = [x.name for x in content_layers]
+            for layer_activation_pyramid in vgg([content_tensor], content_layer_names):
                 content_activations.append(layer_activation_pyramid)
 
             content_targets = []
@@ -302,7 +303,8 @@ class StyleImager(object):
             style_pyramid = utils.Pyramid.make_pyramid(style_tensor, cuda=DO_CUDA, mips=self.style.mips)
 
             style_activations = []
-            for layer_activation_pyramid in vgg(style_pyramid, self.style.layers):
+            style_layer_names = [x.name for x in self.style.layers]
+            for layer_activation_pyramid in vgg(style_pyramid, style_layer_names):
                 style_activations.append(layer_activation_pyramid)
 
             style_loss_fns = [entities.MipGramMSELoss01()] * len(self.style.layers)
@@ -425,7 +427,9 @@ class StyleImager(object):
             opt_pyramid = utils.Pyramid.make_pyramid(opt_tensor, cuda=DO_CUDA, mips=self.style.mips)
             opt_activations = []
 
-            for opt_layer_activation_pyramid in vgg(opt_pyramid, loss_layers):
+            loss_layer_names = [x.name for x in loss_layers]
+
+            for opt_layer_activation_pyramid in vgg(opt_pyramid, loss_layer_names):
                 opt_activations.append(opt_layer_activation_pyramid)
 
             layer_gradients = []
