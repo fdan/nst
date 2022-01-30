@@ -140,34 +140,41 @@ def _doit(opts):
         log_file.write(LOG)
 
 
-class StyleMip(object):
-    def __init__(self, scale, layers, out_mask=None):
-        self.scale = scale
-        self.out_mask = out_mask
-        self.layers = layers
-
-    def as_json(self):
-        return json.dumps(self.as_dict())
-
-    def as_dict(self):
-        return {self.scale: self.layers}
+class VGGLayer(object):
+    def __init__(self, name, weight=1.0, mip_weights=[1.0]*5):
+        self.name = name
+        self.weight = weight
+        self.mip_weights = mip_weights
 
 
 class Style(object):
-    def __init__(self, image, mips, in_mask=None, out_mask=None):
+    def __init__(self, image, layers, in_mask=None, out_mask=None):
         self.image = image
         self.in_mask = in_mask
         self.out_mask = out_mask
-        self.mips = mips
+        self.layers = layers
+        self.scale = 1.0
+        self.mips = 5
+        self.colorspace = 'srgb_texture'
+
+
+class Content(object):
+    def __init__(self, image, layers, in_mask=None, out_mask=None):
+        self.image = image
+        self.in_mask = in_mask
+        self.out_mask = out_mask
+        self.layers = layers
+        self.colorspace = 'acescg'
+        self.scale = 1.0
 
 
 class StyleImager(object):
 
-    def __init__(self, style, content_image=None, frame=0, render_out=None, engine='gpu'):
+    def __init__(self, style, content=None, frame=0, render_out=None, engine='cpu'):
         self.style = style
+        self.content = content
         self.iterations = 500
         self.log_iterations = 100
-        self.content_image = content_image
         self.random_style = False
         self.output_dir = None
         self.engine = engine
@@ -179,25 +186,13 @@ class StyleImager(object):
         self.loss_graph = ([], [])
         self.opt_x = 512
         self.opt_y = 512
-        self.content_layers = ['r42']
-        self.content_weights = [1.0]
-        self.content_masks = [None]
         self.frame = frame
         self.render_out = render_out
-        self.raw_weights = True
         self.optimisation_image = None
         self.output_dir = '%s/output' % os.getcwd()
         self.cuda_device = None
         self.out = None
-        self.out_colorspace = 'acescg'
-        self.content_scale = 1.0
-        self.style_scale = 1.0
-        self.content_colorspace = 'acescg'
-        self.style_colorspace = 'srgb_texture'
-        self.style_weights = [1.0]
-        self.style_layers = ['r41']
-        self.mips = 5
-        self.mip_weights = [1.0] * self.mips
+        self.out_colorspace = 'srgb_texture'
 
         if engine == 'gpu':
             self.init_cuda()
@@ -205,19 +200,6 @@ class StyleImager(object):
     def init_cuda(self) -> None:
         self.cuda_device = utils.get_cuda_device()
         # log('cuda device:', self.cuda_device);
-
-    # def send_to_farm(self, frames: str=None) -> None:
-    #     nfm = NstFarm()
-    #     nfm.from_content = self.from_content
-    #     nfm.style = self.style.image
-    #     nfm.content = self.content_image
-    #     nfm.out = self.out
-    #     nfm.engine = self.engine
-    #     if frames:
-    #         nfm.frames = frames
-    #     nfm.slayers = [x for x in self.style_layers] # todo: requires change to nst bin
-    #     nfm.sweights = [self.style_layers[x]['weight'] for x in self.style_layers]  # todo: requires change to nst bin
-    #     nfm.send_to_farm()
 
     def render_to_disk(self):
         img = self.generate_image()
@@ -236,11 +218,11 @@ class StyleImager(object):
         return utils.tensor_to_image(tensor)
 
     def write_exr(self, frame: int=None) -> None:
-        if self.content_image:
-            if '####' in self.content_image and frame:
-                self._content_image = self.content_image.replace('####', '%04d' % frame)
+        if self.content.image:
+            if '####' in self.content.image and frame:
+                self.content.image = self.content.image.replace('####', '%04d' % frame)
             else:
-                self._content_image = self.content_image
+                self.content.image = self.content.image
 
         if self.out:
             if '####' in self.out and frame:
@@ -261,11 +243,11 @@ class StyleImager(object):
 
     def generate_tensor(self, frame: int=None) -> torch.Tensor:
 
-        if self.content_image:
-            if '####' in self.content_image and frame:
-                self._content_image = self.content_image.replace('####', '%04d' % frame)
+        if self.content.image:
+            if '####' in self.content.image and frame:
+                self.content.image = self.content.image.replace('####', '%04d' % frame)
             else:
-                self._content_image = self.content_image
+                self.content.image = self.content.image
 
         start = timer()
         vgg = self._prepare_engine()
@@ -275,15 +257,16 @@ class StyleImager(object):
         weights = []
         targets = []
         masks = []
+        mip_weights = []
 
-        if self.content_image:
-            content_layers = self.content_layers
+        if self.content:
+            content_layers = self.content.layers
             content_masks = [torch.Tensor(0)]
             masks += content_masks
             loss_layers += content_layers
             content_loss_fns = [entities.MipMSELoss()] * len(content_layers)
             loss_fns += content_loss_fns
-            content_weights = self.content_weights
+            content_weights = [x.weights for x in self.content.layers]
             weights += content_weights
             content_tensor = self._prepare_content()
 
@@ -300,24 +283,28 @@ class StyleImager(object):
 
             targets += content_targets
 
+            for cl in self.content.layers:
+                mip_weights += cl.mip_weights
+
+
         if self.optimisation_image:
             opt_tensor = self.prepare_opt(clone=self.optimisation_image)
         elif self.from_content:
-            opt_tensor = self.prepare_opt(clone=self._content_image)
+            opt_tensor = self.prepare_opt(clone=self.content.image)
         else:
             opt_tensor = self.prepare_opt()
 
         if self.style:
-            loss_layers += self.style_layers
+            loss_layers += self.style.layers
 
-            style_tensor = utils.image_to_tensor(self.style, DO_CUDA, colorspace=self.style_colorspace)
-            style_pyramid = utils.Pyramid.make_pyramid(style_tensor, cuda=DO_CUDA, mips=self.mips)
+            style_tensor = utils.image_to_tensor(self.style, DO_CUDA, colorspace=self.style.colorspace)
+            style_pyramid = utils.Pyramid.make_pyramid(style_tensor, cuda=DO_CUDA, mips=self.style.mips)
 
             style_activations = []
-            for layer_activation_pyramid in vgg(style_pyramid, self.style_layers):
+            for layer_activation_pyramid in vgg(style_pyramid, self.style.layers):
                 style_activations.append(layer_activation_pyramid)
 
-            style_loss_fns = [entities.MipGramMSELoss01()] * len(self.style_layers)
+            style_loss_fns = [entities.MipGramMSELoss01()] * len(self.style.layers)
             loss_fns += style_loss_fns
             weights += self.style_weights
 
@@ -330,6 +317,9 @@ class StyleImager(object):
                 style_targets += [gram_pyramid]
 
             targets += style_targets
+
+            for sl in self.style.layers:
+                mip_weights += sl.mip_weights
 
         # if self.style.image:
         #     for mip in self.style.mips:
@@ -431,7 +421,7 @@ class StyleImager(object):
         cuda_device = self.cuda_device
 
         def closure():
-            opt_pyramid = utils.Pyramid.make_pyramid(opt_tensor, cuda=DO_CUDA, mips=self.mips)
+            opt_pyramid = utils.Pyramid.make_pyramid(opt_tensor, cuda=DO_CUDA, mips=self.style.mips)
             opt_activations = []
 
             for opt_layer_activation_pyramid in vgg(opt_pyramid, loss_layers):
@@ -447,7 +437,7 @@ class StyleImager(object):
             for index, opt_layer_activation_pyramid in enumerate(opt_activations):
                 optimizer.zero_grad()
                 target_layer_activation_pyramid = targets[index]
-                layer_loss = loss_fns[index](opt_layer_activation_pyramid, target_layer_activation_pyramid, self.mip_weights)
+                layer_loss = loss_fns[index](opt_layer_activation_pyramid, target_layer_activation_pyramid, mip_weights[index])
                 layer_weight = weights[index]
                 weighted_layer_loss = layer_weight * layer_loss
                 weighted_layer_loss.backward(retain_graph=True)
@@ -618,13 +608,14 @@ class StyleImager(object):
         return vgg
 
     def _prepare_content(self):
-        content_tensor = utils.image_to_tensor(self._content_image, DO_CUDA, resize=self.content_scale,
-                                               colorspace=self.content_colorspace)
+
+        content_tensor = utils.image_to_tensor(self.content.image, DO_CUDA, resize=self.content.scale,
+                                               colorspace=self.content.colorspace)
         return content_tensor
 
     def prepare_opt(self, clone=None):
         if clone:
-            content_tensor = utils.image_to_tensor(clone, DO_CUDA, resize=self.content_scale, colorspace=self.content_colorspace)
+            content_tensor = utils.image_to_tensor(clone, DO_CUDA, resize=self.content.scale, colorspace=self.content.colorspace)
             opt_tensor = Variable(content_tensor.data.clone(), requires_grad=True)
 
         else:
