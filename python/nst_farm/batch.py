@@ -108,8 +108,8 @@ def nst_job_v2(style_image, content_image, out_dir, opt=None, content_layers='r4
 
     cmd += ['--out', '%s/out.exr' % (out_dir)]
 
-    if opt:
-        cmd += ['--opt', opt]
+    # if opt:
+    #     cmd += ['--opt', opt]
 
     print(cmd)
 
