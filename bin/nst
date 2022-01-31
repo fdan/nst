@@ -177,13 +177,8 @@ def main():
 
         style_layers = []
         for index, sl in enumerate(slayers):
-            print(123, style_mip_weights[index])
-            print(456, style_mip_weights)
             mip_weights = style_mip_weights.split(':')[index]
-            print(7, mip_weights)
             mw = mip_weights.split(',')
-            print(8, mw)
-
             style_layers += [nst.VGGLayer(sl, weight=sweights[index], mip_weights=[float(x) for x in mw])]
         style_obj = nst.Style(style, style_layers, mips=smips)
 
