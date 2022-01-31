@@ -299,8 +299,8 @@ class StyleImager(object):
         if self.style:
             loss_layers += self.style.layers
 
-            if self.style.image.scale:
-                style_tensor = utils.image_to_tensor(self.style.image, DO_CUDA, resize=self.style.image.scale, colorspace=self.style.colorspace)
+            if self.style.scale:
+                style_tensor = utils.image_to_tensor(self.style.image, DO_CUDA, resize=self.style.scale, colorspace=self.style.colorspace)
             else:
                 style_tensor = utils.image_to_tensor(self.style.image, DO_CUDA, colorspace=self.style.colorspace)
 
