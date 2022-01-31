@@ -85,7 +85,7 @@ def wedge(style_image, content, mips, varying_mips, start, end, step, out_dir):
 
 def nst_job_v2(style_image, content_image, out_dir, opt=None, content_layers='r41', content_weights='1.0',
                content_mips='1', content_mip_weights='1.0', style_mips='5', style_layers='p1:r32', style_weights='0.5:0.5',
-               style_mip_weights='1.0,1.0,1.0,1.0,1.0:1.0,1.0,1.0,1.0,1.0'):
+               style_mip_weights='1.0,1.0,1.0,1.0,1.0:1.0,1.0,1.0,1.0,1.0', style_scale=1.0):
 
     style_image_name = style_image.split('/')[-1]
     job = make_tractor_job(title='style_transfer_wedge_%s' % style_image_name, atmost=56)
@@ -101,6 +101,7 @@ def nst_job_v2(style_image, content_image, out_dir, opt=None, content_layers='r4
     cmd += ['--cmipweights', content_mip_weights]
 
     cmd += ['--style', style_image]
+    cmd += ['--style-scale', style_scale]
     cmd += ['--slayers', style_layers]
     cmd += ['--sweights', style_weights]
     cmd += ['--smips', style_mips]
