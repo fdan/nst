@@ -179,7 +179,7 @@ def main():
         for index, sl in enumerate(slayers):
             print(123, style_mip_weights[index])
             print(456, style_mip_weights)
-            mip_weights = style_mip_weights[index].split(':')
+            mip_weights = style_mip_weights.split(':')[index]
             print(7, mip_weights)
             mw = mip_weights.split(',')
             print(8, mw)
