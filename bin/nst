@@ -178,7 +178,7 @@ def main():
         style_layers = []
         for index, sl in enumerate(slayers):
             mip_weight = style_mip_weights[index].split(',')
-            style_layers += [nst.VGGLayer(sl, weight=sweights[index], mip_weights=mip_weight)]
+            style_layers += [nst.VGGLayer(sl, weight=sweights[index], mip_weights=[float(x) for x in mip_weight])]
         style_obj = nst.Style(style, style_layers, mips=smips)
 
         if content:
