@@ -88,7 +88,7 @@ def nst_job_v2(style_image, content_image, out_dir, opt=None, content_layers='r4
                style_mip_weights='1.0,1.0,1.0,1.0,1.0:1.0,1.0,1.0,1.0,1.0'):
 
     style_image_name = style_image.split('/')[-1]
-    job = make_tractor_job(title='style_transfer_wedge_%s' % style_image_name)
+    job = make_tractor_job(title='style_transfer_wedge_%s' % style_image_name, atmost=56)
 
     cmd = make_singularity_cmd()
     cmd += ['--from-content', True]
