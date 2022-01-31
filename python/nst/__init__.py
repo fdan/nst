@@ -302,6 +302,8 @@ class StyleImager(object):
             style_tensor = utils.image_to_tensor(self.style.image, DO_CUDA, colorspace=self.style.colorspace)
             style_pyramid = utils.Pyramid.make_pyramid(style_tensor, cuda=DO_CUDA, mips=self.style.mips)
 
+            print(1.0, len(style_pyramid))
+
             style_activations = []
             style_layer_names = [x.name for x in self.style.layers]
             for layer_activation_pyramid in vgg(style_pyramid, style_layer_names):
