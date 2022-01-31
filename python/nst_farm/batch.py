@@ -111,12 +111,14 @@ def nst_job_v2(style_image, content_image, out_dir, opt=None, content_layers='r4
     if opt:
         cmd += ['--opt', opt]
 
+    print(cmd)
+
     job.newTask(title="style_transfer_wedge_%s" % (style_image_name), argv=cmd)
 
-    try:
-        job.spool()
-    except TypeError:
-        pass
+    # try:
+    #     job.spool()
+    # except TypeError:
+    #     pass
 
 
 def nst_job(style_image, content, mips, out_dir, content_scale=1.0, opt=None, content_layers='r41', content_weights='1.0'):
