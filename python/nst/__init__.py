@@ -383,9 +383,11 @@ class StyleImager(object):
 
         layer_masks = []
 
-        for cl in self.content.out_mask:
-            if not cl:
-                layer_masks.append(None)
+        layer_masks.append(self.content.out_mask)
+
+        # for cl in self.content.out_mask:
+        #     if not cl:
+        #         layer_masks.append(None)
         #     else:
         #         opt_x, opt_y = opt_tensor.size()[2], opt_tensor.size()[3]
         #         mask = oiio.ImageBuf(cl)

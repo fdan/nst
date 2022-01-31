@@ -497,3 +497,12 @@ class Pyramid(object):
 
 
 #####################################################################################################
+
+def lerp_points(levels, keys):
+    """
+    lerp_points(5, [(0,0.1), (1, 1.0), (2, 0.2)])
+    """
+    points = [x[0] for x in keys]
+    values = [x[1] for x in keys]
+    x = np.linspace(points[0], points[-1], num=levels)
+    return np.interp(x, points, values)
