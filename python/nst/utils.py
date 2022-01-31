@@ -467,7 +467,7 @@ class Pyramid(object):
             # print('level:', level)
             filtered = cls._conv_gauss(current, kernel, cuda)
             # scale = 1./float(level) # this is compounding in a way i don't want
-            scale = 0.8
+            scale = 0.63
             # print('scale:', scale)
             current = F.interpolate(filtered, scale_factor=scale)
             # print(1.2, current.size())

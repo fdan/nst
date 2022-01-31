@@ -83,6 +83,42 @@ def wedge(style_image, content, mips, varying_mips, start, end, step, out_dir):
         pass
 
 
+def nst_job_v2(style_image, content_image, mips, out_dir, opt=None, content_layers='r41', content_weights='1.0',
+               content_mips='1', content_mip_weights='1.0', style_mips='5', style_layers='p1:r32', style_weights='0.5:0.5',
+               style_mip_weights='1.0,1.0,1.0,1.0,1.0:1.0,1.0,1.0,1.0,1.0'):
+
+    style_image_name = style_image.split('/')[-1]
+    job = make_tractor_job(title='style_transfer_wedge_%s' % style_image_name)
+
+    cmd = make_singularity_cmd()
+    cmd += ['--from-content', True]
+    cmd += ['--engine', 'cpu']
+
+    cmd += ['--content', content_image]
+    cmd += ['--clayers', content_layers]
+    cmd += ['--cweights', content_weights]
+    cmd += ['--cmips', content_mips]
+    cmd += ['--cmipweights', content_mip_weights]
+
+    cmd += ['--style', style_image]
+    cmd += ['--slayers', style_layers]
+    cmd += ['--sweights', style_weights]
+    cmd += ['--smips', style_mips]
+    cmd += ['--smipweights', style_mip_weights]
+
+    cmd += ['--out', '%s/out.exr' % (out_dir)]
+
+    if opt:
+        cmd += ['--opt', opt]
+
+    job.newTask(title="style_transfer_wedge_%s" % (style_image_name), argv=cmd)
+
+    try:
+        job.spool()
+    except TypeError:
+        pass
+
+
 def nst_job(style_image, content, mips, out_dir, content_scale=1.0, opt=None, content_layers='r41', content_weights='1.0'):
     style_image_name = style_image.split('/')[-1]
 

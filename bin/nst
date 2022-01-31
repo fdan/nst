@@ -33,21 +33,29 @@ def main():
 
     p = OptionParser()
     p.add_option("", "--from-content", dest='from_content', action='store')
-    p.add_option("", "--style", dest='style', action='store')
-    p.add_option("", "--content", dest='content', action='store')
     p.add_option("", "--mask", dest='mask', action='store')
     p.add_option("", "--opt", dest='opt', action='store')
     p.add_option("", "--out", dest='out', action='store')
     p.add_option("", "--frames", dest='frames', action='store')
     p.add_option("", "--iterations", dest='iterations', action='store')
-    p.add_option("", "--clayers", dest='clayers', action='store')
-    p.add_option("", "--cweights", dest='cweights', action='store')
     p.add_option("", "--engine", dest='engine', action='store')
-    p.add_option("", "--style-scale", dest='style_scale', action='store')
-    p.add_option("", "--content-scale", dest='content_scale', action='store')
     p.add_option("", "--opt-x", dest='opt_x', action='store')
     p.add_option("", "--opt-y", dest='opt_y', action='store')
-    p.add_option("", "--mips", dest='mips', action='store')
+
+    p.add_option("", "--content", dest='content', action='store')
+    p.add_option("", "--content-scale", dest='content_scale', action='store')
+    p.add_option("", "--clayers", dest='clayers', action='store')
+    p.add_option("", "--cweights", dest='cweights', action='store')
+    p.add_option("", "--cmips", dest='cmips', action='store')
+    p.add_option("", "--cmipweights", dest='cmipweights', action='store')
+
+    p.add_option("", "--style", dest='style', action='store')
+    p.add_option("", "--style-scale", dest='style_scale', action='store')
+    p.add_option("", "--slayers", dest='slayers', action='store')
+    p.add_option("", "--sweights", dest='sweights', action='store')
+    p.add_option("", "--smips", dest='smips', action='store')
+    p.add_option("", "--smipweights", dest='smipweights', action='store')
+
 
     opts, args = p.parse_args()
 
@@ -60,7 +68,6 @@ def main():
 
     engine = opts.engine
 
-    mips = json.loads(opts.mips)
     check_outputs(opts.out)
     inputs_to_check = []
     content = opts.content
@@ -94,6 +101,37 @@ def main():
     else:
         cweights = [1.0]
 
+    if opts.cmips:
+        cmips = int(opts.cmips)
+    else:
+        cmips = 1
+
+    if opts.cmipweights:
+        content_mip_weights = opts.cmipweights
+    else:
+        content_mip_weights = [1.0] * cmips
+
+    if opts.opt_x:
+        opt_x = opts.opt_x
+    else:
+        opt_x = 858
+
+    if opts.opt_y:
+        opt_y = opts.opt_y
+    else:
+        opt_y = 858
+
+    if opts.iterations:
+        iterations = opts.iterations
+    else:
+        iterations = 100
+
+
+    slayers = opts.slayers.split(':')
+    sweights = [float(x) for x in opts.sweights.split(':')]
+    smips = int(opts.smips)
+    style = opts.style
+    style_mip_weights = opts.smipsweights
 
     if opts.frames:
         frames = eval_frames(opts.frames)
@@ -107,20 +145,22 @@ def main():
 
             output_image_ = opts.out.replace("####", "%04d" % frame)
 
-            mip_objects = []
-            for mip in mips.keys():
-                mip_objects.append(nst.StyleMip(float(mip), mips[mip]))
-            style_obj = nst.Style(opts.style, mip_objects)
+            style_layers = []
+            for index, sl in enumerate(slayers):
+                mip_weight = style_mip_weights[index].split(',')
+                style_layers += [nst.VGGLayer(sl, weight=sweights[index], mip_weights=mip_weight)]
+            style_obj = nst.Style(style, style_layers, mips=smips)
 
-            style_imager = nst.StyleImager(style_obj, content_image=content_, engine=engine)
+            content_layers = []
+            for index, cl in enumerate(clayers):
+                mip_weight = content_mip_weights[index].split(',')
+                content_layers += [nst.VGGLayer(cl, weight=cweights[index], mip_weights=mip_weight)]
+            content_obj = nst.Content(content_, content_layers, mips=cmips)
 
+            style_imager = nst.StyleImager(style_obj, content=content_obj, engine=engine)
             style_imager.from_content = from_content
             style_imager.iterations = iterations
             style_imager.log_iterations = 100
-
-            if opts.content:
-                style_imager.content_weights = cweights
-                style_imager.content_layers = clayers
 
             style_imager.content_masks = [None]
             style_imager.out = output_image_
@@ -135,30 +175,28 @@ def main():
     else:
         output_image_ = opts.out
 
-        mip_objects = []
-        for mip in mips.keys():
-            mip_objects.append(nst.StyleMip(float(mip), mips[mip]))
-        style_obj = nst.Style(opts.style, mip_objects)
+        style_layers = []
+        for index, sl in enumerate(slayers):
+            mip_weight = style_mip_weights[index].split(',')
+            style_layers += [nst.VGGLayer(sl, weight=sweights[index], mip_weights=mip_weight)]
+        style_obj = nst.Style(style, style_layers, mips=smips)
 
         if content:
-            style_imager = nst.StyleImager(style_obj, content_image=opts.content, engine=engine)
-            style_imager.content_weights = cweights
-            style_imager.content_layers = clayers
+            content_layers = []
+            for index, cl in enumerate(clayers):
+                mip_weight = content_mip_weights[index].split(',')
+                content_layers += [nst.VGGLayer(cl, weight=cweights[index], mip_weights=mip_weight)]
+            content_obj = nst.Content(content, content_layers, mips=cmips)
+            style_imager = nst.StyleImager(style_obj, content=content_obj, engine=engine)
 
-            if opts.content_scale:
-                style_imager.content_scale = float(opts.content_scale)
-            else:
-                style_imager.content_scale = 1.0
-
-            style_imager.content_masks = [None]
         else:
             style_imager = nst.StyleImager(style_obj, engine=engine)
-            style_imager.opt_x = 858
-            style_imager.opt_y = 858
+            style_imager.opt_x = opt_x
+            style_imager.opt_y = opt_y
 
         style_imager.from_content = from_content
         style_imager.iterations = iterations
-        style_imager.log_iterations = 100
+        style_imager.log_iterations = iterations
         style_imager.out = output_image_
         style_imager.style_scale = style_scale
 
@@ -166,7 +204,6 @@ def main():
             style_imager.optimisation_image = opts.opt
 
         style_imager.write_exr()
-
 
 
 def check_inputs(style, inputs):

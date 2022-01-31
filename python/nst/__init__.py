@@ -141,14 +141,14 @@ def _doit(opts):
 
 
 class VGGLayer(object):
-    def __init__(self, name, weight=1.0, mip_weights=[1.0]*5):
+    def __init__(self, name, weight=1.0, mip_weights=[1.0]*4):
         self.name = name
         self.weight = weight
         self.mip_weights = mip_weights
 
 
 class Style(object):
-    def __init__(self, image, layers, in_mask=None, out_mask=None, mips=5):
+    def __init__(self, image, layers, in_mask=None, out_mask=None, mips=4):
         self.image = image
         self.in_mask = in_mask
         self.out_mask = out_mask
