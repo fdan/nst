@@ -462,7 +462,8 @@ class Pyramid(object):
 
         pyr = [current]
 
-        for level in range(1, max_levels+1):
+        # for level in range(1, max_levels+1):
+        for level in range(0, max_levels-1):
             # print('level:', level)
             filtered = cls._conv_gauss(current, kernel, cuda)
             # scale = 1./float(level) # this is compounding in a way i don't want
