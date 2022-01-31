@@ -83,7 +83,7 @@ def wedge(style_image, content, mips, varying_mips, start, end, step, out_dir):
         pass
 
 
-def nst_job_v2(style_image, content_image, mips, out_dir, opt=None, content_layers='r41', content_weights='1.0',
+def nst_job_v2(style_image, content_image, out_dir, opt=None, content_layers='r41', content_weights='1.0',
                content_mips='1', content_mip_weights='1.0', style_mips='5', style_layers='p1:r32', style_weights='0.5:0.5',
                style_mip_weights='1.0,1.0,1.0,1.0,1.0:1.0,1.0,1.0,1.0,1.0'):
 
