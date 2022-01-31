@@ -87,6 +87,8 @@ def nst_job_v2(style_image, content_image, out_dir, opt=None, content_layers='r4
                content_mips='1', content_mip_weights='1.0', style_mips='5', style_layers='p1:r32', style_weights='0.5:0.5',
                style_mip_weights='1.0,1.0,1.0,1.0,1.0:1.0,1.0,1.0,1.0,1.0'):
 
+    print(1.1, out_dir)
+
     style_image_name = style_image.split('/')[-1]
     job = make_tractor_job(title='style_transfer_wedge_%s' % style_image_name)
 
