@@ -131,7 +131,7 @@ def main():
     sweights = [float(x) for x in opts.sweights.split(':')]
     smips = int(opts.smips)
     style = opts.style
-    style_mip_weights = opts.smipsweights
+    style_mip_weights = opts.smipweights
 
     if opts.frames:
         frames = eval_frames(opts.frames)
