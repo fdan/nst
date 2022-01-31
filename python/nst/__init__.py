@@ -286,7 +286,7 @@ class StyleImager(object):
             targets += content_targets
 
             for cl in self.content.layers:
-                mip_weights += cl.mip_weights
+                mip_weights += [cl.mip_weights]
 
 
         if self.optimisation_image:
@@ -322,7 +322,7 @@ class StyleImager(object):
             targets += style_targets
 
             for sl in self.style.layers:
-                mip_weights += sl.mip_weights
+                mip_weights += [sl.mip_weights]
 
         # if self.style.image:
         #     for mip in self.style.mips:
