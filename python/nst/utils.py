@@ -478,7 +478,7 @@ class Pyramid(object):
             pil_current = tensor_to_pil(current)
             current = transforms.functional.crop(pil_current, top, left, crop_height, crop_width)
 
-            print(current.size())
+            print(current.__class__)
 
             if cuda:
                 current = current.detach().to(torch.device(get_cuda_device()))
