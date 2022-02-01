@@ -474,8 +474,8 @@ class Pyramid(object):
 
         pyr = []
         pyr.append(img)
-        
-        write_exr(tensor_to_buf(pyr[0]), outdir + '/tmp2.exr')
+        write_exr(tensor_to_buf(img), outdir + '/tmp2.exr')
+        write_exr(tensor_to_buf(pyr[0]), outdir + '/tmp3.exr')
 
         # for level in range(0, max_levels-1):
         #     b, c, old_width, old_height = img.size()
