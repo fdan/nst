@@ -473,24 +473,25 @@ class Pyramid(object):
         write_exr(tensor_to_buf(img), outdir + '/tmp1.exr')
 
         pyr = []
-        pyr.append(img.detach())
+        pyr.append(img)
+        
+        write_exr(tensor_to_buf(pyr[0]), outdir + '/tmp2.exr')
 
-        for level in range(0, max_levels-1):
-            b, c, old_width, old_height = img.size()
-            crop_width = old_width * cls.downsample_scale
-            crop_height = old_height * cls.downsample_scale
-            left = (old_width - crop_width) / 2.
-            right = crop_width + left
-            bottom = (old_height - crop_height) / 2.
-            top = bottom + crop_height
-
+        # for level in range(0, max_levels-1):
+        #     b, c, old_width, old_height = img.size()
+        #     crop_width = old_width * cls.downsample_scale
+        #     crop_height = old_height * cls.downsample_scale
+        #     left = (old_width - crop_width) / 2.
+        #     right = crop_width + left
+        #     bottom = (old_height - crop_height) / 2.
+        #     top = bottom + crop_height
             # buf1 = tensor_to_buf(img.detach())
             # roi = oiio.ROI(int(left), int(right), int(bottom), int(top))
             # buf2 = oiio.ImageBufAlgo.crop(buf1, roi=roi)
             # img = buf_to_tensor(buf2, cuda)
             # pyr.append(img)
 
-        write_exr(tensor_to_buf(pyr[0]), outdir + '/tmp2.exr')
+
         return pyr
 
     @staticmethod
