@@ -479,11 +479,11 @@ class Pyramid(object):
             bottom = (old_height - crop_height) / 2.
             top = bottom + crop_height
             # print(left, right, bottom, top)
-            buf1 = tensor_to_buf(img)
+            buf1 = tensor_to_buf(img.detach())
             roi = oiio.ROI(int(left), int(right), int(bottom), int(top))
             buf2 = oiio.ImageBufAlgo.crop(buf1, roi=roi)
             img = buf_to_tensor(buf2, cuda)
-            # pyr.append(img.detach())
+            pyr.append(img)
 
         write_exr(tensor_to_buf(pyr[0]), outdir + '/tmp2.exr')
         return pyr
