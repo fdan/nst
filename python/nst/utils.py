@@ -459,11 +459,11 @@ class Pyramid(object):
             fp = outdir + '/crop_pyr_lvl_%s.exr' % index
             print('writing ', fp)
             buf = tensor_to_buf(level)
-            # write_exr(buf, fp)
+            write_exr(buf, fp)
 
     @classmethod
     def _crop_pyramid(cls, img, cuda, max_levels, outdir=''):
-        write_exr(tensor_to_buf(img), outdir + '/tmp1.exr')
+        # write_exr(tensor_to_buf(img), outdir + '/tmp1.exr')
 
         pyr = []
         pyr.append(img.detach())
@@ -485,7 +485,7 @@ class Pyramid(object):
             img = buf_to_tensor(buf2, cuda)
             pyr.append(img)
 
-        write_exr(tensor_to_buf(pyr[0]), outdir + '/tmp2.exr')
+        # write_exr(tensor_to_buf(pyr[0]), outdir + '/tmp2.exr')
         return pyr
 
     @staticmethod
