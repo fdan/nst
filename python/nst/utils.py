@@ -448,7 +448,7 @@ class Pyramid(object):
 
     @classmethod
     def write_crop_pyramid(cls, outdir, img, mips=5, cuda=True):
-        crop_pyramid = cls._crop_pyramid(img, cuda, max_levels=mips, outdir=outdir)
+        crop_pyramid = cls._crop_pyramid(img.detach(), cuda, max_levels=mips, outdir=outdir)
         print(crop_pyramid[0])
 
         write_exr(tensor_to_buf(crop_pyramid[0]), outdir + '/tmp2b.exr')
