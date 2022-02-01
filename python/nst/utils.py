@@ -456,13 +456,9 @@ class Pyramid(object):
             except:
                 pass
 
-            print(level)
-
             fp = outdir + '/crop_pyr_lvl_%s.exr' % index
             print('writing ', fp)
             buf = tensor_to_buf(level)
-
-            print(buf.get_pixels())
 
             write_exr(buf, fp)
 
