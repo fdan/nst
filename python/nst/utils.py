@@ -488,6 +488,8 @@ class Pyramid(object):
             buf = tensor_to_buf(current)
             roi = oiio.ROI(int(left), int(right), int(bottom), int(top))
             buf = oiio.ImageBufAlgo.crop(buf, roi=roi)
+            print(buf.get_pixels())
+            
             current = buf_to_tensor(buf, cuda)
 
             # if cuda:
