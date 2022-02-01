@@ -488,10 +488,10 @@ class Pyramid(object):
             buf = tensor_to_buf(current)
             roi = oiio.ROI(int(left), int(right), int(bottom), int(top))
             buf = oiio.ImageBufAlgo.crop(buf, roi=roi)
-            current = buf_to_tensor(buf)
+            current = buf_to_tensor(buf, cuda)
 
-            if cuda:
-                current = current.detach().to(torch.device(get_cuda_device()))
+            # if cuda:
+            #     current = current.detach().to(torch.device(get_cuda_device()))
 
             pyr.append(current)
 
