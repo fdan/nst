@@ -432,7 +432,10 @@ class Pyramid(object):
         for index, level in enumerate(gaus_pyramid):
             fp = outdir + '/gaus_pyr_lvl_%s.exr' % index
             print('writing ', fp)
+            print(level.__class__)
+            print(level.size())
             buf = tensor_to_buf(level)
+            print(buf.get_pixels())
             write_exr(buf, fp)
 
     @classmethod
