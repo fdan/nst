@@ -430,6 +430,12 @@ class Pyramid(object):
     def write_gaussian_pyramid(cls, outdir, img, mips=5, cuda=True):
         gaus_pyramid = cls.make_gaussian_pyramid(img, mips=mips, cuda=cuda)
         for index, level in enumerate(gaus_pyramid):
+
+            try:
+                os.makedirs(outdir)
+            except:
+                pass
+
             fp = outdir + '/gaus_pyr_lvl_%s.exr' % index
             print('writing ', fp)
             print(level.__class__)
