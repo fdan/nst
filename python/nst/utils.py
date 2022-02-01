@@ -490,8 +490,7 @@ class Pyramid(object):
             # img = buf_to_tensor(buf2, cuda)
             # pyr.append(img)
 
-
-        return pyr
+        # return pyr
 
     @staticmethod
     def _build_gauss_kernel(cuda, size=5, sigma=1.0, n_channels=3):
