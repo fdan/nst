@@ -468,14 +468,19 @@ class Pyramid(object):
         pyr = [current]
 
         for level in range(0, max_levels-1):
+            print(level)
+
             b, c, old_width, old_height = current.size()
             crop_width = old_width * cls.downsample_scale
             crop_height = old_height * cls.downsample_scale
+
+            print(crop_width, crop_height)
+
             left = (old_width - crop_width) / 2.
             right = crop_width + left
             bottom = (old_height - crop_height) / 2.
             top = bottom + crop_height
-            print(level)
+
             print(left, right, bottom, top)
 
             buf = tensor_to_buf(current)
