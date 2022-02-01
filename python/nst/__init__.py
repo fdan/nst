@@ -304,7 +304,7 @@ class StyleImager(object):
             else:
                 style_tensor = utils.image_to_tensor(self.style.image, DO_CUDA, colorspace=self.style.colorspace)
 
-            style_pyramid = utils.Pyramid.make_pyramid(style_tensor, cuda=DO_CUDA, mips=self.style.mips)
+            style_pyramid = utils.Pyramid.make_gaussian_pyramid(style_tensor, cuda=DO_CUDA, mips=self.style.mips)
 
             style_activations = []
             style_layer_names = [x.name for x in self.style.layers]
@@ -430,7 +430,7 @@ class StyleImager(object):
         cuda_device = self.cuda_device
 
         def closure():
-            opt_pyramid = utils.Pyramid.make_pyramid(opt_tensor, cuda=DO_CUDA, mips=self.style.mips)
+            opt_pyramid = utils.Pyramid.make_gaussian_pyramid(opt_tensor, cuda=DO_CUDA, mips=self.style.mips)
             opt_activations = []
 
             loss_layer_names = [x.name for x in loss_layers]
