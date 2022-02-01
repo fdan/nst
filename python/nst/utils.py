@@ -456,9 +456,6 @@ class Pyramid(object):
 
         crop_pyramid = cls._crop_pyramid(img.detach(), cuda, max_levels=mips, outdir=outdir)
 
-        write_exr(tensor_to_buf(crop_pyramid[0]), outdir + '/tmp2b.exr')
-        write_exr(tensor_to_buf(crop_pyramid[1]), outdir + '/tmp3b.exr')
-
         for index, level in enumerate(crop_pyramid):
 
             try:
