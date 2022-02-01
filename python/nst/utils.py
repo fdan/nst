@@ -461,6 +461,32 @@ class Pyramid(object):
             buf = tensor_to_buf(level)
             write_exr(buf, fp)
 
+    @classmethod
+    def _crop_pyramid(cls, img, cuda, max_levels):
+        current = img
+        pyr = [current]
+
+        for level in range(0, max_levels-1):
+            b, c, old_width, old_height = current.size()
+            crop_width = old_width * cls.downsample_scale
+            crop_height = old_height * cls.downsample_scale
+            top = (old_height - crop_height) / 2.
+            left = (old_width - crop_width) / 2.
+
+            print(crop_width, crop_height, top, left)
+
+            pil_current = tensor_to_pil(current)
+            current = transforms.functional.crop(pil_current, top, left, crop_height, crop_width)
+
+            print(current.size())
+
+            if cuda:
+                current = current.detach().to(torch.device(get_cuda_device()))
+
+            pyr.append(current)
+
+        return pyr
+
     @staticmethod
     def _build_gauss_kernel(cuda, size=5, sigma=1.0, n_channels=3):
         if size % 2 != 1:
@@ -488,30 +514,6 @@ class Pyramid(object):
             result = result.detach().to(torch.device(get_cuda_device()))
 
         return result
-
-    @classmethod
-    def _crop_pyramid(cls, img, cuda, max_levels):
-        current = img
-        pyr = [current]
-
-        for level in range(0, max_levels-1):
-            b, c, old_width, old_height = img.size()
-            crop_width = old_width * cls.downsample_scale
-            crop_height = old_height * cls.downsample_scale
-
-            top = (old_height - crop_height) / 2.
-            left = (old_width - crop_width) / 2.
-
-            pil_img = tensor_to_pil(img)
-            current = transforms.functional.crop(pil_img, top, left, crop_height, crop_width)
-
-            if cuda:
-                current = current.detach().to(torch.device(get_cuda_device()))
-
-            pyr.append(current)
-
-        return pyr
-
 
     @classmethod
     def _gaussian_pyramid(cls, img, kernel, cuda, max_levels):
