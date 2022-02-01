@@ -456,12 +456,11 @@ class Pyramid(object):
 
         crop_pyramid = cls._crop_pyramid(img.detach(), cuda, max_levels=mips, outdir=outdir)
 
-        for index, level in enumerate(crop_pyramid):
-
-            try:
-                os.makedirs(outdir)
-            except:
-                pass
+        # for index, level in enumerate(crop_pyramid):
+        #     try:
+        #         os.makedirs(outdir)
+        #     except:
+        #         pass
 
             # fp = outdir + '/crop_pyr_lvl_%s.exr' % index
             # print('writing ', fp)
