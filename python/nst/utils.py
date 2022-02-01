@@ -476,7 +476,8 @@ class Pyramid(object):
             print(crop_width, crop_height, top, left)
 
             pil_current = tensor_to_pil(current)
-            current = transforms.functional.crop(pil_current, top, left, crop_height, crop_width)
+            pil_current = transforms.functional.crop(pil_current, top, left, crop_height, crop_width)
+            current = PIL_to_tensor(pil_current, cuda)
 
             print(current.__class__)
 
