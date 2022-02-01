@@ -486,7 +486,7 @@ class Pyramid(object):
             # current = PIL_to_tensor(pil_current, cuda)
 
             buf = tensor_to_buf(current)
-            roi = oiio.ROI(left, right, bottom, top)
+            roi = oiio.ROI(int(left), int(right), int(bottom), int(top))
             buf = oiio.ImageBufAlgo.crop(buf, roi=roi)
             current = buf_to_tensor(buf)
 
