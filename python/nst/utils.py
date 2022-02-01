@@ -448,7 +448,7 @@ class Pyramid(object):
 
     @classmethod
     def write_crop_pyramid(cls, outdir, img, mips=5, cuda=True):
-        crop_pyramid = cls.make_crop_pyramid(img, mips=mips, cuda=cuda)
+        crop_pyramid = cls._crop_pyramid(img, cuda, max_levels=mips, outdir=outdir)
         for index, level in enumerate(crop_pyramid):
 
             try:
@@ -459,40 +459,40 @@ class Pyramid(object):
             fp = outdir + '/crop_pyr_lvl_%s.exr' % index
             print('writing ', fp)
             buf = tensor_to_buf(level)
-
-            write_exr(buf, fp)
+            # write_exr(buf, fp)
 
     @classmethod
-    def _crop_pyramid(cls, img, cuda, max_levels):
+    def _crop_pyramid(cls, img, cuda, max_levels, outdir=''):
         current = img
+        write_exr(current, outdir + '/tmp2.exr')
         pyr = [current]
 
-        for level in range(0, max_levels-1):
-            print(level)
-
-            b, c, old_width, old_height = current.size()
-            crop_width = old_width * cls.downsample_scale
-            crop_height = old_height * cls.downsample_scale
-
-            print(crop_width, crop_height)
-
-            left = (old_width - crop_width) / 2.
-            right = crop_width + left
-            bottom = (old_height - crop_height) / 2.
-            top = bottom + crop_height
-
-            print(left, right, bottom, top)
-
-            buf = tensor_to_buf(current)
-            # roi = oiio.ROI(int(left), int(right), int(bottom), int(top))
-            roi = oiio.ROI(0, 100, 0, 100)
-            buf = oiio.ImageBufAlgo.crop(buf, roi=roi)
-            current = buf_to_tensor(buf, cuda)
-
-            # if cuda:
-            #     current = current.detach().to(torch.device(get_cuda_device()))
-
-            pyr.append(current)
+        # for level in range(0, max_levels-1):
+        #     print(level)
+        #
+        #     b, c, old_width, old_height = current.size()
+        #     crop_width = old_width * cls.downsample_scale
+        #     crop_height = old_height * cls.downsample_scale
+        #
+        #     print(crop_width, crop_height)
+        #
+        #     left = (old_width - crop_width) / 2.
+        #     right = crop_width + left
+        #     bottom = (old_height - crop_height) / 2.
+        #     top = bottom + crop_height
+        #
+        #     print(left, right, bottom, top)
+        #
+        #     buf = tensor_to_buf(current)
+        #     # roi = oiio.ROI(int(left), int(right), int(bottom), int(top))
+        #     roi = oiio.ROI(0, 100, 0, 100)
+        #     buf = oiio.ImageBufAlgo.crop(buf, roi=roi)
+        #     current = buf_to_tensor(buf, cuda)
+        #
+        #     # if cuda:
+        #     #     current = current.detach().to(torch.device(get_cuda_device()))
+        #
+        #     pyr.append(current)
 
         return pyr
 
