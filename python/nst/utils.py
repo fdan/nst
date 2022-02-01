@@ -3,6 +3,7 @@ Repetitive utility functions that have nothing to do with style transfer
 """
 from . import entities
 
+import copy
 import subprocess
 import shutil
 import os
@@ -448,54 +449,47 @@ class Pyramid(object):
 
     @classmethod
     def write_crop_pyramid(cls, outdir, img, mips=5, cuda=True):
-
-        # import copy
-        # copy.copy(x)
-        # copy.deepcopy(x)
-
-
         crop_pyramid = cls._crop_pyramid(img.detach(), cuda, max_levels=mips, outdir=outdir)
 
-        # for index, level in enumerate(crop_pyramid):
-        #     try:
-        #         os.makedirs(outdir)
-        #     except:
-        #         pass
+        for index, level in enumerate(crop_pyramid):
+            try:
+                os.makedirs(outdir)
+            except:
+                pass
 
-            # fp = outdir + '/crop_pyr_lvl_%s.exr' % index
-            # print('writing ', fp)
-            # buf = tensor_to_buf(level)
-            # write_exr(buf, fp)
+            fp = outdir + '/crop_pyr_lvl_%s.exr' % index
+            print('writing ', fp)
+            buf = tensor_to_buf(level)
+            write_exr(buf, fp)
 
     @classmethod
     def _crop_pyramid(cls, img, cuda, max_levels, outdir=''):
 
-        import copy
-        a = copy.deepcopy(img)
+        # a = copy.deepcopy(img)
         # a = tensor_to_buf(img.detach())
-        write_exr(tensor_to_buf(a), outdir + '/tmp1.exr')
-        # pyr = []
-        # pyr.append(img)
+        # write_exr(tensor_to_buf(a), outdir + '/tmp1.exr')
+        pyr = []
+        pyr.append(copy.deepcopy(img))
         # b = tensor_to_buf(img.detach())
-        b = copy.deepcopy(img)
-        write_exr(tensor_to_buf(b), outdir + '/tmp2.exr')
+        # b = copy.deepcopy(img)
+        # write_exr(tensor_to_buf(b), outdir + '/tmp2.exr')
         # write_exr(tensor_to_buf(pyr[0]), outdir + '/tmp3.exr')
 
-        # for level in range(0, max_levels-1):
-        #     b, c, old_width, old_height = img.size()
-        #     crop_width = old_width * cls.downsample_scale
-        #     crop_height = old_height * cls.downsample_scale
-        #     left = (old_width - crop_width) / 2.
-        #     right = crop_width + left
-        #     bottom = (old_height - crop_height) / 2.
-        #     top = bottom + crop_height
-            # buf1 = tensor_to_buf(img.detach())
-            # roi = oiio.ROI(int(left), int(right), int(bottom), int(top))
-            # buf2 = oiio.ImageBufAlgo.crop(buf1, roi=roi)
-            # img = buf_to_tensor(buf2, cuda)
-            # pyr.append(img)
+        for level in range(0, max_levels-1):
+            b, c, old_width, old_height = img.size()
+            crop_width = old_width * cls.downsample_scale
+            crop_height = old_height * cls.downsample_scale
+            left = (old_width - crop_width) / 2.
+            right = crop_width + left
+            bottom = (old_height - crop_height) / 2.
+            top = bottom + crop_height
+            buf = tensor_to_buf(copy.deepcopy(img))
+            roi = oiio.ROI(int(left), int(right), int(bottom), int(top))
+            buf = oiio.ImageBufAlgo.crop(buf, roi=roi)
+            img = buf_to_tensor(buf, cuda)
+            pyr.append(copy.deepcopy(img))
 
-        # return pyr
+        return pyr
 
     @staticmethod
     def _build_gauss_kernel(cuda, size=5, sigma=1.0, n_channels=3):
