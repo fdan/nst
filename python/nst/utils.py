@@ -431,6 +431,7 @@ class Pyramid(object):
         gaus_pyramid = cls.make_gaussian_pyramid(img, mips=mips, cuda=cuda)
         for index, level in enumerate(gaus_pyramid):
             fp = outdir + '/gaus_pyr_lvl_%s.exr' % index
+            print('writing ', fp)
             buf = tensor_to_buf(level)
             write_exr(buf, fp)
 
@@ -444,6 +445,7 @@ class Pyramid(object):
         crop_pyramid = cls.make_crop_pyramid(img, mips=mips, cuda=cuda)
         for index, level in enumerate(crop_pyramid):
             fp = outdir + '/crop_pyr_lvl_%s.exr' % index
+            print('writing ', fp)
             buf = tensor_to_buf(level)
             write_exr(buf, fp)
 
@@ -488,7 +490,7 @@ class Pyramid(object):
             top = (old_height - crop_height) / 2.
             left = (old_width - crop_width) / 2.
 
-            current = transforms.crop(img, top, left, crop_height, crop_width)
+            current = transforms.functional.crop(img, top, left, crop_height, crop_width)
 
             if cuda:
                 current = current.detach().to(torch.device(get_cuda_device()))
