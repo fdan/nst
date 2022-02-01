@@ -478,11 +478,17 @@ class Pyramid(object):
             top = (old_height - crop_height) / 2.
             left = (old_width - crop_width) / 2.
 
-            pil_current = tensor_to_pil(current)
-            pil_current = transforms.functional.crop(pil_current, top, left, crop_height, crop_width)
-            current = PIL_to_tensor(pil_current, cuda)
+            right = old_width - left
+            bottom = old_height - top
 
-            print(current.__class__)
+            # pil_current = tensor_to_pil(current)
+            # pil_current = transforms.functional.crop(pil_current, top, left, crop_height, crop_width)
+            # current = PIL_to_tensor(pil_current, cuda)
+
+            buf = tensor_to_buf(current)
+            roi = oiio.ROI(left, right, bottom, top)
+            buf = oiio.ImageBufAlgo.crop(buf, roi=roi)
+            current = buf_to_tensor(buf)
 
             if cuda:
                 current = current.detach().to(torch.device(get_cuda_device()))
