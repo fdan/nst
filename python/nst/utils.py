@@ -475,11 +475,14 @@ class Pyramid(object):
             b, c, old_width, old_height = current.size()
             crop_width = old_width * cls.downsample_scale
             crop_height = old_height * cls.downsample_scale
-            top = (old_height - crop_height) / 2.
-            left = (old_width - crop_width) / 2.
+            # top = (old_height - crop_height) / 2.
+            # left = (old_width - crop_width) / 2.
 
-            right = old_width - left
-            bottom = old_height - top
+            left = (old_width - crop_width) / 2.
+            right = (old_width - crop_width) / 2.
+            bottom = (old_height - crop_height) / 2.
+            top = (old_height - crop_height) / 2.
+
 
             # pil_current = tensor_to_pil(current)
             # pil_current = transforms.functional.crop(pil_current, top, left, crop_height, crop_width)
