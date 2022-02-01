@@ -456,6 +456,8 @@ class Pyramid(object):
             except:
                 pass
 
+            print(level)
+
             fp = outdir + '/crop_pyr_lvl_%s.exr' % index
             print('writing ', fp)
             buf = tensor_to_buf(level)
@@ -472,8 +474,6 @@ class Pyramid(object):
             crop_height = old_height * cls.downsample_scale
             top = (old_height - crop_height) / 2.
             left = (old_width - crop_width) / 2.
-
-            print(crop_width, crop_height, top, left)
 
             pil_current = tensor_to_pil(current)
             pil_current = transforms.functional.crop(pil_current, top, left, crop_height, crop_width)
