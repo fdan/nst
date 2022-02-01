@@ -490,7 +490,8 @@ class Pyramid(object):
             top = (old_height - crop_height) / 2.
             left = (old_width - crop_width) / 2.
 
-            current = transforms.functional.crop(img, top, left, crop_height, crop_width)
+            pil_img = tensor_to_pil(img)
+            current = transforms.functional.crop(pil_img, top, left, crop_height, crop_width)
 
             if cuda:
                 current = current.detach().to(torch.device(get_cuda_device()))
