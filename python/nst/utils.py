@@ -437,13 +437,8 @@ class Pyramid(object):
                 pass
 
             fp = outdir + '/gaus_pyr_lvl_%s.exr' % index
-            print('writing ', fp)
-            print(level.__class__)
-            print(level.size())
             buf = tensor_to_buf(level)
-            print(buf.get_pixels())
-            print(buf.write(fp, oiio.FLOAT))
-            print('done')
+            write_exr(buf, fp)
 
 
     @classmethod
@@ -455,6 +450,12 @@ class Pyramid(object):
     def write_crop_pyramid(cls, outdir, img, mips=5, cuda=True):
         crop_pyramid = cls.make_crop_pyramid(img, mips=mips, cuda=cuda)
         for index, level in enumerate(crop_pyramid):
+
+            try:
+                os.makedirs(outdir)
+            except:
+                pass
+
             fp = outdir + '/crop_pyr_lvl_%s.exr' % index
             print('writing ', fp)
             buf = tensor_to_buf(level)
