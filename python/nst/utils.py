@@ -463,6 +463,8 @@ class Pyramid(object):
 
     @classmethod
     def _crop_pyramid(cls, img, cuda, max_levels, outdir=''):
+        write_exr(tensor_to_buf(img), outdir + '/tmp1.exr')
+
         pyr = []
         pyr.append(img.detach())
 
