@@ -418,14 +418,34 @@ def do_ffmpeg(output_dir, temp_dir=None):
 
 class Pyramid(object):
 
+    downsample_scale = 0.63
+
     @classmethod
-    def make_pyramid(cls, img, mips=5, cuda=True):
+    def make_gaussian_pyramid(cls, img, mips=5, cuda=True):
         kernel = cls._build_gauss_kernel(cuda)
-        gp = cls._gaussian_pyramid(img, kernel, cuda, max_levels=mips)
-        # dgp = cls._downsample_gaussian_pyramid(gp, cuda)
-        dgp = gp
-        # print('done')
-        return dgp
+        gaus_pyramid = cls._gaussian_pyramid(img, kernel, cuda, max_levels=mips)
+        return gaus_pyramid
+
+    @classmethod
+    def write_gaussian_pyramid(cls, outdir, img, mips=5, cuda=True):
+        gaus_pyramid = cls.make_gaussian_pyramid(img, mips=mips, cuda=cuda)
+        for index, level in enumerate(gaus_pyramid):
+            fp = outdir + '/gaus_pyr_lvl_%s.exr' % index
+            buf = tensor_to_buf(level)
+            write_exr(buf, fp)
+
+    @classmethod
+    def make_crop_pyramid(cls, img, mips=5, cuda=True):
+        crop_pyramid = cls._crop_pyramid(img, cuda, max_levels=mips)
+        return crop_pyramid
+
+    @classmethod
+    def write_crop_pyramid(cls, outdir, img, mips=5, cuda=True):
+        crop_pyramid = cls.make_crop_pyramid(img, mips=mips, cuda=cuda)
+        for index, level in enumerate(crop_pyramid):
+            fp = outdir + '/crop_pyr_lvl_%s.exr' % index
+            buf = tensor_to_buf(level)
+            write_exr(buf, fp)
 
     @staticmethod
     def _build_gauss_kernel(cuda, size=5, sigma=1.0, n_channels=3):
@@ -456,23 +476,19 @@ class Pyramid(object):
         return result
 
     @classmethod
-    def _gaussian_pyramid(cls, img, kernel, cuda, max_levels):
+    def _crop_pyramid(cls, img, cuda, max_levels):
         current = img
-        # print(1.1, current.size())
-
         pyr = [current]
 
-        # for level in range(1, max_levels+1):
         for level in range(0, max_levels-1):
-            # print('level:', level)
-            filtered = cls._conv_gauss(current, kernel, cuda)
-            # scale = 1./float(level) # this is compounding in a way i don't want
-            scale = 0.63
-            # print('scale:', scale)
-            current = F.interpolate(filtered, scale_factor=scale)
-            # print(1.2, current.size())
-            # current = F.avg_pool2d(filtered, 2) # this kernel size param seems to halve the resolution?
-            # print('pyramid item size:', filtered.size(), current.size())
+            b, c, old_width, old_height = img.size()
+            crop_width = old_width * cls.downsample_scale
+            crop_height = old_height * cls.downsample_scale
+
+            top = (old_height - crop_height) / 2.
+            left = (old_width - crop_width) / 2.
+
+            current = transforms.crop(img, top, left, crop_height, crop_width)
 
             if cuda:
                 current = current.detach().to(torch.device(get_cuda_device()))
@@ -481,23 +497,24 @@ class Pyramid(object):
 
         return pyr
 
-    @staticmethod
-    def _downsample_gaussian_pyramid(pyr, cuda):
 
-        for index, tensor in pyr:
-            p = pyr[index]
-            scale = 1./float(index+1)
-            scaled_p = F.interpolate(p, scale_factor=scale, mode='bilinear', align_corners=True)
+    @classmethod
+    def _gaussian_pyramid(cls, img, kernel, cuda, max_levels):
+        current = img
+        pyr = [current]
+
+        for level in range(0, max_levels-1):
+            filtered = cls._conv_gauss(current, kernel, cuda)
+            scale =cls.downsample_scale
+            current = F.interpolate(filtered, scale_factor=scale)
 
             if cuda:
-                scaled_p = scaled_p.detach().to(torch.device(get_cuda_device()))
+                current = current.detach().to(torch.device(get_cuda_device()))
 
-            pyr[index] = scaled_p
+            pyr.append(current)
 
         return pyr
 
-
-#####################################################################################################
 
 def lerp_points(levels, keys):
     """
