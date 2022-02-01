@@ -470,12 +470,15 @@ class Pyramid(object):
     @classmethod
     def _crop_pyramid(cls, img, cuda, max_levels, outdir=''):
 
-        a = tensor_to_buf(img.detach())
-        write_exr(a, outdir + '/tmp1.exr')
+        import copy
+        a = copy.deepcopy(img)
+        # a = tensor_to_buf(img.detach())
+        write_exr(tensor_to_buf(a), outdir + '/tmp1.exr')
         # pyr = []
         # pyr.append(img)
-        b = tensor_to_buf(img.detach())
-        write_exr(b, outdir + '/tmp2.exr')
+        # b = tensor_to_buf(img.detach())
+        b = copy.deepcopy(img)
+        write_exr(tensor_to_buf(b), outdir + '/tmp2.exr')
         # write_exr(tensor_to_buf(pyr[0]), outdir + '/tmp3.exr')
 
         # for level in range(0, max_levels-1):
