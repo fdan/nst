@@ -463,27 +463,25 @@ class Pyramid(object):
 
     @classmethod
     def _crop_pyramid(cls, img, cuda, max_levels, outdir=''):
-        current = img
-        # buf = tensor_to_buf(current)
-        # write_exr(buf, outdir + '/tmp2.exr')
-        pyr = [current]
+        pyr = []
+        pyr.append(img.detach())
 
         for level in range(0, max_levels-1):
-            print(level)
-            b, c, old_width, old_height = current.size()
+            # print(level)
+            b, c, old_width, old_height = img.size()
             crop_width = old_width * cls.downsample_scale
             crop_height = old_height * cls.downsample_scale
-            print(crop_width, crop_height)
+            # print(crop_width, crop_height)
             left = (old_width - crop_width) / 2.
             right = crop_width + left
             bottom = (old_height - crop_height) / 2.
             top = bottom + crop_height
-            print(left, right, bottom, top)
-            buf = tensor_to_buf(current)
+            # print(left, right, bottom, top)
+            buf1 = tensor_to_buf(img)
             roi = oiio.ROI(int(left), int(right), int(bottom), int(top))
-            buf = oiio.ImageBufAlgo.crop(buf, roi=roi)
-            current = buf_to_tensor(buf, cuda)
-            pyr.append(current)
+            buf2 = oiio.ImageBufAlgo.crop(buf1, roi=roi)
+            img = buf_to_tensor(buf2, cuda)
+            pyr.append(img.detach())
 
         write_exr(tensor_to_buf(pyr[0]), outdir + '/tmp2.exr')
         return pyr
