@@ -436,7 +436,9 @@ class Pyramid(object):
             print(level.size())
             buf = tensor_to_buf(level)
             print(buf.get_pixels())
-            write_exr(buf, fp)
+            print(buf.write(fp, oiio.FLOAT))
+            print('done')
+
 
     @classmethod
     def make_crop_pyramid(cls, img, mips=5, cuda=True):
