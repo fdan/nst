@@ -479,9 +479,9 @@ class Pyramid(object):
             # left = (old_width - crop_width) / 2.
 
             left = (old_width - crop_width) / 2.
-            right = (old_width - crop_width) / 2.
+            right = crop_width + left
             bottom = (old_height - crop_height) / 2.
-            top = (old_height - crop_height) / 2.
+            top = bottom + crop_height
 
 
             # pil_current = tensor_to_pil(current)
