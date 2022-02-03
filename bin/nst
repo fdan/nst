@@ -205,7 +205,10 @@ def main():
         style_imager.iterations = iterations
         style_imager.log_iterations = iterations
         style_imager.out = output_image_
-        style_imager.style_scale = style_scale
+        # style_imager.style_scale = style_scale
+
+        if opts.style_crop_scale:
+            style_imager.style_crop_scale = float(opts.style_crop_scale)
 
         if opts.opt:
             style_imager.optimisation_image = opts.opt
