@@ -419,7 +419,8 @@ def do_ffmpeg(output_dir, temp_dir=None):
 
 class Pyramid(object):
 
-    downsample_scale = 0.63
+    gauss_downsample_scale = 0.63
+    crop_scale = 0.9
 
     @classmethod
     def make_gaussian_pyramid(cls, img, mips=5, cuda=True):
@@ -464,21 +465,13 @@ class Pyramid(object):
 
     @classmethod
     def _crop_pyramid(cls, img, cuda, max_levels, outdir=''):
-
-        # a = copy.deepcopy(img)
-        # a = tensor_to_buf(img.detach())
-        # write_exr(tensor_to_buf(a), outdir + '/tmp1.exr')
         pyr = []
         pyr.append(copy.deepcopy(img))
-        # b = tensor_to_buf(img.detach())
-        # b = copy.deepcopy(img)
-        # write_exr(tensor_to_buf(b), outdir + '/tmp2.exr')
-        # write_exr(tensor_to_buf(pyr[0]), outdir + '/tmp3.exr')
 
         for level in range(0, max_levels-1):
             b, c, old_width, old_height = img.size()
-            crop_width = old_width * cls.downsample_scale
-            crop_height = old_height * cls.downsample_scale
+            crop_width = old_width * cls.crop_scale
+            crop_height = old_height * cls.crop_scale
             left = (old_width - crop_width) / 2.
             right = crop_width + left
             bottom = (old_height - crop_height) / 2.
@@ -526,7 +519,7 @@ class Pyramid(object):
 
         for level in range(0, max_levels-1):
             filtered = cls._conv_gauss(current, kernel, cuda)
-            scale =cls.downsample_scale
+            scale =cls.gauss_downsample_scale
             current = F.interpolate(filtered, scale_factor=scale)
 
             if cuda:
