@@ -84,11 +84,16 @@ def wedge(style_image, content, mips, varying_mips, start, end, step, out_dir):
 
 
 def nst_job_v2(style_image, content_image, out_dir, opt=None, content_layers='r41', content_weights='1.0',
-               content_mips='1', content_mip_weights='1.0', style_mips='5', style_layers='p1:r32', style_weights='0.5:0.5',
-               style_mip_weights='1.0,1.0,1.0,1.0,1.0:1.0,1.0,1.0,1.0,1.0', style_scale=1.0, service='Studio', out_file='out.exr'):
+               content_mips='1', content_mip_weights='1.0', style_mips='5', style_layers='p1:r32',
+               style_weights='0.5:0.5', style_mip_weights='1.0,1.0,1.0,1.0,1.0:1.0,1.0,1.0,1.0,1.0', style_scale=1.0,
+               service='Studio', out_file='out.exr', job_title=None):
 
     style_image_name = style_image.split('/')[-1]
-    job = make_tractor_job(title='style_transfer_wedge_%s' % style_image_name, atmost=56, service=service)
+
+    if not job_title:
+        job_title = 'style_transfer_wedge_%s' % style_image_name
+
+    job = make_tractor_job(title=job_title, atmost=56, service=service)
 
     cmd = make_singularity_cmd()
     cmd += ['--from-content', True]

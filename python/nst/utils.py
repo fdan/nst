@@ -417,6 +417,22 @@ def do_ffmpeg(output_dir, temp_dir=None):
 #####################################################################################################
 # This code was mostly ruthlessly appropriated from tyneumann's "Minimal PyTorch implementation of Generative Latent Optimization" https://github.com/tneumann/minimal_glo. Thank the lord for clever germans.
 
+
+def centre_crop_image(img, scale, cuda=False):
+    b, c, old_width, old_height = img.size()
+    crop_width = old_width * scale
+    crop_height = old_height * scale
+    left = (old_width - crop_width) / 2.
+    right = crop_width + left
+    bottom = (old_height - crop_height) / 2.
+    top = bottom + crop_height
+    buf = tensor_to_buf(copy.deepcopy(img))
+    roi = oiio.ROI(int(left), int(right), int(bottom), int(top))
+    buf = oiio.ImageBufAlgo.crop(buf, roi=roi)
+    img = buf_to_tensor(buf, cuda)
+    return img
+
+
 class Pyramid(object):
 
     gauss_downsample_scale = 0.63

@@ -50,7 +50,8 @@ def main():
     p.add_option("", "--cmipweights", dest='cmipweights', action='store')
 
     p.add_option("", "--style", dest='style', action='store')
-    p.add_option("", "--style-scale", dest='style_scale', action='store')
+    # p.add_option("", "--style-scale", dest='style_scale', action='store')
+    p.add_option("", "--style-crop-scale", dest='style_crop_scale', action='store')
     p.add_option("", "--slayers", dest='slayers', action='store')
     p.add_option("", "--sweights", dest='sweights', action='store')
     p.add_option("", "--smips", dest='smips', action='store')
@@ -61,10 +62,11 @@ def main():
 
     from_content = eval(opts.from_content)
 
-    try:
-        style_scale = float(opts.style_scale)
-    except TypeError:
-        style_scale = 1.
+    # retiring this feature as it's pointless:
+    # try:
+    #     style_scale = float(opts.style_scale)
+    # except TypeError:
+    #     style_scale = 1.
 
     engine = opts.engine
 
@@ -164,7 +166,11 @@ def main():
 
             style_imager.content_masks = [None]
             style_imager.out = output_image_
-            style_imager.style_scale = style_scale
+
+            if opts.style_crop_scale:
+                style_imager.style_crop_scale = float(opts.style_crop_scale)
+
+            # style_imager.style_scale = style_scale
     
             if opts.opt:
                 opt_image_ = opts.opt.replace("####", "%04d" % frame)
