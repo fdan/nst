@@ -420,6 +420,7 @@ def do_ffmpeg(output_dir, temp_dir=None):
 
 def centre_crop_image(img, scale, maintain_size=True, cuda=False):
     b, c, old_width, old_height = img.size()
+    print(111, old_width, old_height)
     crop_width = old_width * scale
     crop_height = old_height * scale
     left = (old_width - crop_width) / 2.
@@ -429,7 +430,10 @@ def centre_crop_image(img, scale, maintain_size=True, cuda=False):
     buf = tensor_to_buf(copy.deepcopy(img))
     roi = oiio.ROI(int(left), int(right), int(bottom), int(top))
     buf = oiio.ImageBufAlgo.crop(buf, roi=roi)
-    buf = oiio.ImageBufAlgo.resize(buf, roi=ROI(0, old_width, 0, old_height, 0, 1, 0, 3))
+
+    if maintain_size:
+        buf = oiio.ImageBufAlgo.resize(buf, roi=ROI(0, old_width, 0, old_height, 0, 1, 0, 3))
+
     img = buf_to_tensor(buf, cuda)
     return img
 
