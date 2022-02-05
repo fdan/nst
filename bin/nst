@@ -124,7 +124,7 @@ def main():
         opt_y = 858
 
     if opts.iterations:
-        iterations = opts.iterations
+        iterations = int(opts.iterations)
     else:
         iterations = 500
 
