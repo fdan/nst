@@ -309,7 +309,8 @@ class StyleImager(object):
             style_tensor = utils.image_to_tensor(self.style.image, DO_CUDA, colorspace=self.style.colorspace)
 
             if self.style_crop_scale:
-                style_tensor = utils.centre_crop_image(style_tensor, self.style_crop_scale, cuda=DO_CUDA)
+                #style_tensor = utils.centre_crop_image(style_tensor, self.style_crop_scale, cuda=DO_CUDA)
+                style_tensor = utils.zoom_image(style_tensor, self.style_crop_scale, cuda=DO_CUDA)
 
             style_pyramid = utils.Pyramid.make_gaussian_pyramid(style_tensor, cuda=DO_CUDA, mips=self.style.mips)
 
