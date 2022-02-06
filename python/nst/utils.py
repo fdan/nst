@@ -1,6 +1,8 @@
 """
 Repetitive utility functions that have nothing to do with style transfer
 """
+import math
+
 from . import entities
 
 import copy
@@ -418,6 +420,32 @@ def do_ffmpeg(output_dir, temp_dir=None):
 # This code was mostly ruthlessly appropriated from tyneumann's "Minimal PyTorch implementation of Generative Latent Optimization" https://github.com/tneumann/minimal_glo. Thank the lord for clever germans.
 
 
+def zoom_image(img, scale, cuda=False):
+    if scale >= 1:
+        centre_crop_image(img, scale, cuda=cuda)
+    else:
+        tile(img, scale, cuda=cuda)
+
+
+def tile(img, scale, cuda=False):
+    b, c, old_width, old_height = img.size()
+    img = torch.nn.functional.interpolate(img, scale=scale)
+    b, c, new_width, new_height = img.size()
+
+    # determine how many tiles are needed
+    x_tile = math.ceil(old_width / new_width)
+    y_tile = math.ceil(old_height / new_height)
+    img = img.tile((x_tile, y_tile))
+
+    # crop to old size
+    buf = tensor_to_buf(copy.deepcopy(img))
+    roi = oiio.ROI(int(0), int(old_width), int(0), int(old_height))
+    buf = oiio.ImageBufAlgo.crop(buf, roi=roi)
+    img = buf_to_tensor(buf, cuda)
+
+    return img
+
+
 def centre_crop_image(img, scale, maintain_size=True, cuda=False):
     b, c, old_width, old_height = img.size()
     crop_width = old_width * scale
@@ -429,7 +457,6 @@ def centre_crop_image(img, scale, maintain_size=True, cuda=False):
     buf = tensor_to_buf(copy.deepcopy(img))
     roi = oiio.ROI(int(left), int(right), int(bottom), int(top))
     buf = oiio.ImageBufAlgo.crop(buf, roi=roi)
-
     img = buf_to_tensor(buf, cuda)
 
     if maintain_size:
