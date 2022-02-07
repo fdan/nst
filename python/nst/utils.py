@@ -470,7 +470,7 @@ def centre_crop_image(img, zoom, rescale, cuda=False):
     img = buf_to_tensor(buf, cuda)
     print(2.4, img.size())
     print(2.5, old_width*rescale, old_height*rescale)
-    img = torch.nn.functional.interpolate(img, size=(old_width*rescale, old_height*rescale))
+    img = torch.nn.functional.interpolate(img, size=(int(old_width*rescale), int(old_height*rescale)))
     return img
 
 
