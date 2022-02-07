@@ -421,8 +421,6 @@ def do_ffmpeg(output_dir, temp_dir=None):
 
 
 def zoom_image(img, zoom, rescale, cuda=False):
-    print(1, zoom)
-
     if zoom == 1.0:
         return img
 
@@ -437,16 +435,13 @@ def tile(img, zoom, rescale, cuda=False):
 
     img = torch.nn.functional.interpolate(img, scale_factor=rescale)
     b, c, old_width, old_height = img.size()
-    print(1.1, old_width, old_height, zoom)
     img = torch.nn.functional.interpolate(img, scale_factor=zoom)
     b, c, new_width, new_height = img.size()
-    print(1.2, new_width, new_height, zoom)
 
     # determine how many tiles are needed
     x_tile = math.ceil(old_width / new_width)
     y_tile = math.ceil(old_height / new_height)
     img = img.tile((x_tile, y_tile))
-    print(1.3, x_tile, y_tile, img.size())
 
     # crop to old size
     buf = tensor_to_buf(copy.deepcopy(img))
@@ -461,7 +456,6 @@ def centre_crop_image(img, zoom, rescale, cuda=False):
 
 
     b, c, old_width, old_height = img.size()
-    print(2.1, zoom, rescale, old_width, old_height)
     crop_width = old_width / zoom
     crop_height = old_height / zoom
     left = (old_width - crop_width) / 2.
@@ -470,12 +464,8 @@ def centre_crop_image(img, zoom, rescale, cuda=False):
     top = bottom + crop_height
     buf = tensor_to_buf(copy.deepcopy(img))
     roi = oiio.ROI(int(left), int(right), int(bottom), int(top))
-    print(2.2, old_width, old_height)
-    print(2.3, int(left), int(right), int(bottom), int(top))
     buf = oiio.ImageBufAlgo.crop(buf, roi=roi)
     img = buf_to_tensor(buf, cuda)
-    print(2.4, img.size())
-    print(2.5, old_width*rescale, old_height*rescale)
     img = torch.nn.functional.interpolate(img, size=(int(old_width*rescale), int(old_height*rescale)))
     return img
 
