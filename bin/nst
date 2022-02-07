@@ -186,7 +186,8 @@ def main():
 
         for index, sl in enumerate(slayers):
             print(1.2, index, sl)
-            print(1.3, len(style_mip_weights.split(':')))
+            print(1.3, style_mip_weights.split(':'))
+            print(1.4, len(style_mip_weights.split(':')))
             mip_weights = style_mip_weights.split(':')[index]
             mw = mip_weights.split(',')
             style_layers += [nst.VGGLayer(sl, weight=sweights[index], mip_weights=[float(x) for x in mw])]
