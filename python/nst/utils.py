@@ -453,6 +453,7 @@ def tile(img, zoom, rescale, cuda=False):
 
 
 def centre_crop_image(img, zoom, rescale, cuda=False):
+    zoom = 0.2 * zoom
     b, c, old_width, old_height = img.size()
     crop_width = old_width / zoom
     crop_height = old_height / zoom
