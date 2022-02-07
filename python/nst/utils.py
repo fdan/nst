@@ -433,11 +433,14 @@ def zoom_image(img, zoom, rescale, cuda=False):
 
 
 def tile(img, zoom, rescale, cuda=False):
+    # zoom out, i.e. zoom is between zero and one
+
     img = torch.nn.functional.interpolate(img, scale_factor=rescale)
     b, c, old_width, old_height = img.size()
-    print(old_width, old_height, zoom)
+    print(1.1, old_width, old_height, zoom)
     img = torch.nn.functional.interpolate(img, scale_factor=zoom)
     b, c, new_width, new_height = img.size()
+    print(1.2, new_width, new_height, zoom)
 
     # determine how many tiles are needed
     x_tile = math.ceil(old_width / new_width)
@@ -454,6 +457,8 @@ def tile(img, zoom, rescale, cuda=False):
 
 
 def centre_crop_image(img, zoom, rescale, cuda=False):
+
+
     b, c, old_width, old_height = img.size()
     print(2.1, zoom, rescale, old_width, old_height)
     crop_width = old_width / zoom
