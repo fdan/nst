@@ -423,7 +423,10 @@ def do_ffmpeg(output_dir, temp_dir=None):
 def zoom_image(img, zoom, rescale, cuda=False):
     print(1, zoom)
 
-    if zoom >= 1:
+    if zoom == 1.0:
+        return img
+
+    if zoom > 1:
         return centre_crop_image(img, zoom, rescale, cuda=cuda)
     else:
         return tile(img, zoom, rescale, cuda=cuda)
