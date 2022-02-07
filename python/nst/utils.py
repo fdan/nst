@@ -420,16 +420,17 @@ def do_ffmpeg(output_dir, temp_dir=None):
 # This code was mostly ruthlessly appropriated from tyneumann's "Minimal PyTorch implementation of Generative Latent Optimization" https://github.com/tneumann/minimal_glo. Thank the lord for clever germans.
 
 
-def zoom_image(img, scale, cuda=False):
-    if scale >= 1:
-        return centre_crop_image(img, scale, cuda=cuda)
+def zoom_image(img, zoom, rescale, cuda=False):
+    if zoom >= 1:
+        return centre_crop_image(img, zoom, cuda=cuda)
     else:
-        return tile(img, scale, cuda=cuda)
+        return tile(img, zoom, cuda=cuda)
 
 
-def tile(img, scale, cuda=False):
+def tile(img, zoom, rescale, cuda=False):
+    img = torch.nn.functional.interpolate(img, scale_factor=rescale)
     b, c, old_width, old_height = img.size()
-    img = torch.nn.functional.interpolate(img, scale_factor=scale)
+    img = torch.nn.functional.interpolate(img, scale_factor=zoom)
     b, c, new_width, new_height = img.size()
 
     # determine how many tiles are needed
@@ -446,10 +447,10 @@ def tile(img, scale, cuda=False):
     return img
 
 
-def centre_crop_image(img, scale, maintain_size=True, cuda=False):
+def centre_crop_image(img, zoom, rescale, cuda=False):
     b, c, old_width, old_height = img.size()
-    crop_width = old_width * scale
-    crop_height = old_height * scale
+    crop_width = old_width * zoom
+    crop_height = old_height * zoom
     left = (old_width - crop_width) / 2.
     right = crop_width + left
     bottom = (old_height - crop_height) / 2.
@@ -458,10 +459,7 @@ def centre_crop_image(img, scale, maintain_size=True, cuda=False):
     roi = oiio.ROI(int(left), int(right), int(bottom), int(top))
     buf = oiio.ImageBufAlgo.crop(buf, roi=roi)
     img = buf_to_tensor(buf, cuda)
-
-    if maintain_size:
-        img = torch.nn.functional.interpolate(img, size=(old_width, old_height))
-
+    img = torch.nn.functional.interpolate(img, size=(old_width*rescale, old_height*rescale))
     return img
 
 

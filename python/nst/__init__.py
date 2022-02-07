@@ -173,7 +173,8 @@ class StyleImager(object):
 
     def __init__(self, style, content=None, frame=0, render_out=None, engine='cpu'):
         self.style = style
-        self.style_crop_scale = None
+        self.style_zoom = None
+        self.style_rescale = None
         self.content = content
         self.iterations = 500
         self.log_iterations = 100
@@ -300,17 +301,10 @@ class StyleImager(object):
         if self.style:
             loss_layers += self.style.layers
 
-            # turns out there's no good use case for doing this:
-            # if self.style.scale:
-            #     style_tensor = utils.image_to_tensor(self.style.image, DO_CUDA, resize=self.style.scale, colorspace=self.style.colorspace)
-            # else:
-            #     style_tensor = utils.image_to_tensor(self.style.image, DO_CUDA, colorspace=self.style.colorspace)
-
             style_tensor = utils.image_to_tensor(self.style.image, DO_CUDA, colorspace=self.style.colorspace)
 
-            if self.style_crop_scale:
-                #style_tensor = utils.centre_crop_image(style_tensor, self.style_crop_scale, cuda=DO_CUDA)
-                style_tensor = utils.zoom_image(style_tensor, self.style_crop_scale, cuda=DO_CUDA)
+            if self.style_zoom:
+                style_tensor = utils.zoom_image(style_tensor, self.style_zoom, self.style_rescale, cuda=DO_CUDA)
 
             style_pyramid = utils.Pyramid.make_gaussian_pyramid(style_tensor, cuda=DO_CUDA, mips=self.style.mips)
 

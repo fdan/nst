@@ -50,8 +50,8 @@ def main():
     p.add_option("", "--cmipweights", dest='cmipweights', action='store')
 
     p.add_option("", "--style", dest='style', action='store')
-    # p.add_option("", "--style-scale", dest='style_scale', action='store')
-    p.add_option("", "--style-crop-scale", dest='style_crop_scale', action='store')
+    p.add_option("", "--style-rescale", dest='restyle_scale', action='store')
+    p.add_option("", "--style-zoom", dest='style_zoom', action='store')
     p.add_option("", "--slayers", dest='slayers', action='store')
     p.add_option("", "--sweights", dest='sweights', action='store')
     p.add_option("", "--smips", dest='smips', action='store')
@@ -90,8 +90,6 @@ def main():
         if e.errno != errno.EEXIST:
             raise
         pass
-
-    iterations = opts.iterations or 500
 
     if opts.clayers:
         clayers = opts.clayers.split(':')
@@ -205,10 +203,12 @@ def main():
         style_imager.iterations = iterations
         style_imager.log_iterations = iterations
         style_imager.out = output_image_
-        # style_imager.style_scale = style_scale
 
-        if opts.style_crop_scale:
-            style_imager.style_crop_scale = float(opts.style_crop_scale)
+        if opts.style_zoom:
+            style_imager.style_zoom = float(opts.style_zoom)
+
+        if opts.style_rescale:
+            style_imager.style_rescale = float(opts.style_rescale)
 
         if opts.opt:
             style_imager.optimisation_image = opts.opt
