@@ -446,7 +446,7 @@ def tile(img, zoom, rescale, cuda=False):
     x_tile = math.ceil(old_width / new_width)
     y_tile = math.ceil(old_height / new_height)
     img = img.tile((x_tile, y_tile))
-    print(1.3, img.size())
+    print(1.3, x_tile, y_tile, img.size())
 
     # crop to old size
     buf = tensor_to_buf(copy.deepcopy(img))
