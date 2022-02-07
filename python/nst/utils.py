@@ -465,7 +465,7 @@ def centre_crop_image(img, zoom, rescale, cuda=False):
     buf = tensor_to_buf(copy.deepcopy(img))
     roi = oiio.ROI(int(left), int(right), int(bottom), int(top))
     print(2.2, old_width, old_height)
-    print(2.3, left, right, bottom, top)
+    print(2.3, int(left), int(right), int(bottom), int(top))
     buf = oiio.ImageBufAlgo.crop(buf, roi=roi)
     img = buf_to_tensor(buf, cuda)
     img = torch.nn.functional.interpolate(img, size=(old_width*rescale, old_height*rescale))
