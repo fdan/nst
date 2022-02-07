@@ -50,7 +50,7 @@ def main():
     p.add_option("", "--cmipweights", dest='cmipweights', action='store')
 
     p.add_option("", "--style", dest='style', action='store')
-    p.add_option("", "--style-rescale", dest='restyle_scale', action='store')
+    p.add_option("", "--style-rescale", dest='style_rescale', action='store')
     p.add_option("", "--style-zoom", dest='style_zoom', action='store')
     p.add_option("", "--slayers", dest='slayers', action='store')
     p.add_option("", "--sweights", dest='sweights', action='store')
