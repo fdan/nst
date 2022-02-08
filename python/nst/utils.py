@@ -441,6 +441,9 @@ def tile(img, zoom, rescale, cuda=False):
     # determine how many tiles are needed
     x_tile = math.ceil(old_width / new_width)
     y_tile = math.ceil(old_height / new_height)
+
+    print('x_tile:', x_tile, 'y_tile:', y_tile)
+
     img = img.tile((x_tile, y_tile))
 
     # crop to old size
