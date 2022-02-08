@@ -456,7 +456,7 @@ def tile(img, zoom, rescale, cuda=False):
 
 
 def centre_crop_image(img, zoom, rescale, cuda=False, zoom_factor=0.17):
-    # _, _, old_x, old_y = img.size()
+    _, _, old_x, old_y = img.size()
     #
     # if zoom != 1.0:
     #     print(2.1)
@@ -475,11 +475,12 @@ def centre_crop_image(img, zoom, rescale, cuda=False, zoom_factor=0.17):
     #
     # print(2.2, img.size())
     #
-    # out_x = int(old_x * rescale)
-    # out_y = int(old_y * rescale)
+    out_x = int(old_x * rescale)
+    out_y = int(old_y * rescale)
     # print(2.3, img.size(), out_x, out_y)
     # print(2.4, img)
-    img = torch.nn.functional.interpolate(img, size=(2048, 2048))
+    # img = torch.nn.functional.interpolate(img, size=(2048, 2048))
+    img = torch.nn.functional.interpolate(img, size=(out_x, out_y))
     # print(2.5, img)
     return img
 
