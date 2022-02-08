@@ -456,28 +456,28 @@ def tile(img, zoom, rescale, cuda=False):
 
 
 def centre_crop_image(img, zoom, rescale, cuda=False, zoom_factor=0.17):
-    _, _, old_x, old_y = img.size()
-
-    if zoom != 1.0:
-        print(2.1)
-        zoom_ = 1+(zoom*zoom_factor)
-        crop_width = old_x / zoom_
-        crop_height = old_y / zoom_
-        left = (old_x - crop_width) / 2.
-        right = crop_width + left
-        bottom = (old_x - crop_height) / 2.
-        top = bottom + crop_height
-        buf = tensor_to_buf(copy.deepcopy(img))
-        print(old_x, old_y, left, right, bottom, top)
-        roi = oiio.ROI(int(left), int(right), int(bottom), int(top))
-        buf = oiio.ImageBufAlgo.crop(buf, roi=roi)
-        img = buf_to_tensor(buf, cuda)
-
-    print(2.2, img.size())
-
-    out_x = int(old_x * rescale)
-    out_y = int(old_y * rescale)
-    print(2.3, img.size(), out_x, out_y)
+    # _, _, old_x, old_y = img.size()
+    #
+    # if zoom != 1.0:
+    #     print(2.1)
+    #     zoom_ = 1+(zoom*zoom_factor)
+    #     crop_width = old_x / zoom_
+    #     crop_height = old_y / zoom_
+    #     left = (old_x - crop_width) / 2.
+    #     right = crop_width + left
+    #     bottom = (old_x - crop_height) / 2.
+    #     top = bottom + crop_height
+    #     buf = tensor_to_buf(copy.deepcopy(img))
+    #     print(old_x, old_y, left, right, bottom, top)
+    #     roi = oiio.ROI(int(left), int(right), int(bottom), int(top))
+    #     buf = oiio.ImageBufAlgo.crop(buf, roi=roi)
+    #     img = buf_to_tensor(buf, cuda)
+    #
+    # print(2.2, img.size())
+    #
+    # out_x = int(old_x * rescale)
+    # out_y = int(old_y * rescale)
+    # print(2.3, img.size(), out_x, out_y)
     # print(2.4, img)
     # img = torch.nn.functional.interpolate(img, size=(out_x, out_y))
     # print(2.5, img)
