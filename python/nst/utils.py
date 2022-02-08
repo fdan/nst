@@ -457,17 +457,20 @@ def tile(img, zoom, rescale, cuda=False):
 
 def centre_crop_image(img, zoom, rescale, cuda=False, zoom_factor=0.17):
     _, _, old_x, old_y = img.size()
-    zoom_ = 1+(zoom*zoom_factor)
-    crop_width = old_x / zoom_
-    crop_height = old_y / zoom_
-    left = (old_x - crop_width) / 2.
-    right = crop_width + left
-    bottom = (old_x - crop_height) / 2.
-    top = bottom + crop_height
-    buf = tensor_to_buf(copy.deepcopy(img))
-    roi = oiio.ROI(int(left), int(right), int(bottom), int(top))
-    buf = oiio.ImageBufAlgo.crop(buf, roi=roi)
-    img = buf_to_tensor(buf, cuda)
+
+    if zoom != 1.0:
+        zoom_ = 1+(zoom*zoom_factor)
+        crop_width = old_x / zoom_
+        crop_height = old_y / zoom_
+        left = (old_x - crop_width) / 2.
+        right = crop_width + left
+        bottom = (old_x - crop_height) / 2.
+        top = bottom + crop_height
+        buf = tensor_to_buf(copy.deepcopy(img))
+        roi = oiio.ROI(int(left), int(right), int(bottom), int(top))
+        buf = oiio.ImageBufAlgo.crop(buf, roi=roi)
+        img = buf_to_tensor(buf, cuda)
+
     out_x = int(old_x * rescale)
     out_y = int(old_y * rescale)
     img = torch.nn.functional.interpolate(img, size=(out_x, out_y))
