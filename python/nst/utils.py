@@ -468,6 +468,7 @@ def centre_crop_image(img, zoom, rescale, cuda=False, zoom_factor=0.17):
         bottom = (old_x - crop_height) / 2.
         top = bottom + crop_height
         buf = tensor_to_buf(copy.deepcopy(img))
+        print(old_x, old_y, left, right, bottom, top)
         roi = oiio.ROI(int(left), int(right), int(bottom), int(top))
         buf = oiio.ImageBufAlgo.crop(buf, roi=roi)
         img = buf_to_tensor(buf, cuda)
