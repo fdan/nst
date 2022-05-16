@@ -2,6 +2,7 @@
 Models/*
 .ipynb_checkpoints/
 build/
+*.sif
 *.pyc
 *.pth
 *~

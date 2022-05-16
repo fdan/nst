@@ -1,4 +1,7 @@
 import math
+import random
+
+import numpy as np
 
 import torch
 import torch.nn as nn
@@ -29,110 +32,123 @@ gw['r54'] = 0.003814697265625
 # vgg definition that conveniently let's you grab the outputs from any layer
 class VGG(nn.Module):
 
-    layers = {}
-    layers['r11'] = {'channels': 64, 'x': 512}
-    layers['r12'] = {'channels': 64, 'x': 512}
-    layers['r21'] = {'channels': 128, 'x': 256}
-    layers['r22'] = {'channels': 128, 'x': 256}
-    layers['r31'] = {'channels': 256, 'x': 128}
-    layers['r32'] = {'channels': 256, 'x': 128}
-    layers['r34'] = {'channels': 256, 'x': 128}
-    layers['r41'] = {'channels': 512, 'x': 64}
-    layers['r42'] = {'channels': 512, 'x': 64}
-    layers['r43'] = {'channels': 512, 'x': 64}
-    layers['r44'] = {'channels': 512, 'x': 64}
-    layers['r51'] = {'channels': 512, 'x': 32}
-    layers['r52'] = {'channels': 512, 'x': 32}
-    layers['r53'] = {'channels': 512, 'x': 32}
-    layers['r54'] = {'channels': 512, 'x': 32}
+    # layers = {}
+    # layers['r11'] = {'channels': 64, 'x': 512}
+    # layers['r12'] = {'channels': 64, 'x': 512}
+    # layers['r21'] = {'channels': 128, 'x': 256}
+    # layers['r22'] = {'channels': 128, 'x': 256}
+    # layers['r31'] = {'channels': 256, 'x': 128}
+    # layers['r32'] = {'channels': 256, 'x': 128}
+    # layers['r34'] = {'channels': 256, 'x': 128}
+    # layers['r41'] = {'channels': 512, 'x': 64}
+    # layers['r42'] = {'channels': 512, 'x': 64}
+    # layers['r43'] = {'channels': 512, 'x': 64}
+    # layers['r44'] = {'channels': 512, 'x': 64}
+    # layers['r51'] = {'channels': 512, 'x': 32}
+    # layers['r52'] = {'channels': 512, 'x': 32}
+    # layers['r53'] = {'channels': 512, 'x': 32}
+    # layers['r54'] = {'channels': 512, 'x': 32}
 
-    def __init__(self, pool='max'):
+    def __init__(self, pool='max', conv_kernel_size=3, conv_kernel_padding=1, pool_kernel_size=2, pool_stride=2):
+
         super(VGG, self).__init__()
         # vgg modules
 
         # note: first two args of Conv2d are in channels, out channels
         # where is the x and y dimensions of each filter defined?
-        self.conv1_1 = nn.Conv2d(3, 64, kernel_size=3, padding=1)
-        self.conv1_2 = nn.Conv2d(64, 64, kernel_size=3, padding=1)
-        self.conv2_1 = nn.Conv2d(64, 128, kernel_size=3, padding=1)
-        self.conv2_2 = nn.Conv2d(128, 128, kernel_size=3, padding=1)
-        self.conv3_1 = nn.Conv2d(128, 256, kernel_size=3, padding=1)
-        self.conv3_2 = nn.Conv2d(256, 256, kernel_size=3, padding=1)
-        self.conv3_3 = nn.Conv2d(256, 256, kernel_size=3, padding=1)
-        self.conv3_4 = nn.Conv2d(256, 256, kernel_size=3, padding=1)
-        self.conv4_1 = nn.Conv2d(256, 512, kernel_size=3, padding=1)
-        self.conv4_2 = nn.Conv2d(512, 512, kernel_size=3, padding=1)
-        self.conv4_3 = nn.Conv2d(512, 512, kernel_size=3, padding=1)
-        self.conv4_4 = nn.Conv2d(512, 512, kernel_size=3, padding=1)
-        self.conv5_1 = nn.Conv2d(512, 512, kernel_size=3, padding=1)
-        self.conv5_2 = nn.Conv2d(512, 512, kernel_size=3, padding=1)
-        self.conv5_3 = nn.Conv2d(512, 512, kernel_size=3, padding=1)
-        self.conv5_4 = nn.Conv2d(512, 512, kernel_size=3, padding=1)
+        # a: it's not defined, they come from the input tensor size
+        self.conv1_1 = nn.Conv2d(3, 64, kernel_size=conv_kernel_size, padding=conv_kernel_padding)
+        self.conv1_2 = nn.Conv2d(64, 64, kernel_size=conv_kernel_size, padding=conv_kernel_padding)
+        self.conv2_1 = nn.Conv2d(64, 128, kernel_size=conv_kernel_size, padding=conv_kernel_padding)
+        self.conv2_2 = nn.Conv2d(128, 128, kernel_size=conv_kernel_size, padding=conv_kernel_padding)
+        self.conv3_1 = nn.Conv2d(128, 256, kernel_size=conv_kernel_size, padding=conv_kernel_padding)
+        self.conv3_2 = nn.Conv2d(256, 256, kernel_size=conv_kernel_size, padding=conv_kernel_padding)
+        self.conv3_3 = nn.Conv2d(256, 256, kernel_size=conv_kernel_size, padding=conv_kernel_padding)
+        self.conv3_4 = nn.Conv2d(256, 256, kernel_size=conv_kernel_size, padding=conv_kernel_padding)
+        self.conv4_1 = nn.Conv2d(256, 512, kernel_size=conv_kernel_size, padding=conv_kernel_padding)
+        self.conv4_2 = nn.Conv2d(512, 512, kernel_size=conv_kernel_size, padding=conv_kernel_padding)
+        self.conv4_3 = nn.Conv2d(512, 512, kernel_size=conv_kernel_size, padding=conv_kernel_padding)
+        self.conv4_4 = nn.Conv2d(512, 512, kernel_size=conv_kernel_size, padding=conv_kernel_padding)
+        self.conv5_1 = nn.Conv2d(512, 512, kernel_size=conv_kernel_size, padding=conv_kernel_padding)
+        self.conv5_2 = nn.Conv2d(512, 512, kernel_size=conv_kernel_size, padding=conv_kernel_padding)
+        self.conv5_3 = nn.Conv2d(512, 512, kernel_size=conv_kernel_size, padding=conv_kernel_padding)
+        self.conv5_4 = nn.Conv2d(512, 512, kernel_size=conv_kernel_size, padding=conv_kernel_padding)
         if pool == 'max':
-            self.pool1 = nn.MaxPool2d(kernel_size=2, stride=2)
-            self.pool2 = nn.MaxPool2d(kernel_size=2, stride=2)
-            self.pool3 = nn.MaxPool2d(kernel_size=2, stride=2)
-            self.pool4 = nn.MaxPool2d(kernel_size=2, stride=2)
-            self.pool5 = nn.MaxPool2d(kernel_size=2, stride=2)
+            self.pool1 = nn.MaxPool2d(kernel_size=pool_kernel_size, stride=pool_stride) #stride is how much it jumps
+            self.pool2 = nn.MaxPool2d(kernel_size=pool_kernel_size, stride=pool_stride)
+            self.pool3 = nn.MaxPool2d(kernel_size=pool_kernel_size, stride=pool_stride)
+            self.pool4 = nn.MaxPool2d(kernel_size=pool_kernel_size, stride=pool_stride)
+            self.pool5 = nn.MaxPool2d(kernel_size=pool_kernel_size, stride=pool_stride)
         elif pool == 'avg':
-            self.pool1 = nn.AvgPool2d(kernel_size=2, stride=2)
-            self.pool2 = nn.AvgPool2d(kernel_size=2, stride=2)
-            self.pool3 = nn.AvgPool2d(kernel_size=2, stride=2)
-            self.pool4 = nn.AvgPool2d(kernel_size=2, stride=2)
-            self.pool5 = nn.AvgPool2d(kernel_size=2, stride=2)
+            self.pool1 = nn.AvgPool2d(kernel_size=pool_kernel_size, stride=pool_stride)
+            self.pool2 = nn.AvgPool2d(kernel_size=pool_kernel_size, stride=pool_stride)
+            self.pool3 = nn.AvgPool2d(kernel_size=pool_kernel_size, stride=pool_stride)
+            self.pool4 = nn.AvgPool2d(kernel_size=pool_kernel_size, stride=pool_stride)
+            self.pool5 = nn.AvgPool2d(kernel_size=pool_kernel_size, stride=pool_stride)
 
-    def forward(self, tensor, out_keys):
+    def forward(self, tensor_pyramid, out_keys):
         """
-        :param tensor: torch.Tensor
         :param out_keys: [str]
         :return: [torch.Tensor]
         """
         out_path = '/mnt/ala/research/danielf/nst/experiments/output/temp14/'
-
         out = {}
+        out['r11'] = []
+        out['r12'] = []
+        out['p1'] = []
+        out['r21'] = []
+        out['r22'] = []
+        out['p2'] = []
+        out['r31'] = []
+        out['r32'] = []
+        out['r33'] = []
+        out['r34'] = []
+        out['p3'] = []
+        out['r41'] = []
+        out['r42'] = []
+        out['r43'] = []
+        out['r44'] = []
+        out['p4'] = []
+        out['r51'] = []
+        out['r52'] = []
+        out['r53'] = []
+        out['r54'] = []
+        out['p5'] = []
 
-        out['r11'] = F.relu(self.conv1_1(tensor))
-        # print(out['r11'].size(), out['r11'].dim())
-        # layer_out = out_path + 'layer_r11.png'
-        # utils.render_image(tensor, layer_out)
+        result = []
 
-        out['r12'] = F.relu(self.conv1_2(out['r11']))
-        out['p1'] = self.pool1(out['r12'])
+        for tensor_index in range(0, len(tensor_pyramid)):
+            tensor = tensor_pyramid[tensor_index]
+            # print(1.1, tensor.size())
 
-        out['r21'] = F.relu(self.conv2_1(out['p1']))
-        # layer_out = out_path + 'layer_r21.png'
-        # utils.render_image(tensor, layer_out)
+            out['r11'] += [F.relu(self.conv1_1(tensor))]
+            out['r12'] += [F.relu(self.conv1_2(out['r11'][tensor_index]))]
+            out['p1'] += [self.pool1(out['r12'][tensor_index])]
+            out['r21'] += [F.relu(self.conv2_1(out['p1'][tensor_index]))]
+            out['r22'] += [F.relu(self.conv2_2(out['r21'][tensor_index]))]
+            out['p2'] += [self.pool2(out['r22'][tensor_index])]
+            out['r31'] += [F.relu(self.conv3_1(out['p2'][tensor_index]))]
+            out['r32'] += [F.relu(self.conv3_2(out['r31'][tensor_index]))]
+            out['r33'] += [F.relu(self.conv3_3(out['r32'][tensor_index]))]
+            out['r34'] += [F.relu(self.conv3_4(out['r33'][tensor_index]))]
+            out['p3'] += [self.pool3(out['r34'][tensor_index])]
+            out['r41'] += [F.relu(self.conv4_1(out['p3'][tensor_index]))]
+            out['r42'] += [F.relu(self.conv4_2(out['r41'][tensor_index]))]
+            out['r43'] += [F.relu(self.conv4_3(out['r42'][tensor_index]))]
+            out['r44'] += [F.relu(self.conv4_4(out['r43'][tensor_index]))]
+            out['p4'] += [self.pool4(out['r44'][tensor_index])]
+            out['r51'] += [F.relu(self.conv5_1(out['p4'][tensor_index]))]
+            out['r52'] += [F.relu(self.conv5_2(out['r51'][tensor_index]))]
+            out['r53'] += [F.relu(self.conv5_3(out['r52'][tensor_index]))]
+            out['r54'] += [F.relu(self.conv5_4(out['r53'][tensor_index]))]
+            out['p5'] += [self.pool5(out['r54'][tensor_index])]
 
-        out['r22'] = F.relu(self.conv2_2(out['r21']))
-        out['p2'] = self.pool2(out['r22'])
-
-        out['r31'] = F.relu(self.conv3_1(out['p2']))
-        # layer_out = out_path + 'layer_r31.png'
-        # utils.render_image(tensor, layer_out)
-
-        out['r32'] = F.relu(self.conv3_2(out['r31']))
-        out['r33'] = F.relu(self.conv3_3(out['r32']))
-        out['r34'] = F.relu(self.conv3_4(out['r33']))
-        out['p3'] = self.pool3(out['r34'])
-
-        out['r41'] = F.relu(self.conv4_1(out['p3']))
-        # layer_out = out_path + 'layer_r41.png'
-        # utils.render_image(tensor, layer_out)
-
-        out['r42'] = F.relu(self.conv4_2(out['r41']))
-        out['r43'] = F.relu(self.conv4_3(out['r42']))
-        out['r44'] = F.relu(self.conv4_4(out['r43']))
-        out['p4'] = self.pool4(out['r44'])
-
-        out['r51'] = F.relu(self.conv5_1(out['p4']))
-        # layer_out = out_path + 'layer_r51.png'
-        # utils.render_image(tensor, layer_out)
-
-        out['r52'] = F.relu(self.conv5_2(out['r51']))
-        out['r53'] = F.relu(self.conv5_3(out['r52']))
-        out['r54'] = F.relu(self.conv5_4(out['r53']))
-        out['p5'] = self.pool5(out['r54'])
+        # a list of activation pyramids indexed by layer
+        # issue: need to also use tensor_index otherwise the elements are lists not tensors?
         result = [out[key] for key in out_keys]
+
+        # print(10.1, len(result))
+
         return result
 
 
@@ -142,6 +158,7 @@ class GramMatrix(nn.Module):
     def forward(self, input):
         b, c, h, w = input.size()
         F = input.view(b, c, h * w)
+        # print(2.1, F.size(), F.transpose(1,2).size())
         G = torch.bmm(F, F.transpose(1, 2))
         G.div_(h * w)
         return G
@@ -234,7 +251,10 @@ class RegionGramMSELoss(nn.Module):
         # idea 2:
         # make a 2x2 tensor of these values, return mean square (i.e. penalise greater loss)
         # lt = torch.zeros((2, 2))
-        # device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+
+        # cuda_device = 'cuda:%s' % torch.cuda.current_device()
+        # device = torch.device(cuda_device if torch.cuda.is_available() else "cpu")
+
         # lt = lt.detach().to(device)
         # # lt[0][0] = s1_d
         # # lt[0][1] = s2_d
@@ -252,6 +272,101 @@ class RegionGramMSELoss(nn.Module):
         # return __
 
 
+class MipMSELoss(nn.Module):
+    def forward(self, input, target, mip_weights):
+        """
+        input and target are both layer activation pyramids, i.e. a list of mip tensors
+        """
+        opt_layer_activation_pyramid = input
+        target_layer_activation_pyramid = target
+        loss = 0
+
+        # the target may be smaller length than input, i.e. content loss is not pyramid.  iterate through target
+        # or just assume single layer
+        for index, target_activations in enumerate(target_layer_activation_pyramid):
+            opt_activations = opt_layer_activation_pyramid[index]
+            a_ = torch.sub(opt_activations, target_activations)
+            b_ = torch.pow(a_, 2)
+            c_ = torch.mean(b_)
+            loss += c_
+
+        return loss
+
+
+class MipGramMSELoss01(nn.Module):
+    def forward(self, input, target, mip_weights):
+        opt_layer_activation_pyramid = input
+        target_layer_gram_pyramid = target
+        loss = 0
+
+        for index, target_gram in enumerate(target_layer_gram_pyramid):
+            mip_weight = mip_weights[index]
+            opt_activations = opt_layer_activation_pyramid[index]
+            opt_gram = GramMatrix()(opt_activations)
+            a_ = torch.sub(opt_gram, target_gram)
+            b_ = torch.pow(a_, 2)
+            c_ = torch.mean(b_)
+            c_ *= mip_weight
+
+            # not entirely sure we're meant to sum the pyramid loss?
+            loss += c_
+
+        return loss
+
+
+class MipGramMSELoss(nn.Module):
+    """
+    MSE = Mean Squared Error
+    https://pytorch.org/docs/stable/nn.html#mseloss
+    """
+    def forward(self, input, target, scale, layer, vgg):
+        # print(input.size(), target.size(), scale, layer)
+
+        # randomly create scale between values of 1.0 and 1./6.
+        # scale = float(torch.FloatTensor(1).uniform_(0.25, 1.0)[0])
+
+        # to do: apply a gaussian blur before downsampling [3] https://wxs.ca/research/multiscale-neural-synthesis/Snelgrove-multiscale-texture-synthesis.pdf
+        # if I'm understanding this correctly, this involve the target not being the activations for a single mip,
+        # but rather a tensor holding the activations for all the mips for a layer (blurring them before downsampling).
+        # we would then also have to create blurred downsampled mips of the optimisation image to calculate loss against.
+
+        # todo: randomly jitter scale within a range
+        variation = 0.001
+        scale = float(torch.FloatTensor(1).uniform_(scale-variation, scale+variation)[0])
+
+        # todo: try the same, but upscaling the target instead of downsampling the input
+        # this would mean the loss fn gets both the opt and target tensors without
+        # any mip level or rescaling applied.
+        # target_ = F.interpolate(target, scale_factor=1./scale, mode='nearest')
+
+        # todo: try interpolating the layer activations themselves]]
+
+        # note: doesn't matter if the dimensions of the input and ungrammed target
+        # match - as long as they are close.  once grammed they are the same size.
+        input_ = F.interpolate(input, scale_factor=scale, mode='bilinear', align_corners=True)
+        # input_ = F.interpolate(input, scale_factor=scale, mode='nearest')
+        input_activations = vgg(input_, [layer])[0]
+        # input_activations = vgg(input, [layer])[0]
+
+        # the principle of what we're doing here, is to apply the same scale factor
+        # to the optimisation image as we are to the style image.  i.e. we are scaling
+        # the style into various mips to exploit how the various vgg layers will be activated
+        # from this scaling.  eg: r41 is not well activated by 4k images, but is well
+        # activated by 512sq images.
+        #
+        # if we don't scale the opt tensor, we have a problem in that the 2k opt tensor
+        # itself will not be able to activate higher layers well.
+
+        # g = GramMatrix()(input_activations)
+        # print(g.size())
+
+        # a_ = torch.sub(GramMatrix()(input_activations), target_)
+        a_ = torch.sub(GramMatrix()(input_activations), target)
+        b_ = torch.pow(a_, 2)
+        c_ = torch.mean(b_)
+        return c_
+
+
 class GramMSELoss(nn.Module):
     """
     MSE = Mean Squared Error
@@ -259,8 +374,12 @@ class GramMSELoss(nn.Module):
     """
     # def forward(self, input, target, mask):
     def forward(self, input, target):
+
         # homebrew MSE loss, matches nn.MSELoss():
         a_ = torch.sub(GramMatrix()(input), target)
+
+        # print(input.size(), target.size(), a_.size())
+
         b_ = torch.pow(a_, 2)
         c_ = torch.mean(b_)
         return c_
@@ -377,7 +496,8 @@ class MaskedGramMSELoss(nn.Module):
         # values visualy match
         # then derive
 
-        # t_ = torch.Tensor(w, h).detach().to(torch.device("cuda:0"))
+        # cuda_device = 'cuda:%s' % torch.cuda.current_device()
+        # t_ = torch.Tensor(w, h).detach().to(torch.device(cuda_device))
         # t_.fill_(0.5)
         # tn_ = (w*h) / t_.sum()
         # tw_ = torch.mul(t_, tn_)

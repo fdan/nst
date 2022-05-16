@@ -3,28 +3,32 @@ import random
 import traceback
 import uuid
 import os
+import json
 import subprocess
 from timeit import default_timer as timer
 
-import memory_profiler
-
+# import memory_profiler
+import OpenImageIO as oiio
 import torch
 from torch.autograd import Variable # deprecated - use Tensor
 import torch.nn as nn
 from torch import optim
+import torch.nn.functional as F
 
 from PIL import Image
 
-import matplotlib
-matplotlib.use('Agg')
+# import matplotlib
+# matplotlib.use('Agg')
 
 from . import entities
 from . import utils
 
+from nst_farm.singularity import NstFarm
+
 import numpy as np
 
-import OpenImageIO as oiio
-from OpenImageIO import ImageBuf, ImageSpec, ROI
+# import OpenImageIO as oiio
+# from OpenImageIO import ImageBuf, ImageSpec, ROI
 
 # https://pytorch.org/docs/stable/notes/randomness.html
 import torch
@@ -136,47 +140,71 @@ def _doit(opts):
         log_file.write(LOG)
 
 
+class VGGLayer(object):
+    def __init__(self, name, weight=1.0, mip_weights=[1.0]*4):
+        self.name = name
+        self.weight = weight
+        self.mip_weights = mip_weights
+
+
+class Style(object):
+    def __init__(self, image, layers, in_mask=None, out_mask=None, mips=4):
+        self.image = image
+        self.in_mask = in_mask
+        self.out_mask = out_mask
+        self.layers = layers
+        self.scale = 1.0
+        self.mips = mips
+        self.colorspace = 'srgb_texture'
+
+
+class Content(object):
+    def __init__(self, image, layers, in_mask=None, out_mask=None, mips=1):
+        self.image = image
+        self.in_mask = in_mask
+        self.out_mask = out_mask
+        self.layers = layers
+        self.colorspace = 'acescg'
+        self.scale = 1.0
+        self.mips = mips
+
+
 class StyleImager(object):
 
-    def __init__(self, style_layers=None, style_image=None, content_image=None, style_importance_mask=None, grad_mask=None,
-                 frame=0, render_out=None, denoise=False):
-        self.denoise = denoise
-        self.style_imprtance_mask = style_importance_mask
-        self.grad_mask = grad_mask
+    def __init__(self, style, content=None, frame=0, render_out=None, engine='cpu'):
+        self.style = style
+        self.style_zoom = None
+        self.zoom_factor = 0.17
+        self.gauss_scale_factor = 0.63
+        self.style_rescale = None
+        self.content = content
         self.iterations = 500
         self.log_iterations = 100
-        self.style_image = style_image
-        self.content_image = content_image
         self.random_style = False
         self.output_dir = None
-        self.engine = 'gpu'
+        self.engine = engine
         self.from_content = True
         self.unsafe = False
         self.progressive = False
         self.max_loss = None
         self.lr = 1
         self.loss_graph = ([], [])
-        self.style_layers = style_layers
-        self.content_layers = ['r42']
-        self.content_weights = [1.0]
-        self.content_masks = [None]
+        self.opt_x = 512
+        self.opt_y = 512
         self.frame = frame
         self.render_out = render_out
-        self.raw_weights = True
         self.optimisation_image = None
         self.output_dir = '%s/output' % os.getcwd()
+        self.cuda_device = None
+        self.out = None
+        self.out_colorspace = 'srgb_texture'
 
-        # if not self.raw_weights:
-        #     utils.normalise_weights(self.style_layers)
+        if engine == 'gpu':
+            self.init_cuda()
 
-        if self.content_image:
-            self.content_image_pil = Image.open(self.content_image)
-        else:
-            self.content_image_pil = None
-
-    def generate_image(self):
-        tensor = self.generate_tensor()
-        return utils.tensor_to_image(tensor)
+    def init_cuda(self) -> None:
+        self.cuda_device = utils.get_cuda_device()
+        # log('cuda device:', self.cuda_device);
 
     def render_to_disk(self):
         img = self.generate_image()
@@ -190,64 +218,170 @@ class StyleImager(object):
 
         img.save(img_path)
 
-    def generate_tensor(self):
+    def generate_image(self, frame: int=None) -> Image:
+        tensor = self.generate_tensor(frame=frame)
+        return utils.tensor_to_image(tensor)
+
+    def write_exr(self, frame: int=None) -> None:
+        if self.content.image:
+            if '####' in self.content.image and frame:
+                self.content.image = self.content.image.replace('####', '%04d' % frame)
+            else:
+                self.content.image = self.content.image
+
+        if self.out:
+            if '####' in self.out and frame:
+                self._out = self.out.replace('####', '%04d' % frame)
+            else:
+                self._out = self.out
+
+        out_dir = os.path.abspath(os.path.join(self.out, os.path.pardir))
+        os.makedirs(out_dir, exist_ok=True)
+
+        tensor = self.generate_tensor(frame=frame)
+        buf = utils.tensor_to_buf(tensor)
+
+        if self.out_colorspace != 'srgb_texture':
+            buf = oiio.ImageBufAlgo.colorconvert(buf, 'srgb_texture', self.out_colorspace)
+
+        buf.write(self._out)
+
+    def generate_tensor(self, frame: int=None) -> torch.Tensor:
+
+        if self.content.image:
+            if '####' in self.content.image and frame:
+                self.content.image = self.content.image.replace('####', '%04d' % frame)
+            else:
+                self.content.image = self.content.image
+
         start = timer()
-
-        vgg = prepare_engine(self.engine)
-
-        if not self.raw_weights:
-            utils.normalise_weights(self.style_layers)
+        vgg = self._prepare_engine()
 
         loss_layers = []
         loss_fns = []
         weights = []
         targets = []
         masks = []
+        mip_weights = []
 
-        if self.style_layers:
-            style_layer_names = [x for x in self.style_layers]
-            style_layer_weights = [self.style_layers[x]['weight'] for x in self.style_layers]
-
-        if self.content_image_pil:
-
-            content_layers = self.content_layers
+        if self.content:
+            content_layers = self.content.layers
             content_masks = [torch.Tensor(0)]
             masks += content_masks
             loss_layers += content_layers
-            # content_loss_fns = [entities.MSELoss()] # not using mask, but need to handle extra arg...
-            content_loss_fns = [entities.MSELoss()] * len(content_layers)
+            content_loss_fns = [entities.MipMSELoss()] * len(content_layers)
             loss_fns += content_loss_fns
-            content_weights = self.content_weights
+            content_weights = [x.weight for x in self.content.layers]
             weights += content_weights
-            content_tensor = prepare_content(self.content_image)
+            content_tensor = self._prepare_content()
 
             content_activations = []
-            for x in vgg(content_tensor, content_layers):
-                content_activations.append(x)
-            # content_activations = vgg(content_tensor, content_layers)
+            content_layer_names = [x.name for x in content_layers]
+            for layer_activation_pyramid in vgg([content_tensor], content_layer_names):
+                content_activations.append(layer_activation_pyramid)
 
-            content_targets = [A.detach() for A in content_activations]
+            content_targets = []
+            for layer_activation_pyramid in content_activations:
+                thing = []
+                for tensor in layer_activation_pyramid:
+                    thing += [tensor.detach()]
+                content_targets += thing
+
             targets += content_targets
 
-        if self.optimisation_image:
-            opt_tensor = prepare_opt(clone=self.optimisation_image)
-        elif self.from_content:
-            opt_tensor = prepare_opt(clone=self.content_image)
-        else:
-            #opt_tensor = prepare_opt(width=self.content_image_pil.size[0], height=self.content_image_pil.size[1])
-            opt_tensor = prepare_opt(width=512, height=512)
+            for cl in self.content.layers:
+                mip_weights += [cl.mip_weights]
 
-        if self.style_image:
-            loss_layers += style_layer_names
-            style_tensor = prepare_style(self.style_image, self.random_style, self.output_dir)
+
+        if self.optimisation_image:
+            opt_tensor = self.prepare_opt(clone=self.optimisation_image)
+        elif self.from_content:
+            opt_tensor = self.prepare_opt(clone=self.content.image)
+        else:
+            opt_tensor = self.prepare_opt()
+
+        if self.style:
+            loss_layers += self.style.layers
+
+            style_tensor = utils.image_to_tensor(self.style.image, DO_CUDA, colorspace=self.style.colorspace)
+
+            if self.style_zoom:
+                style_tensor = utils.zoom_image(style_tensor, self.style_zoom, self.style_rescale,
+                                                zoom_factor=self.zoom_factor, cuda=DO_CUDA)
+
+            style_pyramid = utils.Pyramid.make_gaussian_pyramid(style_tensor, cuda=DO_CUDA, mips=self.style.mips,
+                                                                scale_factor=self.gauss_scale_factor)
+
             style_activations = []
-            for x in vgg(style_tensor, style_layer_names):
-                style_activations.append(x)
-            style_loss_fns = [entities.GramMSELoss()] * len(style_layer_names)
+            style_layer_names = [x.name for x in self.style.layers]
+            for layer_activation_pyramid in vgg(style_pyramid, style_layer_names):
+                style_activations.append(layer_activation_pyramid)
+
+            style_loss_fns = [entities.MipGramMSELoss01()] * len(self.style.layers)
             loss_fns += style_loss_fns
-            weights += style_layer_weights
-            style_targets = [entities.GramMatrix()(A).detach() for A in style_activations]
+            weights += [x.weight for x in self.style.layers]
+
+            style_targets = []
+            for layer_activation_pyramid in style_activations:
+                gram_pyramid = []
+                for tensor in layer_activation_pyramid:
+                    gram = entities.GramMatrix()(tensor).detach()
+                    gram_pyramid += [gram]
+                style_targets += [gram_pyramid]
+
             targets += style_targets
+
+            for sl in self.style.layers:
+                mip_weights += [sl.mip_weights]
+
+        # if self.style.image:
+        #     for mip in self.style.mips:
+        #
+        #         # todo: in adopting the gaussian pyramid approach, we need to package the data up differently.
+        #         # currently in the closure, we index everything by loss layer, and below we have a loss layer for
+        #         # each mip.
+        #         #
+        #         # we need to change that, such that the style_targets holds gram activations for all mips in a layer.
+        #         # so that's a change to the entity relationsip: instead of mips holding layers, layers hold mips.
+        #
+        #         if mip.layers:
+        #             style_layer_names = [x for x in mip.layers]
+        #             style_layer_weights = [mip.layers[x] for x in mip.layers]
+        #             # print(1.0, 'mip scale:', mip.scale, style_layer_names, style_layer_weights)
+        #             loss_layers += style_layer_names
+        #
+        #             style_tensor = utils.image_to_tensor(self.style.image, DO_CUDA, resize=mip.scale, colorspace=self.style_colorspace)
+        #
+        #             style_activations = []
+        #             for x in vgg(style_tensor, style_layer_names):
+        #                 style_activations.append(x)
+        #
+        #             # style_loss_fns = [entities.GramMSELoss()] * len(style_layer_names)
+        #             style_loss_fns = [entities.MipGramMSELoss()] * len(style_layer_names)
+        #             loss_fns += style_loss_fns
+        #             weights += style_layer_weights
+        #
+        #             # do not calculate the gram here - we need to know the mip dimensions in the loss fn
+        #             # style_targets = style_activations
+        #             style_targets = [entities.GramMatrix()(A).detach() for A in style_activations]
+        #             targets += style_targets
+        #
+        #             scales += [float(mip.scale)]
+
+        # # todo: do this for each mip
+        # if self.style_image:
+        #     loss_layers += style_layer_names
+        #     style_tensor = utils.image_to_tensor(self.style_image, DO_CUDA, resize=self.style_scale, colorspace=self.style_colorspace)
+        #
+        #     style_activations = []
+        #     for x in vgg(style_tensor, style_layer_names):
+        #         style_activations.append(x)
+        #
+        #     style_loss_fns = [entities.GramMSELoss()] * len(style_layer_names)
+        #     loss_fns += style_loss_fns
+        #     weights += style_layer_weights
+        #     style_targets = [entities.GramMatrix()(A).detach() for A in style_activations]
+        #     targets += style_targets
 
         if DO_CUDA:
             loss_fns = [loss_fn.cuda() for loss_fn in loss_fns]
@@ -259,51 +393,89 @@ class StyleImager(object):
 
         layer_masks = []
 
-        for cl in self.content_masks:
-            if not cl:
-                layer_masks.append(None)
-            else:
-                opt_x, opt_y = opt_tensor.size()[2], opt_tensor.size()[3]
-                mask = oiio.ImageBuf(cl)
+        layer_masks.append(self.content.out_mask)
 
-                # oiio axis are flipped:
-                scaled_mask = oiio.ImageBufAlgo.resize(mask, roi=oiio.ROI(0, opt_y, 0, opt_x, 0, 1, 0, 3))
-                mask_np = scaled_mask.get_pixels()
-                x, y, z = mask_np.shape
-                mask_np = mask_np[:, :, :1].reshape(x, y)
-                mask_tensor = torch.Tensor(mask_np).detach().to(torch.device("cuda:0"))
-                layer_masks.append(mask_tensor)
+        # for cl in self.content.out_mask:
+        #     if not cl:
+        #         layer_masks.append(None)
+        #     else:
+        #         opt_x, opt_y = opt_tensor.size()[2], opt_tensor.size()[3]
+        #         mask = oiio.ImageBuf(cl)
+        #
+        #         # oiio axis are flipped:
+        #         scaled_mask = oiio.ImageBufAlgo.resize(mask, roi=oiio.ROI(0, opt_y, 0, opt_x, 0, 1, 0, 3))
+        #         mask_np = scaled_mask.get_pixels()
+        #         x, y, z = mask_np.shape
+        #         mask_np = mask_np[:, :, :1].reshape(x, y)
+        #         mask_tensor = torch.Tensor(mask_np).detach().to(torch.device(self.cuda_device))
+        #         layer_masks.append(mask_tensor)
 
-        for sl in style_layer_names:
-            has_mask = True if 'mask' in self.style_layers[sl] else False
+        # todo: update to work with mips, one mask per mip (not per mip layer)
+        # for sl in style_layer_names:
+        #     has_mask = True if 'mask' in self.style_layers[sl] else False
+        #
+        #     if not has_mask:
+        #         layer_masks.append(None)
+        #         continue
 
-            if not has_mask:
-                layer_masks.append(None)
-                continue
+            # mask_file = self.style.out_mask
+            #
+            # opt_x, opt_y = opt_tensor.size()[2], opt_tensor.size()[3]
+            # mask = oiio.ImageBuf(mask_file)
+            #
+            # # oiio axis are flipped:
+            # scaled_mask = oiio.ImageBufAlgo.resize(mask, roi=oiio.ROI(0, opt_y, 0, opt_x, 0, 1, 0, 3))
+            # mask_np = scaled_mask.get_pixels()
+            # x, y, z = mask_np.shape
+            # mask_np = mask_np[:, :, :1].reshape(x, y)
+            # mask_tensor = torch.Tensor(mask_np).detach().to(torch.device(self.cuda_device))
+            # layer_masks.append(mask_tensor)
 
-            mask_file = self.style_layers[sl]['mask']
+        layer_masks = 10 * [None]
 
-            opt_x, opt_y = opt_tensor.size()[2], opt_tensor.size()[3]
-            mask = oiio.ImageBuf(mask_file)
-
-            # oiio axis are flipped:
-            scaled_mask = oiio.ImageBufAlgo.resize(mask, roi=oiio.ROI(0, opt_y, 0, opt_x, 0, 1, 0, 3))
-            mask_np = scaled_mask.get_pixels()
-            x, y, z = mask_np.shape
-            mask_np = mask_np[:, :, :1].reshape(x, y)
-            mask_tensor = torch.Tensor(mask_np).detach().to(torch.device("cuda:0"))
-            layer_masks.append(mask_tensor)
+        cuda_device = self.cuda_device
 
         def closure():
-            output_tensors = vgg(opt_tensor, loss_layers)
+            opt_pyramid = utils.Pyramid.make_gaussian_pyramid(opt_tensor, cuda=DO_CUDA, mips=self.style.mips,
+                                                              scale_factor=self.gauss_scale_factor)
+            opt_activations = []
+
+            loss_layer_names = [x.name for x in loss_layers]
+
+            for opt_layer_activation_pyramid in vgg(opt_pyramid, loss_layer_names):
+                opt_activations.append(opt_layer_activation_pyramid)
+
             layer_gradients = []
+            mip_gradients = []
+            # it should be possible to make out the mip gradients instead of the layer ones.
+            # in this system, a user would provide a mask for each mip level, which is used for
+            # all style layers.  however this is only half of varyihng scale, the other half
+            # being the mip zoom.
+            # what if we zoomed the gaussian pyramid?  so that higher levels are also
+            # more zoomed.
 
-            loss = torch.zeros(1, requires_grad=False)
+            if cuda_device:
+                loss = torch.zeros(1, requires_grad=False).to(torch.device(cuda_device))
+            else:
+                loss = torch.zeros(1, requires_grad=False)
 
-            for counter, tensor in enumerate(output_tensors):
-                optimizer.zero_grad()
-                layer_loss = loss_fns[counter](tensor, targets[counter])
-                layer_weight = weights[counter]
+            for index, opt_layer_activation_pyramid in enumerate(opt_activations):
+                optimizer.zero_grad() # this is really significant - we're zeroing the grads for each layer so we can sum them separately after masking
+                target_layer_activation_pyramid = targets[index]
+
+                # for mip in target_layer_activation_pyramid:
+                ## work out loss for each mip in the pyramid and mask/tally it's gradients
+                ## use regular gram mse loss as we not passing in a pyramid
+                ## need to work out how to process mask for each mip, ie lerp an inversion over num mips.
+                ## we need to measure loss for each thing for which we want to mask gradients of.
+                ## i.e. if you want to mask grads for individual mips of gram mse activations for an image pyramid,
+                ## then the loss function needs to process individual mips.
+                ## this is an argumet for doing less in the loss function and more in the optimisation closure.
+                ## pushing logic to the loss function to keep the closure tidy was a mistake.  
+                #     optimizer.zero_grad()
+
+                layer_loss = loss_fns[index](opt_layer_activation_pyramid, target_layer_activation_pyramid, mip_weights[index])
+                layer_weight = weights[index]
                 weighted_layer_loss = layer_weight * layer_loss
                 weighted_layer_loss.backward(retain_graph=True)
 
@@ -313,11 +485,10 @@ class StyleImager(object):
                     loss += layer_loss
 
                     # if this style layer has a mask
-                    if layer_masks[counter] is not None:
+                    if layer_masks[index] is not None:
 
-                        layer_mask = layer_masks[counter]
+                        layer_mask = layer_masks[index]
                         b, c, w, h = opt_tensor.grad.size()
-
                         masked_grad = opt_tensor.grad.clone()
 
                         # output gradient to disk for first epoch
@@ -342,6 +513,7 @@ class StyleImager(object):
                         # mask_normalisation = (x * y) / layer_mask.sum()
                         # weighted_mask_tensor = torch.div(layer_mask, mask_normalisation)
 
+                        # apply the gradient mask for this layer
                         for i in range(0, c):
                             # masked_grad[0][i] *= weighted_mask_tensor
                             masked_grad[0][i] *= layer_mask
@@ -373,48 +545,56 @@ class StyleImager(object):
                     layer_gradients.append(opt_tensor.grad.clone())
 
             b, c, w, h = opt_tensor.grad.size() # not strictly necessary?
-            output_layer_gradient = torch.zeros((b, c, w, h)).detach().to(torch.device("cuda:0"))
+
+            # todo: this assumes the engine is gpu.
+            if self.engine == "gpu":
+                output_layer_gradient = torch.zeros((b, c, w, h)).detach().to(torch.device(cuda_device))
+            else:
+                output_layer_gradient = torch.zeros((b, c, w, h)).detach()
+
+            # sum all layer gradients
             for lg in layer_gradients:
                 output_layer_gradient += lg
-
-            # average?  why?
             opt_tensor.grad = output_layer_gradient
+
+            # output opt_tensor as an image seq here
 
             nice_loss = '{:,.0f}'.format(loss.item())
             if self.progressive:
                 output_render = self.output_dir + '/render.%04d.png' % n_iter[0]
-                # print('doing render:', output_render)
-                # print(os.path.isdir(self.output_dir))
                 utils.render_image(opt_tensor, output_render, 'loss: %s\niteration: %s' % (nice_loss, n_iter[0]))
-                # print('finished render')
 
             nice_loss = '{:,.0f}'.format(loss.item())
             current_loss[0] = loss.item()
             n_iter[0] += 1
             if n_iter[0] % show_iter == (show_iter - 1):
-                max_mem_cached = torch.cuda.max_memory_cached(0) / 1000000
+
+
+                if torch.__version__ == '1.1.0':
+                    max_mem_cached = torch.cuda.max_memory_cached(0) / 1000000
+                elif torch.__version__ == '1.7.1':
+                    max_mem_cached = torch.cuda.max_memory_reserved(0) / 1000000
+
                 msg = ''
                 msg += 'Iteration: %d, ' % (n_iter[0])
                 msg += 'loss: %s, ' % (nice_loss)
-                if DO_CUDA:
-                    msg += 'memory used: %s of %s' % (max_mem_cached, TOTAL_GPU_MEMORY)
-                else:
-                    mem_usage = memory_profiler.memory_usage(proc=-1, interval=0.1, timeout=0.1)
-                    msg += 'memory used: %.02f of %s Gb' % (mem_usage[0]/1000, TOTAL_SYSTEM_MEMORY/1000000000)
+                # if DO_CUDA:
+                #     msg += 'memory used: %s of %s' % (max_mem_cached, TOTAL_GPU_MEMORY)
+                # else:
+                #     mem_usage = memory_profiler.memory_usage(proc=-1, interval=0.1, timeout=0.1)
+                #     msg += 'memory used: %.02f of %s Gb' % (mem_usage[0]/1000, TOTAL_SYSTEM_MEMORY/1000000000)
 
                 log(msg)
             return loss
 
         if self.iterations:
             max_iter = int(self.iterations)
-            log('')
             while n_iter[0] <= max_iter:
                 optimizer.step(closure)
-            log('')
 
-        if self.max_loss:
-            while current_loss[0] > int(self.max_loss):
-                optimizer.step(closure)
+        # if we did per-iteration gradient outputs, do an ffmpeg on the sequence:
+
+        # if we did per-iteration opt outputs, do an ffmpeg on the sequence:
 
         end = timer()
         duration = "%.02f seconds" % float(end - start)
@@ -423,84 +603,73 @@ class StyleImager(object):
         return opt_tensor
 
 
-def prepare_engine(engine):
-    vgg = entities.VGG()
-    model_filepath = os.getenv('NST_VGG_MODEL')
-    vgg.load_state_dict(torch.load(model_filepath))
+    def _prepare_engine(self):
 
-    for param in vgg.parameters():
-        param.requires_grad = False
+        vgg = entities.VGG()
 
-    global DO_CUDA
+        model_filepath = os.getenv('NST_VGG_MODEL')
 
-    if engine == 'gpu':
-        global TOTAL_GPU_MEMORY
-        
-        if torch.cuda.is_available():
-            DO_CUDA = True
-            smi_mem_total = ['nvidia-smi', '--query-gpu=memory.total', '--format=csv,noheader,nounits']
-            TOTAL_GPU_MEMORY = float(subprocess.check_output(smi_mem_total).rstrip(b'\n'))
+        for param in vgg.parameters():
+            param.requires_grad = False
+
+        global DO_CUDA
+
+        if self.engine == 'gpu':
             vgg.cuda()
 
-            # log("using cuda\navailable memory: %.0f Gb" % TOTAL_GPU_MEMORY)
+            vgg.load_state_dict(torch.load(model_filepath))
+            global TOTAL_GPU_MEMORY
+
+            if torch.cuda.is_available():
+                DO_CUDA = True
+                smi_mem_total = ['nvidia-smi', '--query-gpu=memory.total', '--format=csv,noheader,nounits']
+                TOTAL_GPU_MEMORY = float(subprocess.check_output(smi_mem_total).rstrip(b'\n'))
+                vgg.cuda()
+                # log("using cuda\navailable memory: %.0f Gb" % TOTAL_GPU_MEMORY)
+            else:
+                msg = "gpu mode was requested, but cuda is not available"
+                raise RuntimeError(msg)
+
+        elif self.engine == 'cpu':
+            vgg.load_state_dict(torch.load(model_filepath))
+            global TOTAL_SYSTEM_MEMORY
+
+            DO_CUDA = False
+            from psutil import virtual_memory
+            TOTAL_SYSTEM_MEMORY = virtual_memory().total
+            # log("using cpu\navailable memory: %s Gb" % (TOTAL_SYSTEM_MEMORY / 1000000000))
+
         else:
-            msg = "gpu mode was requested, but cuda is not available"
+            msg = "invalid arg for engine: valid options are cpu, gpu"
             raise RuntimeError(msg)
 
-    elif engine == 'cpu':
-        global TOTAL_SYSTEM_MEMORY
-        
-        DO_CUDA = False
-        from psutil import virtual_memory
-        TOTAL_SYSTEM_MEMORY = virtual_memory().total
-        # log("using cpu\navailable memory: %s Gb" % (TOTAL_SYSTEM_MEMORY / 1000000000))
+        return vgg
 
-    else:
-        msg = "invalid arg for engine: valid options are cpu, gpu"
-        raise RuntimeError(msg) 
-    
-    return vgg
+    def _prepare_content(self):
 
+        content_tensor = utils.image_to_tensor(self.content.image, DO_CUDA, resize=self.content.scale,
+                                               colorspace=self.content.colorspace)
+        return content_tensor
 
-def prepare_style(style, random_style, output_dir):
-    style_image = Image.open(style)
+    def prepare_opt(self, clone=None):
+        if clone:
+            content_tensor = utils.image_to_tensor(clone, DO_CUDA, resize=self.content.scale, colorspace=self.content.colorspace)
+            opt_tensor = Variable(content_tensor.data.clone(), requires_grad=True)
 
-    if random_style:
-        style_image = utils.random_crop_image(style_image)
-        style_image.save('%s/style.png' % output_dir)
+        else:
+            o_width = self.opt_x
+            o_height = self.opt_y
+            opt_image = Image.new("RGB", (o_width, o_height), 255)
+            random_grid = map(lambda x: (
+                    int(random.random() * 256),
+                    int(random.random() * 256),
+                    int(random.random() * 256)
+                ), [0] * o_width * o_height)
 
-    style_tensor = utils.image_to_tensor(style_image, DO_CUDA)
-    return style_tensor
-
-
-def prepare_content(content):
-    content_image = Image.open(content)
-    content_tensor = utils.image_to_tensor(content_image, DO_CUDA)
-    return content_tensor
-
-
-def prepare_opt(clone=None, width=500, height=500):
-    if clone:
-        content_image = Image.open(clone)
-        content_tensor = utils.image_to_tensor(content_image, DO_CUDA)
-        opt_tensor = Variable(content_tensor.data.clone(), requires_grad=True)
-    else:
-        o_width = width
-        o_height = height
-        opt_image = Image.new("RGB", (o_width, o_height), 255)
-        random_grid = map(lambda x: (
-                int(random.random() * 256),
-                int(random.random() * 256),
-                int(random.random() * 256)
-            ), [0] * o_width * o_height)
-
-        # handle different map behaviour for python3
-        if sys.version[0] == '3':
             random_grid = list(random_grid)
 
-        opt_image.putdata(random_grid)
-        opt_tensor = utils.image_to_tensor(opt_image, DO_CUDA)
-        opt_tensor = Variable(opt_tensor.data.clone(), requires_grad=True)
+            opt_image.putdata(random_grid)
+            opt_tensor = utils.PIL_to_tensor(opt_image, DO_CUDA)
+            opt_tensor = Variable(opt_tensor.data.clone(), requires_grad=True)
 
-    return opt_tensor
-
+        return opt_tensor

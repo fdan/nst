@@ -15,3 +15,12 @@ spython recipe Dockerfile Singularity
 
 # build a recipe
 singularity build nuke_ml_server.sif Singularity
+
+# build a recipe with a sandbox:
+singularity build --sandbox sandbox/  nuke_ml_server.sif Singularity
+
+# shell with access to host filesystem
+singularity shell --nv --bind /mnt/ala nst.sif
+
+# shell with access to host filesystem and sandbox writable:
+singularity shell --writable sandbox/ --nv --bind /mnt/ala nst.sif

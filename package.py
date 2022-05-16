@@ -2,7 +2,7 @@
 
 name = 'nst'
 
-version = '1.0.0'
+version = '2.0.2'
 
 requires = [
             'tractor',
@@ -17,3 +17,4 @@ def commands():
     env.NST_VGG_MODEL.set('/mnt/ala/research/danielf/models/gatys_nst_vgg/vgg_conv.pth')
     env.PATH.append('{root}/bin')
     env.PYTHONPATH.append('{root}/python')
+    env.NST_HOME.set('{root}')

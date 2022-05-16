@@ -1,8 +1,11 @@
 """
 Repetitive utility functions that have nothing to do with style transfer
 """
+import math
+
 from . import entities
 
+import copy
 import subprocess
 import shutil
 import os
@@ -10,13 +13,16 @@ import random
 
 import torch
 from torchvision import transforms
+import torch.nn.functional as F
+from torch.autograd import Variable
 
-import matplotlib
-matplotlib.use('Agg')
-from matplotlib import pyplot
+# import matplotlib
+# matplotlib.use('Agg')
+# from matplotlib import pyplot
 
 from PIL import ImageFont
 from PIL import ImageDraw
+from PIL import Image
 
 import cv2
 import OpenImageIO as oiio
@@ -123,30 +129,6 @@ def normalise_weights(style_layers):
         style_layers[layer]['weight'] = style_layers[layer]['weight'] * 1000.0 / channels ** 2
 
 
-def image_to_tensor(image, do_cuda):
-    """
-    :param [PIL.Image]
-    :return: [torch.Tensor]
-    """
-    # pre and post processing for images
-    img_size = 512
-
-    tforms = transforms.Compose([transforms.Resize(img_size),
-                               transforms.ToTensor(),
-                               transforms.Lambda(lambda x: x[torch.LongTensor([2, 1, 0])]),  # turn to BGR
-                               transforms.Normalize(mean=[0.40760392, 0.45795686, 0.48501961],  # subtract imagenet mean
-                                                    std=[1, 1, 1]),
-                               transforms.Lambda(lambda x: x.mul_(255)),
-                               ])
-
-    tensor = tforms(image)
-
-    if do_cuda:
-        return tensor.unsqueeze(0).cuda()
-    else:
-        return tensor.unsqueeze(0)
-
-
 def random_crop_image(image):
     """
     Given a PIL.Image, crop it with a bbox of random location and size
@@ -195,6 +177,184 @@ def tensor_to_image(tensor):
     return out_img
 
 
+def image_to_tensor_old(image, do_cuda):
+    """
+    :param [PIL.Image]
+    :return: [torch.Tensor]
+    """
+    tforms = transforms.Compose([transforms.ToTensor(),
+                               transforms.Lambda(lambda x: x[torch.LongTensor([2, 1, 0])]),  # turn to BGR
+                               transforms.Normalize(mean=[0.40760392, 0.45795686, 0.48501961],  # subtract imagenet mean
+                                                    std=[1, 1, 1]),
+                               transforms.Lambda(lambda x: x.mul_(255.)),
+                               ])
+
+    tensor = tforms(image)
+
+    if do_cuda:
+        return tensor.unsqueeze(0).cuda()
+    else:
+        return tensor.unsqueeze(0)
+
+
+
+
+def image_to_tensor(image: str, do_cuda: bool, resize:float=None, colorspace=None, sharpen:float=1.0) -> torch.Tensor:
+        # note: oiio implicitely converts to 0-1 floating point data here regardless of format:
+        buf = ImageBuf(image)
+
+        o_width = buf.oriented_full_width
+        o_height = buf.oriented_full_height
+
+        if resize:
+            n_width = int(float(o_width) * resize)
+            n_height = int(float(o_height) * resize)
+            # print(2.0, image, resize, n_width, n_height)
+            buf = oiio.ImageBufAlgo.resize(buf, roi=ROI(0, n_width, 0, n_height, 0, 1, 0, 3))
+        #
+        # if sharpen:
+        #     buf = oiio.ImageBufAlgo.unsharp_mask(buf, kernel="gaussian", width=50.0, contrast=1.0, threshold=0.0, roi=oiio.ROI.All, nthreads=0)
+        #
+        #     # based on the reduction in size, set an appropriate sharpening level for style transfer
+        #     # "good" sharpen values
+        #     #
+        #     # 4k: 50
+        #     # 2k: 27
+        #     # 1k: 12.8
+        #     # 512: 7.3
+        #     # 256: 4.3
+        #     #
+        #     # close enough to say, for each halving of image.x, halve sharpen filter width.
+        #     #
+        #     # however the initial sharpen filter width for the highest mip needs to be eyeballed by the user.  generally for nst, you want "sharper than you think is necessary".
+
+        if colorspace:
+            if colorspace != 'srgb_texture':
+                buf = oiio.ImageBufAlgo.colorconvert(buf, colorspace, 'srgb_texture')
+
+        return buf_to_tensor(buf, do_cuda)
+
+def PIL_to_tensor(image, do_cuda):
+    """
+    :param [PIL.Image]
+    :return: [torch.Tensor]
+    """
+    # deprecated: don't perform a resize
+
+    tforms = transforms.Compose([
+                               transforms.ToTensor(),
+                               transforms.Lambda(lambda x: x[torch.LongTensor([2, 1, 0])]),  # turn to BGR
+                               transforms.Normalize(mean=[0.40760392, 0.45795686, 0.48501961],  # subtract imagenet mean
+                                                    std=[1, 1, 1]),
+                               transforms.Lambda(lambda x: x.mul_(255)),
+                               ])
+
+    tensor = tforms(image)
+
+    if do_cuda:
+        return tensor.unsqueeze(0).cuda()
+    else:
+        return tensor.unsqueeze(0)
+
+
+def buf_to_tensor(buf: oiio.ImageBuf, do_cuda: bool) -> torch.Tensor:
+
+    tforms_ = []
+
+    #  turn to BGR
+    tforms_ += [transforms.Lambda(lambda x: x[torch.LongTensor([2, 1, 0])])]
+
+    # subtract imagenet mean
+    tforms_ += [transforms.Normalize(mean=[0.40760392, 0.45795686, 0.48501961], std=[1, 1, 1])]
+
+    # scale to imagenet values
+    tforms_ += [transforms.Lambda(lambda x: x.mul_(255.))]
+
+    tforms = transforms.Compose(tforms_)
+
+    # note: oiio implicitely converts to 0-1 floating point data here regardless of format:
+    it = torch.Tensor(buf.get_pixels())
+
+    it = torch.transpose(it, 2, 0)
+    it = torch.transpose(it, 2, 1)
+
+    it = tforms(it)
+
+    if do_cuda:
+        device = get_cuda_device()
+        it = it.detach().to(torch.device(device))
+        return it.unsqueeze(0).cuda()
+    else:
+        return it.unsqueeze(0)
+
+
+def tensor_to_pil(tensor: torch.Tensor) -> Image:
+
+    tforms_ = []
+
+    # convert to int
+    tforms_ += [transforms.Lambda(lambda x: x.mul_(1. / 255.))]
+
+    # add imagenet mean
+    tforms_ += [transforms.Normalize(mean=[-0.40760392, -0.45795686, -0.48501961], std=[1, 1, 1])]
+
+    # turn to RGB
+    tforms_ += [transforms.Lambda(lambda x: x[torch.LongTensor([2, 1, 0])])]
+
+    prep_pil = transforms.Compose(tforms_)
+    to_pil = transforms.Compose([transforms.ToPILImage()])
+
+    t = prep_pil(tensor.data[0].cpu().squeeze())
+    t[t > 1] = 1
+    t[t < 0] = 0
+    out_img = to_pil(t)
+
+    return out_img
+
+
+def tensor_to_buf(tensor: torch.Tensor) -> oiio.ImageBuf:
+    tforms_ = []
+
+    tforms_ += [transforms.Lambda(lambda x: x.mul_(1. / 255.))]
+
+    # add imagenet mean
+    tforms_ += [transforms.Normalize(mean=[(-0.40760392), -0.45795686, -0.48501961], std=[1, 1, 1])]
+
+    # turn to RGB
+    tforms_ += [transforms.Lambda(lambda x: x[torch.LongTensor([2, 1, 0])])]
+
+    tforms = transforms.Compose(tforms_)
+
+    t = tforms(tensor.data[0].cpu().squeeze())
+
+    t = torch.transpose(t, 2, 0)
+    t = torch.transpose(t, 0, 1)
+    t = t.contiguous()
+    n = t.numpy()
+    x, y, z = n.shape
+    buf = ImageBuf(ImageSpec(y, x, z, oiio.FLOAT))
+    buf.set_pixels(ROI(), n)
+    return buf
+
+
+def get_cuda_device() -> str:
+    cuda_device = 'cuda:%s' % torch.cuda.current_device()
+    if not cuda_device:
+        raise Exception('no cuda device found')
+    return cuda_device
+
+
+def write_exr(exr_buf: oiio.ImageBuf, filepath: str) -> None:
+    pardir = os.path.abspath(os.path.join(filepath, os.path.pardir))
+
+    try:
+        os.makedirs(pardir)
+    except:
+        pass
+
+    exr_buf.write(filepath, oiio.FLOAT)
+
+
 def layer_to_image(tensor):
 
     s = tensor.size()[-1]
@@ -211,7 +371,7 @@ def layer_to_image(tensor):
     # what's this do?
     postpb = transforms.Compose([transforms.ToPILImage()])
 
-    t = postpa(t.data[0].cpu().squeeze())
+    t = postpa(tensor.data[0].cpu().squeeze())
     t[t > 1] = 1
     t[t < 0] = 0
     out_img = postpb(t)
@@ -248,7 +408,7 @@ def graph_loss(loss_graph, output_dir):
 
 
 def do_ffmpeg(output_dir, temp_dir=None):
-
+# ffmpeg -start_number 1001 -i ./comp.%04d.png -c:v libx264 -crf 15 -y ./comp.mp4
     if not temp_dir:
         temp_dir = '%s/tmp' % output_dir
 
@@ -258,3 +418,187 @@ def do_ffmpeg(output_dir, temp_dir=None):
     ffmpeg_cmd += ['%s/prog.mp4' % output_dir]
     subprocess.check_output(ffmpeg_cmd)
     shutil.rmtree(temp_dir)
+
+
+#####################################################################################################
+# This code was mostly ruthlessly appropriated from tyneumann's "Minimal PyTorch implementation of Generative Latent Optimization" https://github.com/tneumann/minimal_glo. Thank the lord for clever germans.
+
+
+def zoom_image(img, zoom, rescale, cuda=False):
+    if zoom == 1.0:
+        return img
+
+    if zoom >= 1:
+        return centre_crop_image(img, zoom, rescale, cuda=cuda)
+    else:
+        return tile(img, zoom, rescale, cuda=cuda)
+
+
+def tile(img, zoom, rescale, cuda=False):
+    # zoom out, i.e. zoom is between zero and one
+
+    img = torch.nn.functional.interpolate(img, scale_factor=rescale)
+    b, c, old_width, old_height = img.size()
+    img = torch.nn.functional.interpolate(img, scale_factor=zoom)
+    b, c, new_width, new_height = img.size()
+
+    # determine how many tiles are needed
+    x_tile = math.ceil(old_width / new_width)
+    y_tile = math.ceil(old_height / new_height)
+
+    img = img.tile((x_tile, y_tile))
+
+    # crop to old size
+    buf = tensor_to_buf(copy.deepcopy(img))
+    roi = oiio.ROI(int(0), int(old_width), int(0), int(old_height))
+    buf = oiio.ImageBufAlgo.crop(buf, roi=roi)
+    img = buf_to_tensor(buf, cuda)
+
+    return img
+
+
+def centre_crop_image(img, zoom, rescale, cuda=False, zoom_factor=0.17):
+    _, _, old_x, old_y = img.size()
+
+    if zoom != 1.0:
+        zoom_ = 1+(zoom*zoom_factor) # 1.612
+        crop_width = old_x / zoom_
+        crop_height = old_y / zoom_
+        left = (old_x - crop_width) / 2.
+        right = crop_width + left
+        bottom = (old_y - crop_height) / 2.
+        top = bottom + crop_height
+        buf = tensor_to_buf(copy.deepcopy(img)) # transpose happens here
+        roi = oiio.ROI(int(bottom), int(top), int(left), int(right)) # reverse transpose
+        buf = oiio.ImageBufAlgo.crop(buf, roi=roi)
+        img = buf_to_tensor(buf, cuda)
+
+    out_x = int(old_x * rescale)
+    out_y = int(old_y * rescale)
+    img = torch.nn.functional.interpolate(img, size=(out_x, out_y))
+    return img
+
+
+class Pyramid(object):
+
+    gauss_downsample_scale = 0.63
+    crop_scale = 0.9
+
+    @classmethod
+    def make_gaussian_pyramid(cls, img, mips=5, cuda=True):
+        kernel = cls._build_gauss_kernel(cuda)
+        gaus_pyramid = cls._gaussian_pyramid(img, kernel, cuda, max_levels=mips)
+        return gaus_pyramid
+
+    @classmethod
+    def write_gaussian_pyramid(cls, outdir, img, mips=5, cuda=True):
+        gaus_pyramid = cls.make_gaussian_pyramid(img, mips=mips, cuda=cuda)
+        for index, level in enumerate(gaus_pyramid):
+
+            try:
+                os.makedirs(outdir)
+            except:
+                pass
+
+            fp = outdir + '/gaus_pyr_lvl_%s.exr' % index
+            buf = tensor_to_buf(level)
+            write_exr(buf, fp)
+
+
+    @classmethod
+    def make_crop_pyramid(cls, img, mips=5, cuda=True):
+        crop_pyramid = cls._crop_pyramid(img, cuda, max_levels=mips)
+        return crop_pyramid
+
+    @classmethod
+    def write_crop_pyramid(cls, outdir, img, mips=5, cuda=True):
+        crop_pyramid = cls._crop_pyramid(img.detach(), cuda, max_levels=mips, outdir=outdir)
+
+        for index, level in enumerate(crop_pyramid):
+            try:
+                os.makedirs(outdir)
+            except:
+                pass
+
+            fp = outdir + '/crop_pyr_lvl_%s.exr' % index
+            print('writing ', fp)
+            buf = tensor_to_buf(level)
+            write_exr(buf, fp)
+
+    @classmethod
+    def _crop_pyramid(cls, img, cuda, max_levels, outdir=''):
+        pyr = []
+        pyr.append(copy.deepcopy(img))
+
+        for level in range(0, max_levels-1):
+            b, c, old_width, old_height = img.size()
+            crop_width = old_width * cls.crop_scale
+            crop_height = old_height * cls.crop_scale
+            left = (old_width - crop_width) / 2.
+            right = crop_width + left
+            bottom = (old_height - crop_height) / 2.
+            top = bottom + crop_height
+            buf = tensor_to_buf(copy.deepcopy(img))
+            roi = oiio.ROI(int(left), int(right), int(bottom), int(top))
+            buf = oiio.ImageBufAlgo.crop(buf, roi=roi)
+            img = buf_to_tensor(buf, cuda)
+            pyr.append(copy.deepcopy(img))
+
+        return pyr
+
+    @staticmethod
+    def _build_gauss_kernel(cuda, size=5, sigma=1.0, n_channels=3):
+        if size % 2 != 1:
+            raise ValueError("kernel size must be uneven")
+        grid = np.float32(np.mgrid[0:size,0:size].T)
+        gaussian = lambda x: np.exp((x - size//2)**2/(-2*sigma**2))**2
+        kernel = np.sum(gaussian(grid), axis=2)
+        kernel /= np.sum(kernel)
+        kernel = np.tile(kernel, (n_channels, 1, 1))
+        kernel = torch.FloatTensor(kernel[:, None, :, :])
+
+        if cuda:
+            kernel = kernel.cuda()
+
+        return Variable(kernel, requires_grad=False)
+
+    @staticmethod
+    def _conv_gauss(img, kernel, cuda):
+        """ convolve img with a gaussian kernel that has been built with build_gauss_kernel """
+        n_channels, _, kw, kh = kernel.shape
+        img = F.pad(img, (kw//2, kh//2, kw//2, kh//2), mode='replicate')
+        result = F.conv2d(img, kernel, groups=n_channels)
+
+        if cuda:
+            result = result.detach().to(torch.device(get_cuda_device()))
+
+        return result
+
+    @classmethod
+    def _gaussian_pyramid(cls, img, kernel, cuda, max_levels):
+        current = img
+        pyr = [current]
+
+        for level in range(0, max_levels-1):
+            filtered = cls._conv_gauss(current, kernel, cuda)
+            scale =cls.gauss_downsample_scale
+            current = F.interpolate(filtered, scale_factor=scale)
+
+            if cuda:
+                current = current.detach().to(torch.device(get_cuda_device()))
+
+            pyr.append(current)
+
+        return pyr
+
+
+def lerp_points(levels, keys):
+    """
+    lerp_points(5, [0.1, 1.0, 0.2])
+    """
+    points = [x for x, y in enumerate([keys])]
+    values = [x for x in keys]
+    x = np.linspace(points[0], points[-1], num=levels)
+    return np.interp(x, points, values)
+
+
