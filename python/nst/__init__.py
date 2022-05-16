@@ -174,6 +174,8 @@ class StyleImager(object):
     def __init__(self, style, content=None, frame=0, render_out=None, engine='cpu'):
         self.style = style
         self.style_zoom = None
+        self.zoom_factor = 0.17
+        self.gauss_scale_factor = 0.63
         self.style_rescale = None
         self.content = content
         self.iterations = 500
@@ -304,9 +306,11 @@ class StyleImager(object):
             style_tensor = utils.image_to_tensor(self.style.image, DO_CUDA, colorspace=self.style.colorspace)
 
             if self.style_zoom:
-                style_tensor = utils.zoom_image(style_tensor, self.style_zoom, self.style_rescale, cuda=DO_CUDA)
+                style_tensor = utils.zoom_image(style_tensor, self.style_zoom, self.style_rescale,
+                                                zoom_factor=self.zoom_factor, cuda=DO_CUDA)
 
-            style_pyramid = utils.Pyramid.make_gaussian_pyramid(style_tensor, cuda=DO_CUDA, mips=self.style.mips)
+            style_pyramid = utils.Pyramid.make_gaussian_pyramid(style_tensor, cuda=DO_CUDA, mips=self.style.mips,
+                                                                scale_factor=self.gauss_scale_factor)
 
             style_activations = []
             style_layer_names = [x.name for x in self.style.layers]
@@ -432,7 +436,8 @@ class StyleImager(object):
         cuda_device = self.cuda_device
 
         def closure():
-            opt_pyramid = utils.Pyramid.make_gaussian_pyramid(opt_tensor, cuda=DO_CUDA, mips=self.style.mips)
+            opt_pyramid = utils.Pyramid.make_gaussian_pyramid(opt_tensor, cuda=DO_CUDA, mips=self.style.mips,
+                                                              scale_factor=self.gauss_scale_factor)
             opt_activations = []
 
             loss_layer_names = [x.name for x in loss_layers]
@@ -441,6 +446,13 @@ class StyleImager(object):
                 opt_activations.append(opt_layer_activation_pyramid)
 
             layer_gradients = []
+            mip_gradients = []
+            # it should be possible to make out the mip gradients instead of the layer ones.
+            # in this system, a user would provide a mask for each mip level, which is used for
+            # all style layers.  however this is only half of varyihng scale, the other half
+            # being the mip zoom.
+            # what if we zoomed the gaussian pyramid?  so that higher levels are also
+            # more zoomed.
 
             if cuda_device:
                 loss = torch.zeros(1, requires_grad=False).to(torch.device(cuda_device))
@@ -448,8 +460,20 @@ class StyleImager(object):
                 loss = torch.zeros(1, requires_grad=False)
 
             for index, opt_layer_activation_pyramid in enumerate(opt_activations):
-                optimizer.zero_grad()
+                optimizer.zero_grad() # this is really significant - we're zeroing the grads for each layer so we can sum them separately after masking
                 target_layer_activation_pyramid = targets[index]
+
+                # for mip in target_layer_activation_pyramid:
+                ## work out loss for each mip in the pyramid and mask/tally it's gradients
+                ## use regular gram mse loss as we not passing in a pyramid
+                ## need to work out how to process mask for each mip, ie lerp an inversion over num mips.
+                ## we need to measure loss for each thing for which we want to mask gradients of.
+                ## i.e. if you want to mask grads for individual mips of gram mse activations for an image pyramid,
+                ## then the loss function needs to process individual mips.
+                ## this is an argumet for doing less in the loss function and more in the optimisation closure.
+                ## pushing logic to the loss function to keep the closure tidy was a mistake.  
+                #     optimizer.zero_grad()
+
                 layer_loss = loss_fns[index](opt_layer_activation_pyramid, target_layer_activation_pyramid, mip_weights[index])
                 layer_weight = weights[index]
                 weighted_layer_loss = layer_weight * layer_loss
@@ -489,6 +513,7 @@ class StyleImager(object):
                         # mask_normalisation = (x * y) / layer_mask.sum()
                         # weighted_mask_tensor = torch.div(layer_mask, mask_normalisation)
 
+                        # apply the gradient mask for this layer
                         for i in range(0, c):
                             # masked_grad[0][i] *= weighted_mask_tensor
                             masked_grad[0][i] *= layer_mask
@@ -526,10 +551,10 @@ class StyleImager(object):
                 output_layer_gradient = torch.zeros((b, c, w, h)).detach().to(torch.device(cuda_device))
             else:
                 output_layer_gradient = torch.zeros((b, c, w, h)).detach()
+
+            # sum all layer gradients
             for lg in layer_gradients:
                 output_layer_gradient += lg
-
-            # average?  why?
             opt_tensor.grad = output_layer_gradient
 
             # output opt_tensor as an image seq here

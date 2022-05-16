@@ -87,7 +87,7 @@ def nst_job_v2(style_image, content_image, out_dir, opt=None, content_layers='r4
                content_mips='1', content_mip_weights='1.0', style_mips='5', style_layers='p1:r32',
                style_weights='0.5:0.5', style_mip_weights='1.0,1.0,1.0,1.0,1.0:1.0,1.0,1.0,1.0,1.0', style_scale=1.0,
                service='Studio', out_file='out.exr', job_title=None, style_zoom=1.0, style_rescale=1.0,
-                iterations=500):
+                iterations=500, zoom_factor=0.17, gauss_scale_factor=0.63):
 
     style_image_name = style_image.split('/')[-1]
 
@@ -105,6 +105,9 @@ def nst_job_v2(style_image, content_image, out_dir, opt=None, content_layers='r4
     cmd += ['--cweights', content_weights]
     cmd += ['--cmips', content_mips]
     cmd += ['--cmipweights', content_mip_weights]
+
+    cmd += ['--zoom_factor', zoom_factor]
+    cmd += ['--gauss_scale_factor', gauss_scale_factor]
 
     cmd += ['--style', style_image]
     cmd += ['--style-rescale', style_rescale]

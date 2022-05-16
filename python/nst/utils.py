@@ -345,6 +345,13 @@ def get_cuda_device() -> str:
 
 
 def write_exr(exr_buf: oiio.ImageBuf, filepath: str) -> None:
+    pardir = os.path.abspath(os.path.join(filepath, os.path.pardir))
+
+    try:
+        os.makedirs(pardir)
+    except:
+        pass
+
     exr_buf.write(filepath, oiio.FLOAT)
 
 

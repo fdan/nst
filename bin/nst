@@ -49,6 +49,9 @@ def main():
     p.add_option("", "--cmips", dest='cmips', action='store')
     p.add_option("", "--cmipweights", dest='cmipweights', action='store')
 
+    p.add_option("", "--zoom_factor", dest='zoom_factor', action='store')
+    p.add_option("", "--gauss_scale_factor", dest='gauss_scale_factor', action='store')
+
     p.add_option("", "--style", dest='style', action='store')
     p.add_option("", "--style-rescale", dest='style_rescale', action='store')
     p.add_option("", "--style-zoom", dest='style_zoom', action='store')
@@ -90,6 +93,16 @@ def main():
         if e.errno != errno.EEXIST:
             raise
         pass
+
+    if opts.zoom_factor:
+        zoom_factor = float(opts.zoom_factor)
+    else:
+        zoom_factor = 0.17
+
+    if opts.gauss_scale_factor:
+        gauss_scale_factor = float(opts.gauss_scale_factor)
+    else:
+        gauss_scale_factor = 0.63
 
     if opts.clayers:
         clayers = opts.clayers.split(':')
@@ -181,13 +194,7 @@ def main():
 
         style_layers = []
 
-        # todo: resolve this issue:
-        print(1.1, slayers)
-
         for index, sl in enumerate(slayers):
-            print(1.2, index, sl)
-            print(1.3, style_mip_weights.split(':'))
-            print(1.4, len(style_mip_weights.split(':')))
             mip_weights = style_mip_weights.split(':')[index]
             mw = mip_weights.split(',')
             style_layers += [nst.VGGLayer(sl, weight=sweights[index], mip_weights=[float(x) for x in mw])]
@@ -211,6 +218,9 @@ def main():
         style_imager.iterations = iterations
         style_imager.log_iterations = iterations
         style_imager.out = output_image_
+
+        style_imager.zoom_factor = zoom_factor
+        style_imager.gauss_scale_factor = gauss_scale_factor
 
         if opts.style_zoom:
             style_imager.style_zoom = float(opts.style_zoom)
