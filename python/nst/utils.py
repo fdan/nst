@@ -327,9 +327,6 @@ def tensor_to_buf(tensor: torch.Tensor) -> oiio.ImageBuf:
 
     t = tforms(tensor.data[0].cpu().squeeze())
 
-    # t[t > 1] = 1 # clamp
-    # t[t < 0] = 0 # clamp
-
     t = torch.transpose(t, 2, 0)
     t = torch.transpose(t, 0, 1)
     t = t.contiguous()
@@ -421,8 +418,8 @@ def do_ffmpeg(output_dir, temp_dir=None):
 
 
 def zoom_image(img, zoom, rescale, cuda=False):
-    # if zoom == 1.0:
-    #     return img
+    if zoom == 1.0:
+        return img
 
     if zoom >= 1:
         return centre_crop_image(img, zoom, rescale, cuda=cuda)
@@ -455,17 +452,17 @@ def tile(img, zoom, rescale, cuda=False):
 
 def centre_crop_image(img, zoom, rescale, cuda=False, zoom_factor=0.17):
     _, _, old_x, old_y = img.size()
-    #
+
     if zoom != 1.0:
-        zoom_ = 1+(zoom*zoom_factor)
+        zoom_ = 1+(zoom*zoom_factor) # 1.612
         crop_width = old_x / zoom_
         crop_height = old_y / zoom_
         left = (old_x - crop_width) / 2.
         right = crop_width + left
-        bottom = (old_x - crop_height) / 2.
+        bottom = (old_y - crop_height) / 2.
         top = bottom + crop_height
-        buf = tensor_to_buf(copy.deepcopy(img))
-        roi = oiio.ROI(int(left), int(right), int(bottom), int(top))
+        buf = tensor_to_buf(copy.deepcopy(img)) # transpose happens here
+        roi = oiio.ROI(int(bottom), int(top), int(left), int(right)) # reverse transpose
         buf = oiio.ImageBufAlgo.crop(buf, roi=roi)
         img = buf_to_tensor(buf, cuda)
 
