@@ -199,7 +199,7 @@ def image_to_tensor_old(image, do_cuda):
 
 
 
-def image_to_tensor(image: str, do_cuda: bool, resize:float=None, colorspace=None, sharpen:float=1.0) -> torch.Tensor:
+def image_to_tensor(image: str, do_cuda: bool, resize:float=None, colorspace=None, sharpen:float=1.0, raw=False) -> torch.Tensor:
         # note: oiio implicitely converts to 0-1 floating point data here regardless of format:
         buf = ImageBuf(image)
 
@@ -232,7 +232,7 @@ def image_to_tensor(image: str, do_cuda: bool, resize:float=None, colorspace=Non
             if colorspace != 'srgb_texture':
                 buf = oiio.ImageBufAlgo.colorconvert(buf, colorspace, 'srgb_texture')
 
-        return buf_to_tensor(buf, do_cuda)
+        return buf_to_tensor(buf, do_cuda, raw=raw)
 
 def PIL_to_tensor(image, do_cuda):
     """
@@ -257,18 +257,19 @@ def PIL_to_tensor(image, do_cuda):
         return tensor.unsqueeze(0)
 
 
-def buf_to_tensor(buf: oiio.ImageBuf, do_cuda: bool) -> torch.Tensor:
+def buf_to_tensor(buf: oiio.ImageBuf, do_cuda: bool, raw=False) -> torch.Tensor:
 
     tforms_ = []
 
     #  turn to BGR
     tforms_ += [transforms.Lambda(lambda x: x[torch.LongTensor([2, 1, 0])])]
 
-    # subtract imagenet mean
-    tforms_ += [transforms.Normalize(mean=[0.40760392, 0.45795686, 0.48501961], std=[1, 1, 1])]
+    if not raw:
+        # subtract imagenet mean
+        tforms_ += [transforms.Normalize(mean=[0.40760392, 0.45795686, 0.48501961], std=[1, 1, 1])]
 
-    # scale to imagenet values
-    tforms_ += [transforms.Lambda(lambda x: x.mul_(255.))]
+        # scale to imagenet values
+        tforms_ += [transforms.Lambda(lambda x: x.mul_(255.))]
 
     tforms = transforms.Compose(tforms_)
 
@@ -325,7 +326,8 @@ def tensor_to_buf(tensor: torch.Tensor) -> oiio.ImageBuf:
 
     tforms = transforms.Compose(tforms_)
 
-    t = tforms(tensor.data[0].cpu().squeeze())
+    tensor_ = torch.clone(tensor)
+    t = tforms(tensor_.data[0].cpu().squeeze())
 
     t = torch.transpose(t, 2, 0)
     t = torch.transpose(t, 0, 1)
@@ -346,13 +348,15 @@ def get_cuda_device() -> str:
 
 def write_exr(exr_buf: oiio.ImageBuf, filepath: str) -> None:
     pardir = os.path.abspath(os.path.join(filepath, os.path.pardir))
-
-    try:
-        os.makedirs(pardir)
-    except:
-        pass
-
+    os.makedirs(pardir, exist_ok=True)
     exr_buf.write(filepath, oiio.FLOAT)
+
+
+def write_jpg(buf: oiio.ImageBuf, filepath: str) -> None:
+    pardir = os.path.abspath(os.path.join(filepath, os.path.pardir))
+    os.makedirs(pardir, exist_ok=True)
+    buf.write(filepath, dtype=oiio.FLOAT, fileformat='jpg')
+
 
 
 def layer_to_image(tensor):
@@ -424,7 +428,7 @@ def do_ffmpeg(output_dir, temp_dir=None):
 # This code was mostly ruthlessly appropriated from tyneumann's "Minimal PyTorch implementation of Generative Latent Optimization" https://github.com/tneumann/minimal_glo. Thank the lord for clever germans.
 
 
-def zoom_image(img, zoom, rescale, cuda=False):
+def zoom_image(img, zoom, rescale, cuda=False, zoom_factor=0.17):
     if zoom == 1.0:
         return img
 
@@ -485,7 +489,7 @@ class Pyramid(object):
     crop_scale = 0.9
 
     @classmethod
-    def make_gaussian_pyramid(cls, img, mips=5, cuda=True):
+    def make_gaussian_pyramid(cls, img, mips=5, cuda=True, scale_factor=gauss_downsample_scale):
         kernel = cls._build_gauss_kernel(cuda)
         gaus_pyramid = cls._gaussian_pyramid(img, kernel, cuda, max_levels=mips)
         return gaus_pyramid
@@ -602,3 +606,116 @@ def lerp_points(levels, keys):
     return np.interp(x, points, values)
 
 
+def get_vgg(engine):
+
+    vgg = entities.VGG()
+
+    model_filepath = os.getenv('NST_VGG_MODEL')
+
+    for param in vgg.parameters():
+        param.requires_grad = False
+
+    global DO_CUDA
+
+    if engine == 'gpu':
+        vgg.cuda()
+
+        vgg.load_state_dict(torch.load(model_filepath))
+        global TOTAL_GPU_MEMORY
+
+        if torch.cuda.is_available():
+            DO_CUDA = True
+            smi_mem_total = ['nvidia-smi', '--query-gpu=memory.total', '--format=csv,noheader,nounits']
+            TOTAL_GPU_MEMORY = float(subprocess.check_output(smi_mem_total).rstrip(b'\n'))
+            vgg.cuda()
+            # log("using cuda\navailable memory: %.0f Gb" % TOTAL_GPU_MEMORY)
+        else:
+            msg = "gpu mode was requested, but cuda is not available"
+            raise RuntimeError(msg)
+
+    elif engine == 'cpu':
+        vgg.load_state_dict(torch.load(model_filepath))
+        global TOTAL_SYSTEM_MEMORY
+
+        DO_CUDA = False
+        from psutil import virtual_memory
+        TOTAL_SYSTEM_MEMORY = virtual_memory().total
+        # log("using cpu\navailable memory: %s Gb" % (TOTAL_SYSTEM_MEMORY / 1000000000))
+
+    else:
+        msg = "invalid arg for engine: valid options are cpu, gpu"
+        raise RuntimeError(msg)
+
+    return vgg
+
+
+def write_activation_atlas(vgg_layer_activations, filepath):
+
+    _, num_tiles, tile_size_x, tile_size_y = vgg_layer_activations.size()
+
+    num_x_tiles = int(round(math.sqrt(num_tiles)))
+    num_y_tiles = num_x_tiles
+
+    atlas_size_x = num_x_tiles * tile_size_x
+    atlas_size_y = num_y_tiles * tile_size_y
+
+    a = np.zeros((atlas_size_x, atlas_size_y, 3))
+
+    atlas_tile_x = 0
+    atlas_tile_y = 0
+
+    for tile in range(0, num_tiles):
+
+        for x in range(0, tile_size_x):
+            for y in range(0, tile_size_y):
+                value = vgg_layer_activations[0][tile][x][y]
+                atlas_x = x + atlas_tile_x
+                atlas_y = y + atlas_tile_y
+                try:
+                    a[atlas_x][atlas_y] = value
+                except:
+                    pass
+
+        if atlas_tile_x >= atlas_size_x:
+            atlas_tile_x = 0
+            atlas_tile_y += tile_size_y
+        elif atlas_tile_y >= atlas_size_y:
+            atlas_tile_y = 0
+            atlas_tile_x += tile_size_x
+        else:
+            atlas_tile_x += tile_size_x
+
+    np_write(a, filepath)
+
+
+def np_write(np, fp):
+    os.makedirs(os.path.abspath(os.path.join(fp, os.path.pardir)), exist_ok=True)
+    x, y, z = np.shape
+    buf = ImageBuf(ImageSpec(y, x, z, oiio.FLOAT)) # flip x and y
+    buf.set_pixels(ROI(), np.copy())
+    print('writing:', fp)
+    buf.write(fp, oiio.FLOAT, fileformat='jpg')
+
+
+def make_output_dirs(output):
+    t_ = output.split('/')
+    t_.pop()
+    d_ = ('/'.join(t_))
+    try:
+        os.makedirs(d_)
+    except:
+        pass
+
+
+def write_gradient(grad, fp):
+    t = grad.data[0].cpu().squeeze()
+    t = torch.transpose(t, 2, 0)
+    t = torch.transpose(t, 0, 1)
+    t = t.contiguous()
+    ni = t.numpy()
+    x, y, z = ni.shape
+    np_write(ni, fp)
+
+
+def write_gram(gram):
+    pass

@@ -86,7 +86,7 @@ class VGG(nn.Module):
             self.pool4 = nn.AvgPool2d(kernel_size=pool_kernel_size, stride=pool_stride)
             self.pool5 = nn.AvgPool2d(kernel_size=pool_kernel_size, stride=pool_stride)
 
-    def forward(self, tensor_pyramid, out_keys):
+    def forward(self, tensor_pyramid, out_keys, mask=None):
         """
         :param out_keys: [str]
         :return: [torch.Tensor]
@@ -117,39 +117,134 @@ class VGG(nn.Module):
 
         result = []
 
-        for tensor_index in range(0, len(tensor_pyramid)):
-            tensor = tensor_pyramid[tensor_index]
-            # print(1.1, tensor.size())
+        def process(layer_activations, layer_name):
+            b, c, w, h = layer_activations.size()
 
-            out['r11'] += [F.relu(self.conv1_1(tensor))]
-            out['r12'] += [F.relu(self.conv1_2(out['r11'][tensor_index]))]
-            out['p1'] += [self.pool1(out['r12'][tensor_index])]
-            out['r21'] += [F.relu(self.conv2_1(out['p1'][tensor_index]))]
-            out['r22'] += [F.relu(self.conv2_2(out['r21'][tensor_index]))]
-            out['p2'] += [self.pool2(out['r22'][tensor_index])]
-            out['r31'] += [F.relu(self.conv3_1(out['p2'][tensor_index]))]
-            out['r32'] += [F.relu(self.conv3_2(out['r31'][tensor_index]))]
-            out['r33'] += [F.relu(self.conv3_3(out['r32'][tensor_index]))]
-            out['r34'] += [F.relu(self.conv3_4(out['r33'][tensor_index]))]
-            out['p3'] += [self.pool3(out['r34'][tensor_index])]
-            out['r41'] += [F.relu(self.conv4_1(out['p3'][tensor_index]))]
-            out['r42'] += [F.relu(self.conv4_2(out['r41'][tensor_index]))]
-            out['r43'] += [F.relu(self.conv4_3(out['r42'][tensor_index]))]
-            out['r44'] += [F.relu(self.conv4_4(out['r43'][tensor_index]))]
-            out['p4'] += [self.pool4(out['r44'][tensor_index])]
-            out['r51'] += [F.relu(self.conv5_1(out['p4'][tensor_index]))]
-            out['r52'] += [F.relu(self.conv5_2(out['r51'][tensor_index]))]
-            out['r53'] += [F.relu(self.conv5_3(out['r52'][tensor_index]))]
-            out['r54'] += [F.relu(self.conv5_4(out['r53'][tensor_index]))]
-            out['p5'] += [self.pool5(out['r54'][tensor_index])]
+            if layer_name not in out_keys:
+                return layer_activations
+
+            if not torch.is_tensor(mask):
+                return layer_activations
+
+            mask_scaled = torch.nn.functional.interpolate(mask, size=(w, h))
+
+            # normalise: ensure mean activation remains same
+            # mask_normalisation = (w * h) / mask.sum()
+            # mask_normalised = torch.div(mask_scaled, mask_normalisation)
+
+            masked_activations = layer_activations.clone()
+
+            for i in range(0, c):
+                masked_activations[0][i] *= mask_scaled[0][0]
+                # masked_activations[0][i] *= mask_normalised[0][0]
+
+            return masked_activations
+
+        #  for each pyramid in the list, i.e. for each mip of the image
+        for tensor_index in range(0, len(tensor_pyramid)):
+
+            # for a given mip of the image, get the activations
+            tensor = tensor_pyramid[tensor_index]
+
+            # out['r11'] += [process(F.relu(self.conv1_1(tensor)), 'r11')]
+            # out['r12'] += [process(F.relu(self.conv1_2(out['r11'][tensor_index])), 'r12')]
+            # out['p1']  += [process(self.pool1(out['r12'][tensor_index]), 'p1')]
+            # out['r21'] += [process(F.relu(self.conv2_1(out['p1'][tensor_index])), 'r21')]
+            # out['r22'] += [process(F.relu(self.conv2_2(out['r21'][tensor_index])), 'r22')]
+            # out['p2']  += [process(self.pool2(out['r22'][tensor_index]), 'p2')]
+            # out['r31'] += [process(F.relu(self.conv3_1(out['p2'][tensor_index])), 'r31')]
+            # out['r32'] += [process(F.relu(self.conv3_2(out['r31'][tensor_index])), 'r32')]
+            # out['r33'] += [process(F.relu(self.conv3_3(out['r32'][tensor_index])), 'r33')]
+            # out['r34'] += [process(F.relu(self.conv3_4(out['r33'][tensor_index])), 'r34')]
+            # out['p3']  += [process(self.pool3(out['r34'][tensor_index]), 'p3')]
+            # out['r41'] += [process(F.relu(self.conv4_1(out['p3'][tensor_index])), 'r41')]
+            # out['r42'] += [process(F.relu(self.conv4_2(out['r41'][tensor_index])), 'r42')]
+            # out['r43'] += [process(F.relu(self.conv4_3(out['r42'][tensor_index])), 'r43')]
+            # out['r44'] += [process(F.relu(self.conv4_4(out['r43'][tensor_index])), 'r44')]
+            # out['p4']  += [process(self.pool4(out['r44'][tensor_index]), 'p4')]
+            # out['r51'] += [process(F.relu(self.conv5_1(out['p4'][tensor_index])), 'r51')]
+            # out['r52'] += [process(F.relu(self.conv5_2(out['r51'][tensor_index])), 'r52')]
+            # out['r53'] += [process(F.relu(self.conv5_3(out['r52'][tensor_index])), 'r53')]
+            # out['r54'] += [process(F.relu(self.conv5_4(out['r53'][tensor_index])), 'r54')]
+            # out['p5']  += [process(self.pool5(out['r54'][tensor_index]), 'p5')]
+
+            r11 = F.relu(self.conv1_1(tensor))
+            r12 = F.relu(self.conv1_2(r11))
+            p1  = self.pool1(r12)
+            r21 = F.relu(self.conv2_1(p1))
+            r22 = F.relu(self.conv2_2(r21))
+            p2  = self.pool2(r22)
+            r31 = F.relu(self.conv3_1(p2))
+            r32 = F.relu(self.conv3_2(r31))
+            r33 = F.relu(self.conv3_3(r32))
+            r34 = F.relu(self.conv3_4(r33))
+            p3  = self.pool3(r34)
+            r41 = F.relu(self.conv4_1(p3))
+            r42 = F.relu(self.conv4_2(r41))
+            r43 = F.relu(self.conv4_3(r42))
+            r44 = F.relu(self.conv4_4(r43))
+            p4  = self.pool4(r44)
+            r51 = F.relu(self.conv5_1(p4))
+            r52 = F.relu(self.conv5_2(r51))
+            r53 = F.relu(self.conv5_3(r52))
+            r54 = F.relu(self.conv5_4(r53))
+            p5  = self.pool5(r54)
+
+            out['r11'] += [process(r11, 'r11')]
+            out['r12'] += [process(r12, 'r12')]
+            out['p1'] += [process(p1, 'p1')]
+            out['r21'] += [process(r21, 'r21')]
+            out['r22'] += [process(r22, 'r22')]
+            out['p2'] += [process(p2, 'p2')]
+            out['r31'] += [process(r31, 'r31')]
+            out['r32'] += [process(r32, 'r32')]
+            out['r33'] += [process(r33, 'r33')]
+            out['r34'] += [process(r34, 'r34')]
+            out['p3'] += [process(p3, 'p3')]
+            out['r41'] += [process(r41, 'r41')]
+            out['r42'] += [process(r42, 'r42')]
+            out['r43'] += [process(r43, 'r43')]
+            out['r44'] += [process(r44, 'r44')]
+            out['p4'] += [process(p4, 'p4')]
+            out['r51'] += [process(r51, 'r51')]
+            out['r52'] += [process(r52, 'r52')]
+            out['r53'] += [process(r53, 'r53')]
+            out['r54'] += [process(r54, 'r54')]
+            out['p5'] += [process(p5, 'p5')]
+
+            # out['r11'] += [F.relu(self.conv1_1(tensor))]
+            # out['r12'] += [F.relu(self.conv1_2(out['r11'][tensor_index]))]
+            # out['p1'] += [self.pool1(out['r12'][tensor_index])]
+            # out['r21'] += [F.relu(self.conv2_1(out['p1'][tensor_index]))]
+            # out['r22'] += [F.relu(self.conv2_2(out['r21'][tensor_index]))]
+            # out['p2'] += [self.pool2(out['r22'][tensor_index])]
+            # out['r31'] += [F.relu(self.conv3_1(out['p2'][tensor_index]))]
+            # out['r32'] += [F.relu(self.conv3_2(out['r31'][tensor_index]))]
+            # out['r33'] += [F.relu(self.conv3_3(out['r32'][tensor_index]))]
+            # out['r34'] += [F.relu(self.conv3_4(out['r33'][tensor_index]))]
+            # out['p3'] += [self.pool3(out['r34'][tensor_index])]
+            # out['r41'] += [F.relu(self.conv4_1(out['p3'][tensor_index]))]
+            # out['r42'] += [F.relu(self.conv4_2(out['r41'][tensor_index]))]
+            # out['r43'] += [F.relu(self.conv4_3(out['r42'][tensor_index]))]
+            # out['r44'] += [F.relu(self.conv4_4(out['r43'][tensor_index]))]
+            # out['p4'] += [self.pool4(out['r44'][tensor_index])]
+            # out['r51'] += [F.relu(self.conv5_1(out['p4'][tensor_index]))]
+            # out['r52'] += [F.relu(self.conv5_2(out['r51'][tensor_index]))]
+            # out['r53'] += [F.relu(self.conv5_3(out['r52'][tensor_index]))]
+            # out['r54'] += [F.relu(self.conv5_4(out['r53'][tensor_index]))]
+            # out['p5'] += [self.pool5(out['r54'][tensor_index])]
 
         # a list of activation pyramids indexed by layer
-        # issue: need to also use tensor_index otherwise the elements are lists not tensors?
         result = [out[key] for key in out_keys]
 
-        # print(10.1, len(result))
-
         return result
+
+        # mask
+        # for each mip in the pyramid
+        # for each vgg layer in the mip
+
+
+
 
 
 # gram matrix and loss
@@ -303,12 +398,11 @@ class MipGramMSELoss01(nn.Module):
             mip_weight = mip_weights[index]
             opt_activations = opt_layer_activation_pyramid[index]
             opt_gram = GramMatrix()(opt_activations)
+            # utils.write_gram(opt_gram)
             a_ = torch.sub(opt_gram, target_gram)
             b_ = torch.pow(a_, 2)
             c_ = torch.mean(b_)
             c_ *= mip_weight
-
-            # not entirely sure we're meant to sum the pyramid loss?
             loss += c_
 
         return loss

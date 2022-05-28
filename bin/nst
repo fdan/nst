@@ -15,7 +15,7 @@ import glob
 import nst
 
 # import nst.farm
-
+#     layer_gradients.append(opt_tensor.grad.clone())
 def main():
     """
     usage:
@@ -41,6 +41,12 @@ def main():
     p.add_option("", "--engine", dest='engine', action='store')
     p.add_option("", "--opt-x", dest='opt_x', action='store')
     p.add_option("", "--opt-y", dest='opt_y', action='store')
+    p.add_option("", "--log-iterations", dest='log_iterations', action='store')
+    p.add_option("", "--progressive", dest='progressive', action='store')
+    p.add_option("", "--zoom_factor", dest='zoom_factor', action='store')
+    p.add_option("", "--gauss_scale_factor", dest='gauss_scale_factor', action='store')
+    p.add_option("", "--style-rescale", dest='style_rescale', action='store')
+    p.add_option("", "--style-zoom", dest='style_zoom', action='store')
 
     p.add_option("", "--content", dest='content', action='store')
     p.add_option("", "--content-scale", dest='content_scale', action='store')
@@ -49,21 +55,27 @@ def main():
     p.add_option("", "--cmips", dest='cmips', action='store')
     p.add_option("", "--cmipweights", dest='cmipweights', action='store')
 
-    p.add_option("", "--zoom_factor", dest='zoom_factor', action='store')
-    p.add_option("", "--gauss_scale_factor", dest='gauss_scale_factor', action='store')
+    p.add_option("", "--style-1", dest='style_1', action='store')
+    p.add_option("", "--style-in-mask-1", dest='style_in_mask_1', action='store')
+    p.add_option("", "--style-target-map-1", dest='style_target_map_1', action='store')
+    p.add_option("", "--slayers-1", dest='slayers_1', action='store')
+    p.add_option("", "--sweights-1", dest='sweights_1', action='store')
+    p.add_option("", "--smips-1", dest='smips_1', action='store')
+    p.add_option("", "--smipweights-1", dest='smipweights_1', action='store')
 
-    p.add_option("", "--style", dest='style', action='store')
-    p.add_option("", "--style-rescale", dest='style_rescale', action='store')
-    p.add_option("", "--style-zoom", dest='style_zoom', action='store')
-    p.add_option("", "--slayers", dest='slayers', action='store')
-    p.add_option("", "--sweights", dest='sweights', action='store')
-    p.add_option("", "--smips", dest='smips', action='store')
-    p.add_option("", "--smipweights", dest='smipweights', action='store')
-
+    p.add_option("", "--style-2", dest='style_2', action='store')
+    p.add_option("", "--style-in-mask-2", dest='style_in_mask_2', action='store')
+    p.add_option("", "--style-target-map-2", dest='style_target_map_2', action='store')
+    p.add_option("", "--slayers-2", dest='slayers_2', action='store')
+    p.add_option("", "--sweights-2", dest='sweights_2', action='store')
+    p.add_option("", "--smips-2", dest='smips_2', action='store')
+    p.add_option("", "--smipweights-2", dest='smipweights_2', action='store')
 
     opts, args = p.parse_args()
 
     from_content = eval(opts.from_content)
+    progressive = eval(opts.progressive)
+    log_iterations = int(opts.log_iterations)
 
     # retiring this feature as it's pointless:
     # try:
@@ -72,8 +84,6 @@ def main():
     #     style_scale = 1.
 
     engine = opts.engine
-
-    check_outputs(opts.out)
     inputs_to_check = []
     content = opts.content
 
@@ -84,15 +94,7 @@ def main():
     if content:
         inputs_to_check.append(opts.content)
 
-    check_inputs(opts.style, inputs_to_check)
-    output_dir = os.path.abspath(os.path.join(opts.out, os.path.pardir))
-
-    try:
-        os.makedirs(output_dir)
-    except OSError as e:
-        if e.errno != errno.EEXIST:
-            raise
-        pass
+    check_inputs(opts.style_1, inputs_to_check)
 
     if opts.zoom_factor:
         zoom_factor = float(opts.zoom_factor)
@@ -125,12 +127,12 @@ def main():
         content_mip_weights = [1.0] * cmips
 
     if opts.opt_x:
-        opt_x = opts.opt_x
+        opt_x = int(opts.opt_x)
     else:
         opt_x = 858
 
     if opts.opt_y:
-        opt_y = opts.opt_y
+        opt_y = int(opts.opt_y)
     else:
         opt_y = 858
 
@@ -139,12 +141,30 @@ def main():
     else:
         iterations = 500
 
+    if opts.style_in_mask_1:
+        style_in_mask_1 = opts.style_in_mask_1
+    else:
+        style_in_mask_1 = None
 
-    slayers = opts.slayers.split(':')
-    sweights = [float(x) for x in opts.sweights.split(':')]
-    smips = int(opts.smips)
-    style = opts.style
-    style_mip_weights = opts.smipweights
+    if opts.style_in_mask_2:
+        style_in_mask_2 = opts.style_in_mask_2
+    else:
+        style_in_mask_2 = None
+
+    slayers_1 = opts.slayers_1.split(':')
+    sweights_1 = [float(x) for x in opts.sweights_1.split(':')]
+    smips_1 = int(opts.smips_1)
+    style_1 = opts.style_1
+    style_mip_weights_1 = opts.smipweights_1
+
+    if opts.style_2:
+        slayers_2 = opts.slayers_2.split(':')
+        sweights_2 = [float(x) for x in opts.sweights_2.split(':')]
+        smips_2 = int(opts.smips_2)
+        style_2 = opts.style_2
+        style_mip_weights_2 = opts.smipweights_2
+    else:
+        style_2 = None
 
     if opts.frames:
         frames = eval_frames(opts.frames)
@@ -158,11 +178,26 @@ def main():
 
             output_image_ = opts.out.replace("####", "%04d" % frame)
 
-            style_layers = []
-            for index, sl in enumerate(slayers):
-                mip_weight = style_mip_weights[index].split(',')
-                style_layers += [nst.VGGLayer(sl, weight=sweights[index], mip_weights=mip_weight)]
-            style_obj = nst.Style(style, style_layers, mips=smips)
+            style_layers_1 = []
+            for index, sl in enumerate(slayers_1):
+                mip_weights = style_mip_weights_1.split(':')[index]
+                mip_weight = mip_weights.split(',')
+                mip_weight = [float(x) for x in mip_weight]
+                style_layers_1 += [nst.VGGLayer(sl, weight=sweights_1[index], mip_weights=mip_weight)]
+            style_obj_1 = nst.Style(style_1, style_layers_1, mips=smips_1, in_mask=style_in_mask_1)
+            if opts.style_target_map_1:
+                style_obj_1.target_map = opts.style_target_map_1
+
+            if opts.style_2:
+                style_layers_2 = []
+                for index, sl in enumerate(slayers_2):
+                    mip_weights = style_mip_weights_2.split(':')[index]
+                    mip_weight = mip_weights.split(',')
+                    mip_weight = [float(x) for x in mip_weight]
+                    style_layers_2 += [nst.VGGLayer(sl, weight=sweights_2[index], mip_weights=mip_weight)]
+                style_obj_2 = nst.Style(style_2, style_layers_2, mips=smips_2, in_mask=style_in_mask_2)
+                if opts.style_target_map_2:
+                    style_obj_2.target_map = opts.style_target_map_2
 
             content_layers = []
             for index, cl in enumerate(clayers):
@@ -170,10 +205,12 @@ def main():
                 content_layers += [nst.VGGLayer(cl, weight=cweights[index], mip_weights=mip_weight)]
             content_obj = nst.Content(content_, content_layers, mips=cmips)
 
-            style_imager = nst.StyleImager(style_obj, content=content_obj, engine=engine)
+            style_imager = nst.StyleImager(style_obj_1, style2=style_obj_2, content=content_obj, engine=engine)
             style_imager.from_content = from_content
             style_imager.iterations = iterations
             style_imager.log_iterations = 100
+            style_imager.progressive = progressive
+            style_imager.log_iterations = log_iterations
 
             style_imager.content_masks = [None]
             style_imager.out = output_image_
@@ -190,16 +227,29 @@ def main():
             style_imager.write_exr(frame=frame)
 
     else:
-        output_image_ = opts.out
 
-        style_layers = []
+        style_layers_1 = []
+        for index, sl in enumerate(slayers_1):
+            mip_weights = style_mip_weights_1.split(':')[index]
+            mip_weight = mip_weights.split(',')
+            mip_weight = [float(x) for x in mip_weight]
+            style_layers_1 += [nst.VGGLayer(sl, weight=sweights_1[index], mip_weights=[float(x) for x in mip_weight])]
+        style_obj_1 = nst.Style(style_1, style_layers_1, mips=smips_1, in_mask=style_in_mask_1)
+        if opts.style_target_map_1:
+            style_obj_1.target_map = opts.style_target_map_1
 
-        for index, sl in enumerate(slayers):
-            mip_weights = style_mip_weights.split(':')[index]
-            mw = mip_weights.split(',')
-            style_layers += [nst.VGGLayer(sl, weight=sweights[index], mip_weights=[float(x) for x in mw])]
-
-        style_obj = nst.Style(style, style_layers, mips=smips)
+        if opts.style_2:
+            style_layers_2 = []
+            for index, sl in enumerate(slayers_2):
+                mip_weights = style_mip_weights_2.split(':')[index]
+                mip_weight = mip_weights.split(',')
+                mip_weight = [float(x) for x in mip_weight]
+                style_layers_2 += [nst.VGGLayer(sl, weight=sweights_2[index], mip_weights=[float(x) for x in mip_weight])]
+            style_obj_2 = nst.Style(style_2, style_layers_2, mips=smips_2, in_mask=style_in_mask_2)
+            if opts.style_target_map_2:
+                style_obj_2.target_map = opts.style_target_map_2
+        else:
+            style_obj_2 = None
 
         if content:
             content_layers = []
@@ -207,17 +257,19 @@ def main():
                 mip_weight = content_mip_weights[index].split(',')
                 content_layers += [nst.VGGLayer(cl, weight=cweights[index], mip_weights=mip_weight)]
             content_obj = nst.Content(content, content_layers, mips=cmips)
-            style_imager = nst.StyleImager(style_obj, content=content_obj, engine=engine)
+            style_imager = nst.StyleImager(style_obj_1, style2=style_obj_2, content=content_obj, engine=engine)
 
         else:
-            style_imager = nst.StyleImager(style_obj, engine=engine)
+            style_imager = nst.StyleImager(style_obj_1, style2=style_obj_2, engine=engine)
             style_imager.opt_x = opt_x
             style_imager.opt_y = opt_y
 
         style_imager.from_content = from_content
         style_imager.iterations = iterations
         style_imager.log_iterations = iterations
-        style_imager.out = output_image_
+        style_imager.out = opts.out
+        style_imager.progressive = progressive
+        style_imager.log_iterations = log_iterations
 
         style_imager.zoom_factor = zoom_factor
         style_imager.gauss_scale_factor = gauss_scale_factor
@@ -246,10 +298,16 @@ def check_inputs(style, inputs):
 
 
 def check_outputs(output):
-    op = os.path
-    output_rel_dir = op.relpath(op.join(output, op.pardir))
-    if not os.path.isdir(output_rel_dir):
-        os.makedirs(output_rel_dir, exist_ok=True)
+    # op = os.path
+    # output_rel_dir = op.relpath(op.join(output, op.pardir))n
+    # if not os.path.isdir(output_rel_dir):
+    #     os.makedirs(output_rel_dir, exist_ok=True)
+    try:
+        print(5.2, output)
+        os.makedirs(output)
+    except:
+        print(5.3, output)
+        pass
 
 
 def eval_frames(frames_list):

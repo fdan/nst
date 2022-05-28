@@ -83,47 +83,97 @@ def wedge(style_image, content, mips, varying_mips, start, end, step, out_dir):
         pass
 
 
-def nst_job_v2(style_image, content_image, out_dir, opt=None, content_layers='r41', content_weights='1.0',
-               content_mips='1', content_mip_weights='1.0', style_mips='5', style_layers='p1:r32',
-               style_weights='0.5:0.5', style_mip_weights='1.0,1.0,1.0,1.0,1.0:1.0,1.0,1.0,1.0,1.0', style_scale=1.0,
-               service='Studio', out_file='out.exr', job_title=None, style_zoom=1.0, style_rescale=1.0,
-                iterations=500, zoom_factor=0.17, gauss_scale_factor=0.63):
+def nst_job_v2(style_image_1,
+               content_image=None,
+               out='',
+               from_content=True,
+               opt_x=500,
+               opt_y=500,
+               service='Studio',
+               job_title=None,
+               style_zoom=1.0,
+               style_rescale=1.0,
+               progressive=False,
+               log_iterations=100,
+               iterations=500,
+               zoom_factor=0.17,
+               gauss_scale_factor=0.63,
+               opt=None,
+               style_scale=1.0,
+               content_layers='r41',
+               content_weights='1.0',
+               content_mips='1',
+               content_mip_weights='1.0',
+               style_mips_1='5',
+               style_layers_1='p1:r32',
+               style_weights_1='0.5:0.5',
+               style_mip_weights_1='1.0,1.0,1.0,1.0,1.0:1.0,1.0,1.0,1.0,1.0',
+               style_in_mask_1=None,
+               style_target_map_1=None,
+               style_image_2=None,
+               style_mips_2='5',
+               style_layers_2='p1:r32',
+               style_weights_2='0.5:0.5',
+               style_mip_weights_2='1.0,1.0,1.0,1.0,1.0:1.0,1.0,1.0,1.0,1.0',
+               style_in_mask_2=None,
+               style_target_map_2=None):
 
-    style_image_name = style_image.split('/')[-1]
+
+    style_image_name_1 = style_image_1.split('/')[-1]
 
     if not job_title:
-        job_title = 'style_transfer_wedge_%s' % style_image_name
+        job_title = 'style_transfer_wedge_%s' % style_image_name_1
 
     job = make_tractor_job(title=job_title, atmost=56, service=service)
 
     cmd = make_singularity_cmd()
     cmd += ['--from-content', True]
     cmd += ['--engine', 'cpu']
-
-    cmd += ['--content', content_image]
-    cmd += ['--clayers', content_layers]
-    cmd += ['--cweights', content_weights]
-    cmd += ['--cmips', content_mips]
-    cmd += ['--cmipweights', content_mip_weights]
-
+    cmd += ['--out', '%s' % out]
     cmd += ['--zoom_factor', zoom_factor]
     cmd += ['--gauss_scale_factor', gauss_scale_factor]
-
-    cmd += ['--style', style_image]
     cmd += ['--style-rescale', style_rescale]
     cmd += ['--style-zoom', style_zoom]
-    cmd += ['--slayers', style_layers]
-    cmd += ['--sweights', style_weights]
-    cmd += ['--smips', style_mips]
-    cmd += ['--smipweights', style_mip_weights]
     cmd += ['--iterations', iterations]
-
-    cmd += ['--out', '%s/%s' % (out_dir, out_file)]
-
+    cmd += ['--progressive', progressive]
+    cmd += ['--from-content', from_content]
+    cmd += ['--log-iterations', log_iterations]
     if opt:
         cmd += ['--opt', opt]
+    if opt_x:
+        cmd += ['--opt-x', opt_x]
+    if opt_y:
+        cmd += ['--opt-y', opt_y]
 
-    job.newTask(title="style_transfer_wedge_%s" % (style_image_name), argv=cmd)
+    if content_image:
+        cmd += ['--content', content_image]
+        cmd += ['--clayers', content_layers]
+        cmd += ['--cweights', content_weights]
+        cmd += ['--cmips', content_mips]
+        cmd += ['--cmipweights', content_mip_weights]
+
+    cmd += ['--style-1', style_image_1]
+    cmd += ['--slayers-1', style_layers_1]
+    cmd += ['--sweights-1', style_weights_1]
+    cmd += ['--smips-1', style_mips_1]
+    cmd += ['--smipweights-1', style_mip_weights_1]
+    if style_target_map_1:
+        cmd += ['--style-target-map-1', style_target_map_1]
+    if style_in_mask_1:
+        cmd += ['--style-in-mask-1', style_in_mask_1]
+
+    if style_image_2:
+        cmd += ['--style-2', style_image_2]
+        cmd += ['--slayers-2', style_layers_2]
+        cmd += ['--sweights-2', style_weights_2]
+        cmd += ['--smips-2', style_mips_2]
+        cmd += ['--smipweights-2', style_mip_weights_2]
+        if style_target_map_2:
+            cmd += ['--style-target-map-2', style_target_map_2]
+        if style_in_mask_2:
+            cmd += ['--style-in-mask-2', style_in_mask_2]
+
+    job.newTask(title="style_transfer_wedge_%s" % (style_image_name_1), argv=cmd)
 
     try:
         job.spool()
