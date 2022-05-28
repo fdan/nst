@@ -1,34 +1,19 @@
-import sys
+import memory_profiler
+import yaml
 import random
-import traceback
-import uuid
 import os
-import json
-import subprocess
 from timeit import default_timer as timer
 
-# import memory_profiler
 import OpenImageIO as oiio
-import torch
 from torch.autograd import Variable # deprecated - use Tensor
-import torch.nn as nn
 from torch import optim
-import torch.nn.functional as F
 
 from PIL import Image
-
-# import matplotlib
-# matplotlib.use('Agg')
 
 from . import entities
 from . import utils
 
-from nst_farm.singularity import NstFarm
-
 import numpy as np
-
-# import OpenImageIO as oiio
-# from OpenImageIO import ImageBuf, ImageSpec, ROI
 
 # https://pytorch.org/docs/stable/notes/randomness.html
 import torch
@@ -48,96 +33,7 @@ TOTAL_SYSTEM_MEMORY = 1
 
 
 def log(msg):
-    global LOG
-    LOG += msg + '\n'
     print(msg)
-
-
-def doit(opts):
-    try:
-        _doit(opts)
-    except:
-        print(traceback.print_exc())
-    finally:
-        if opts.farm:
-            env_cleanup = ['setup-conda-env', '-r']
-            subprocess.check_output(env_cleanup)
-
-
-def _doit(opts):
-    start = timer()
-
-    style = opts.style
-    if style:
-        style = utils.get_full_path(style)
-
-    content = opts.content
-    if content:
-        content = utils.get_full_path(content)
-
-    # user_style_layers = opts.style_layers
-    # if user_style_layers:
-    #     user_style_layers = [int(x) for x in user_style_layers.split(',')]
-
-    render_name = opts.render_name
-
-    output_dir = utils.get_full_path(opts.output_dir)
-    if not output_dir.endswith('/'):
-        output_dir += '/'
-
-    temp_dir = '/tmp/nst/%s' % str(uuid.uuid4())[:8:]
-    engine = opts.engine
-    iterations = opts.iterations
-    max_loss = opts.loss
-    unsafe = bool(opts.unsafe)
-    random_style = bool(opts.random_style)
-    progressive = bool(opts.progressive)
-
-    # if this fails, we want an exception:
-    os.makedirs(temp_dir)
-
-    # if this fails, dir probably exists already:
-    try:
-        os.makedirs(output_dir)
-    except:
-        pass
-
-    log('\nstyle input: %s' % style)
-    log('content input: %s' % content)
-    log('output dir: %s' % output_dir)
-    log('engine: %s' % engine)
-    log('iterations: %s' % iterations)
-    log('max_loss: %s' % max_loss)
-    log('unsafe: %s' % unsafe)
-    log('')
-
-    style_imager = StyleImager(style_image=style, content_image=content)
-    style_imager.output_dir = output_dir
-
-    if iterations:
-        style_imager.iterations = iterations
-
-    opt_tensor = style_imager.generate_tensor()
-
-    output_render_name = render_name or 'render.png'
-    output_render = output_dir + output_render_name
-    # output_render = output_dir + 'render.png'
-    utils.render_image(opt_tensor, output_render)
-
-    end = timer()
-
-    utils.graph_loss(style_imager.loss_graph, output_dir)
-
-    duration = "%.02f seconds" % float(end-start)
-    log('completed\n')
-    log("duration: %s" % duration)
-    log_filepath = output_dir + '/log.txt'
-
-    if progressive:
-        utils.do_ffmpeg(output_dir, temp_dir)
-
-    with open(log_filepath, 'w') as log_file:
-        log_file.write(LOG)
 
 
 class VGGLayer(object):
@@ -146,16 +42,23 @@ class VGGLayer(object):
         self.weight = weight
         self.mip_weights = mip_weights
 
+    def __repr__(self):
+        return yaml.dump(self)
+
 
 class Style(object):
-    def __init__(self, image, layers, in_mask=None, out_mask=None, mips=4):
+    def __init__(self, image, layers):
         self.image = image
-        self.in_mask = in_mask
-        self.out_mask = out_mask
+        self.in_mask = ''
+        self.target_map = None
+        self.out_mask = ''
         self.layers = layers
         self.scale = 1.0
-        self.mips = mips
+        self.mips = 4
         self.colorspace = 'srgb_texture'
+
+    def __repr__(self):
+        return yaml.dump(self)
 
 
 class Content(object):
@@ -168,11 +71,15 @@ class Content(object):
         self.scale = 1.0
         self.mips = mips
 
+    def __repr__(self):
+        return yaml.dump(self)
+
 
 class StyleImager(object):
 
-    def __init__(self, style, content=None, frame=0, render_out=None, engine='cpu'):
-        self.style = style
+    def __init__(self, style1=None, style2=None, content=None, frame=0, render_out=None, engine='cpu'):
+        self.style1 = style1
+        self.style2 = style2
         self.style_zoom = None
         self.zoom_factor = 0.17
         self.gauss_scale_factor = 0.63
@@ -181,26 +88,46 @@ class StyleImager(object):
         self.iterations = 500
         self.log_iterations = 100
         self.random_style = False
-        self.output_dir = None
         self.engine = engine
         self.from_content = True
         self.unsafe = False
         self.progressive = False
         self.max_loss = None
         self.lr = 1
-        self.loss_graph = ([], [])
         self.opt_x = 512
         self.opt_y = 512
         self.frame = frame
         self.render_out = render_out
         self.optimisation_image = None
-        self.output_dir = '%s/output' % os.getcwd()
+        self.out = ''
+        self.output_dir = ''
         self.cuda_device = None
-        self.out = None
         self.out_colorspace = 'srgb_texture'
+        self.opt_colorspace = 'srgb_texture'
+        self.write_gradients = False
 
         if engine == 'gpu':
             self.init_cuda()
+
+    def get_output_dir(self):
+        return os.path.abspath(os.path.join(self.out, (os.path.pardir)))
+
+    def save(self, fp):
+        pardir = os.path.abspath(os.path.join(fp, os.path.pardir))
+        os.makedirs(pardir, exist_ok=True)
+        with open(fp, mode="wt", encoding="utf-8") as file:
+            yaml.dump(self, file)
+
+    @staticmethod
+    def load(fp):
+        with open(fp, mode="r", encoding='utf-8') as file:
+            return yaml.load(file, yaml.Loader)
+
+    def __str__(self):
+        return yaml.dump(self)
+
+    def __repr__(self):
+        return yaml.dump(self)
 
     def init_cuda(self) -> None:
         self.cuda_device = utils.get_cuda_device()
@@ -223,11 +150,12 @@ class StyleImager(object):
         return utils.tensor_to_image(tensor)
 
     def write_exr(self, frame: int=None) -> None:
-        if self.content.image:
-            if '####' in self.content.image and frame:
-                self.content.image = self.content.image.replace('####', '%04d' % frame)
-            else:
-                self.content.image = self.content.image
+        if self.content:
+            if self.content.image:
+                if '####' in self.content.image and frame:
+                    self.content.image = self.content.image.replace('####', '%04d' % frame)
+                else:
+                    self.content.image = self.content.image
 
         if self.out:
             if '####' in self.out and frame:
@@ -247,12 +175,12 @@ class StyleImager(object):
         buf.write(self._out)
 
     def generate_tensor(self, frame: int=None) -> torch.Tensor:
-
-        if self.content.image:
-            if '####' in self.content.image and frame:
-                self.content.image = self.content.image.replace('####', '%04d' % frame)
-            else:
-                self.content.image = self.content.image
+        if self.content:
+            if self.content.image:
+                if '####' in self.content.image and frame:
+                    self.content.image = self.content.image.replace('####', '%04d' % frame)
+                else:
+                    self.content.image = self.content.image
 
         start = timer()
         vgg = self._prepare_engine()
@@ -263,6 +191,8 @@ class StyleImager(object):
         targets = []
         masks = []
         mip_weights = []
+
+        output_dir = self.get_output_dir()
 
         if self.content:
             content_layers = self.content.layers
@@ -292,7 +222,6 @@ class StyleImager(object):
             for cl in self.content.layers:
                 mip_weights += [cl.mip_weights]
 
-
         if self.optimisation_image:
             opt_tensor = self.prepare_opt(clone=self.optimisation_image)
         elif self.from_content:
@@ -300,26 +229,37 @@ class StyleImager(object):
         else:
             opt_tensor = self.prepare_opt()
 
-        if self.style:
-            loss_layers += self.style.layers
+        if self.style1:
+            loss_layers += self.style1.layers
 
-            style_tensor = utils.image_to_tensor(self.style.image, DO_CUDA, colorspace=self.style.colorspace)
+            style_tensor = utils.image_to_tensor(self.style1.image, DO_CUDA, colorspace=self.style1.colorspace)
 
-            if self.style_zoom:
-                style_tensor = utils.zoom_image(style_tensor, self.style_zoom, self.style_rescale,
-                                                zoom_factor=self.zoom_factor, cuda=DO_CUDA)
+            if self.style1.in_mask:
+                style_in_mask_tensor = utils.image_to_tensor(self.style1.in_mask, DO_CUDA, raw=True)
+            else:
+                style_in_mask_tensor = None
 
-            style_pyramid = utils.Pyramid.make_gaussian_pyramid(style_tensor, cuda=DO_CUDA, mips=self.style.mips,
-                                                                scale_factor=self.gauss_scale_factor)
+            if self.style1.target_map:
+                style_target_map_tensor_1 = utils.image_to_tensor(self.style1.target_map, DO_CUDA, raw=True)
+            else:
+                style_target_map_tensor_1 = None
+
+            if self.style_zoom or self.style_rescale:
+                style_tensor = utils.zoom_image(style_tensor, self.style_zoom, self.style_rescale, zoom_factor=self.zoom_factor, cuda=DO_CUDA)
+
+                if self.style1.in_mask:
+                    style_in_mask_tensor = utils.zoom_image(style_in_mask_tensor, self.style_zoom, self.style_rescale, zoom_factor=self.zoom_factor, cuda=DO_CUDA)
+
+            style_pyramid = utils.Pyramid.make_gaussian_pyramid(style_tensor, cuda=DO_CUDA, mips=self.style1.mips, scale_factor=self.gauss_scale_factor)
 
             style_activations = []
-            style_layer_names = [x.name for x in self.style.layers]
-            for layer_activation_pyramid in vgg(style_pyramid, style_layer_names):
+            style_layer_names = [x.name for x in self.style1.layers]
+            for layer_activation_pyramid in vgg(style_pyramid, style_layer_names, mask=style_in_mask_tensor):
                 style_activations.append(layer_activation_pyramid)
 
-            style_loss_fns = [entities.MipGramMSELoss01()] * len(self.style.layers)
+            style_loss_fns = [entities.MipGramMSELoss01()] * len(self.style1.layers)
             loss_fns += style_loss_fns
-            weights += [x.weight for x in self.style.layers]
+            weights += [x.weight for x in self.style1.layers]
 
             style_targets = []
             for layer_activation_pyramid in style_activations:
@@ -331,7 +271,52 @@ class StyleImager(object):
 
             targets += style_targets
 
-            for sl in self.style.layers:
+            for sl in self.style1.layers:
+                mip_weights += [sl.mip_weights]
+
+        if self.style2:
+            loss_layers += self.style2.layers
+
+            style_tensor = utils.image_to_tensor(self.style2.image, DO_CUDA, colorspace=self.style2.colorspace)
+
+            if self.style2.in_mask:
+                style_in_mask_tensor = utils.image_to_tensor(self.style2.in_mask, DO_CUDA, raw=True)
+            else:
+                style_in_mask_tensor = None
+
+            if self.style2.target_map:
+                style_target_map_tensor_2 = utils.image_to_tensor(self.style2.target_map, DO_CUDA, raw=True)
+            else:
+                style_target_map_tensor_2 = None
+
+            if self.style_zoom or self.style_rescale:
+                style_tensor = utils.zoom_image(style_tensor, self.style_zoom, self.style_rescale, zoom_factor=self.zoom_factor, cuda=DO_CUDA)
+
+                if self.style2.in_mask:
+                    style_in_mask_tensor = utils.zoom_image(style_in_mask_tensor, self.style_zoom, self.style_rescale, zoom_factor=self.zoom_factor, cuda=DO_CUDA)
+
+            style_pyramid = utils.Pyramid.make_gaussian_pyramid(style_tensor, cuda=DO_CUDA, mips=self.style2.mips, scale_factor=self.gauss_scale_factor)
+
+            style_activations = []
+            style_layer_names = [x.name for x in self.style2.layers]
+            for layer_activation_pyramid in vgg(style_pyramid, style_layer_names, mask=style_in_mask_tensor):
+                style_activations.append(layer_activation_pyramid)
+
+            style_loss_fns = [entities.MipGramMSELoss01()] * len(self.style2.layers)
+            loss_fns += style_loss_fns
+            weights += [x.weight for x in self.style2.layers]
+
+            style_targets = []
+            for layer_activation_pyramid in style_activations:
+                gram_pyramid = []
+                for tensor in layer_activation_pyramid:
+                    gram = entities.GramMatrix()(tensor).detach()
+                    gram_pyramid += [gram]
+                style_targets += [gram_pyramid]
+
+            targets += style_targets
+
+            for sl in self.style2.layers:
                 mip_weights += [sl.mip_weights]
 
         # if self.style.image:
@@ -387,13 +372,22 @@ class StyleImager(object):
             loss_fns = [loss_fn.cuda() for loss_fn in loss_fns]
 
         show_iter = self.log_iterations
+
+        # lbfgs
         optimizer = optim.LBFGS([opt_tensor], lr=self.lr, max_iter=int(self.iterations))
+
+        # adam
+        optimizer = optim.Adam([opt_tensor])
+
         n_iter = [1]
         current_loss = [9999999]
 
         layer_masks = []
 
-        layer_masks.append(self.content.out_mask)
+        if self.content:
+            layer_masks.append(self.content.out_mask)
+        else:
+            layer_masks.append(None)
 
         # for cl in self.content.out_mask:
         #     if not cl:
@@ -436,7 +430,7 @@ class StyleImager(object):
         cuda_device = self.cuda_device
 
         def closure():
-            opt_pyramid = utils.Pyramid.make_gaussian_pyramid(opt_tensor, cuda=DO_CUDA, mips=self.style.mips,
+            opt_pyramid = utils.Pyramid.make_gaussian_pyramid(opt_tensor, cuda=DO_CUDA, mips=self.style1.mips,
                                                               scale_factor=self.gauss_scale_factor)
             opt_activations = []
 
@@ -446,13 +440,6 @@ class StyleImager(object):
                 opt_activations.append(opt_layer_activation_pyramid)
 
             layer_gradients = []
-            mip_gradients = []
-            # it should be possible to make out the mip gradients instead of the layer ones.
-            # in this system, a user would provide a mask for each mip level, which is used for
-            # all style layers.  however this is only half of varyihng scale, the other half
-            # being the mip zoom.
-            # what if we zoomed the gaussian pyramid?  so that higher levels are also
-            # more zoomed.
 
             if cuda_device:
                 loss = torch.zeros(1, requires_grad=False).to(torch.device(cuda_device))
@@ -463,90 +450,46 @@ class StyleImager(object):
                 optimizer.zero_grad() # this is really significant - we're zeroing the grads for each layer so we can sum them separately after masking
                 target_layer_activation_pyramid = targets[index]
 
-                # for mip in target_layer_activation_pyramid:
-                ## work out loss for each mip in the pyramid and mask/tally it's gradients
-                ## use regular gram mse loss as we not passing in a pyramid
-                ## need to work out how to process mask for each mip, ie lerp an inversion over num mips.
-                ## we need to measure loss for each thing for which we want to mask gradients of.
-                ## i.e. if you want to mask grads for individual mips of gram mse activations for an image pyramid,
-                ## then the loss function needs to process individual mips.
-                ## this is an argumet for doing less in the loss function and more in the optimisation closure.
-                ## pushing logic to the loss function to keep the closure tidy was a mistake.  
-                #     optimizer.zero_grad()
-
                 layer_loss = loss_fns[index](opt_layer_activation_pyramid, target_layer_activation_pyramid, mip_weights[index])
                 layer_weight = weights[index]
                 weighted_layer_loss = layer_weight * layer_loss
                 weighted_layer_loss.backward(retain_graph=True)
 
-                # don't apply mask for content loss
-                if True == True: # silly way to make this run on any layer, witout adjusting indentation, for easy rollback
+                loss += layer_loss
 
-                    loss += layer_loss
+                # # this may not work with multiple styles
+                if torch.is_tensor(style_target_map_tensor_1):
+                    b, c, w, h = opt_tensor.grad.size()
+                    masked_grad = opt_tensor.grad.clone()
+                    if self.write_gradients:
+                        utils.write_gradient(masked_grad, '%s/grad1/%04d.jpg' % (output_dir, n_iter[0]))
+                    for i in range(0, c):
+                        masked_grad[0][i] *= style_target_map_tensor_1[0][0]
+                    if self.write_gradients:
+                        utils.write_gradient(masked_grad, '%s/grad2/%04d.jpg' % (output_dir, n_iter[0]))
+                    layer_gradients.append(masked_grad)
+                #
+                # elif torch.is_tensor(style_target_map_tensor_2):
+                #     b, c, w, h = opt_tensor.grad.size()
+                #     masked_grad = opt_tensor.grad.clone()
+                #     if self.write_gradients:
+                #         utils.write_gradient(masked_grad, '%s/grad3/%04d.exr' % (output_dir, n_iter[0]))
+                #     for i in range(0, c):
+                #         masked_grad[0][i] *= style_target_map_tensor_2[0][0]
+                #     if self.write_gradients:
+                #         utils.write_gradient(masked_grad, '%s/grad4/%04d.exr' % (output_dir, n_iter[0]))
+                #     layer_gradients.append(masked_grad)
+                #
+                # else:
+                #     layer_gradients.append(opt_tensor.grad.clone())
+                layer_gradients.append(opt_tensor.grad.clone())
 
-                    # if this style layer has a mask
-                    if layer_masks[index] is not None:
+            # normalise: ensure mean activation remains same
+            # mask_normalisation = (x * y) / layer_mask.sum()
+            # weighted_mask_tensor = torch.div(layer_mask, mask_normalisation)
 
-                        layer_mask = layer_masks[index]
-                        b, c, w, h = opt_tensor.grad.size()
-                        masked_grad = opt_tensor.grad.clone()
+            b, c, w, h = opt_tensor.grad.size()
 
-                        # output gradient to disk for first epoch
-                        # if n_iter[0] == 3:
-                        #     ni = masked_grad.cpu().numpy().transpose()
-                        #
-                        #     x = ni.shape[1]
-                        #     y = ni.shape[0]
-                        #     z = ni.shape[2]
-                        #
-                        #     ni = np.reshape(ni, (x, y, z))
-                        #
-                        #     buf = ImageBuf(ImageSpec(x, y, z, oiio.FLOAT))
-                        #     buf.set_pixels(ROI(), ni.copy())
-                        #
-                        #     fp = 'grad_seq/%02d_%02d_grad.exr' % (n_iter[0], counter)
-                        #     print('writing gradient:', fp)
-                        #     buf.write(fp, oiio.FLOAT)
-                        #     print('done')
-
-                        # normalise: ensure mean activation remains same
-                        # mask_normalisation = (x * y) / layer_mask.sum()
-                        # weighted_mask_tensor = torch.div(layer_mask, mask_normalisation)
-
-                        # apply the gradient mask for this layer
-                        for i in range(0, c):
-                            # masked_grad[0][i] *= weighted_mask_tensor
-                            masked_grad[0][i] *= layer_mask
-
-                        # if n_iter[0] == 3:
-                        #     ni = masked_grad.cpu().numpy().transpose()
-                        #
-                        #     x = ni.shape[1]
-                        #     y = ni.shape[0]
-                        #     z = ni.shape[2]
-                        #
-                        #     ni = np.reshape(ni, (x, y, z))
-                        #
-                        #     buf = ImageBuf(ImageSpec(x, y, z, oiio.FLOAT))
-                        #     buf.set_pixels(ROI(), ni.copy())
-                        #
-                        #     fp = 'grad_seq/%02d_%02d_grad_masked.exr' % (n_iter[0], counter)
-                        #     print('writing gradient:', fp)
-                        #     buf.write(fp, oiio.FLOAT)
-
-                        layer_gradients.append(masked_grad)
-
-                    # this style layer does not have a mask
-                    else:
-                        layer_gradients.append(opt_tensor.grad.clone())
-
-                else:
-                    loss += layer_loss
-                    layer_gradients.append(opt_tensor.grad.clone())
-
-            b, c, w, h = opt_tensor.grad.size() # not strictly necessary?
-
-            # todo: this assumes the engine is gpu.
             if self.engine == "gpu":
                 output_layer_gradient = torch.zeros((b, c, w, h)).detach().to(torch.device(cuda_device))
             else:
@@ -557,18 +500,18 @@ class StyleImager(object):
                 output_layer_gradient += lg
             opt_tensor.grad = output_layer_gradient
 
-            # output opt_tensor as an image seq here
-
-            nice_loss = '{:,.0f}'.format(loss.item())
             if self.progressive:
-                output_render = self.output_dir + '/render.%04d.png' % n_iter[0]
-                utils.render_image(opt_tensor, output_render, 'loss: %s\niteration: %s' % (nice_loss, n_iter[0]))
+                # iterative_output = '%s/iterations/render.%04d.exr' % (output_dir, n_iter[0])
+                iterative_output = '%s/iterations/render.%04d.jpg' % (output_dir, n_iter[0])
+                os.makedirs(os.path.realpath(os.path.join(iterative_output, os.pardir)), exist_ok=True)
+                buf = utils.tensor_to_buf(torch.clone(opt_tensor))
+                # utils.write_exr(buf, iterative_output)
+                utils.write_jpg(buf, iterative_output)
 
             nice_loss = '{:,.0f}'.format(loss.item())
             current_loss[0] = loss.item()
             n_iter[0] += 1
             if n_iter[0] % show_iter == (show_iter - 1):
-
 
                 if torch.__version__ == '1.1.0':
                     max_mem_cached = torch.cuda.max_memory_cached(0) / 1000000
@@ -578,11 +521,11 @@ class StyleImager(object):
                 msg = ''
                 msg += 'Iteration: %d, ' % (n_iter[0])
                 msg += 'loss: %s, ' % (nice_loss)
-                # if DO_CUDA:
-                #     msg += 'memory used: %s of %s' % (max_mem_cached, TOTAL_GPU_MEMORY)
-                # else:
-                #     mem_usage = memory_profiler.memory_usage(proc=-1, interval=0.1, timeout=0.1)
-                #     msg += 'memory used: %.02f of %s Gb' % (mem_usage[0]/1000, TOTAL_SYSTEM_MEMORY/1000000000)
+                if DO_CUDA:
+                    msg += 'memory used: %s of %s' % (max_mem_cached, TOTAL_GPU_MEMORY)
+                else:
+                    mem_usage = memory_profiler.memory_usage(proc=-1, interval=0.1, timeout=0.1)
+                    msg += 'memory used: %.02f of %s Gb' % (mem_usage[0]/1000, TOTAL_SYSTEM_MEMORY/1000000000)
 
                 log(msg)
             return loss
@@ -592,10 +535,6 @@ class StyleImager(object):
             while n_iter[0] <= max_iter:
                 optimizer.step(closure)
 
-        # if we did per-iteration gradient outputs, do an ffmpeg on the sequence:
-
-        # if we did per-iteration opt outputs, do an ffmpeg on the sequence:
-
         end = timer()
         duration = "%.02f seconds" % float(end - start)
         log("duration: %s" % duration)
@@ -604,46 +543,8 @@ class StyleImager(object):
 
 
     def _prepare_engine(self):
+        return utils.get_vgg(self.engine)
 
-        vgg = entities.VGG()
-
-        model_filepath = os.getenv('NST_VGG_MODEL')
-
-        for param in vgg.parameters():
-            param.requires_grad = False
-
-        global DO_CUDA
-
-        if self.engine == 'gpu':
-            vgg.cuda()
-
-            vgg.load_state_dict(torch.load(model_filepath))
-            global TOTAL_GPU_MEMORY
-
-            if torch.cuda.is_available():
-                DO_CUDA = True
-                smi_mem_total = ['nvidia-smi', '--query-gpu=memory.total', '--format=csv,noheader,nounits']
-                TOTAL_GPU_MEMORY = float(subprocess.check_output(smi_mem_total).rstrip(b'\n'))
-                vgg.cuda()
-                # log("using cuda\navailable memory: %.0f Gb" % TOTAL_GPU_MEMORY)
-            else:
-                msg = "gpu mode was requested, but cuda is not available"
-                raise RuntimeError(msg)
-
-        elif self.engine == 'cpu':
-            vgg.load_state_dict(torch.load(model_filepath))
-            global TOTAL_SYSTEM_MEMORY
-
-            DO_CUDA = False
-            from psutil import virtual_memory
-            TOTAL_SYSTEM_MEMORY = virtual_memory().total
-            # log("using cpu\navailable memory: %s Gb" % (TOTAL_SYSTEM_MEMORY / 1000000000))
-
-        else:
-            msg = "invalid arg for engine: valid options are cpu, gpu"
-            raise RuntimeError(msg)
-
-        return vgg
 
     def _prepare_content(self):
 
@@ -653,8 +554,12 @@ class StyleImager(object):
 
     def prepare_opt(self, clone=None):
         if clone:
-            content_tensor = utils.image_to_tensor(clone, DO_CUDA, resize=self.content.scale, colorspace=self.content.colorspace)
-            opt_tensor = Variable(content_tensor.data.clone(), requires_grad=True)
+            if self.content:
+                tensor = utils.image_to_tensor(clone, DO_CUDA, resize=self.content.scale, colorspace=self.content.colorspace)
+            else:
+                tensor = utils.image_to_tensor(clone, DO_CUDA, colorspace=self.opt_colorspace)
+
+            opt_tensor = Variable(tensor.data.clone(), requires_grad=True)
 
         else:
             o_width = self.opt_x
