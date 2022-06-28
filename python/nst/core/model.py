@@ -15,10 +15,10 @@ torch.backends.cudnn.enabled=False
 
 
 class TorchStyle(object):
-    def __init__(self, tensor):
+    def __init__(self, tensor, in_mask, target_map):
         self.tensor = tensor
-        self.in_mask = torch.zeros(0)
-        self.target_map = torch.zeros(0)
+        self.in_mask = in_mask
+        self.target_map = target_map
         self.scale = 1.0
 
 
@@ -28,10 +28,10 @@ class Nst(torch.nn.Module):
 
         # core data
         self.vgg = vgg.VGG()
-        self.content = torch.zeros(0)
+        self.content = None
         self.content_scale = 1.0
         self.styles = []
-        self.opt_tensor = torch.zeros(0)
+        self.opt_tensor = None
         self.opt_guides = []
 
         # options

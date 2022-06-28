@@ -1,0 +1,104 @@
+syntax = "proto2";
+
+package mlserver;
+
+message RequestWrapper {
+	optional bool info = 1;
+	optional RequestInfo r1 = 2;
+	optional RequestInference r2 = 3;
+}
+
+message RespondWrapper {
+	optional bool info = 1;
+	optional RespondInfo r1 = 2;
+	optional RespondInference r2 = 3;
+	optional Error error = 4;
+}
+
+message RequestInfo {
+	optional bool info = 1;
+}
+
+message RespondInfo {
+	optional int32 num_models = 1;
+	repeated Model models = 2;
+}
+
+message Model {
+	optional string name = 1;
+	optional string label = 2;
+	repeated ImagePrototype inputs = 3;
+	repeated ImagePrototype outputs = 4;
+	repeated BoolAttrib bool_options = 5;
+	repeated IntAttrib int_options = 6;
+	repeated FloatAttrib float_options = 7;
+	repeated StringAttrib string_options = 8;
+	repeated BoolAttrib button_options = 9;
+	repeated MultipleChoiceOption mc_options = 10;
+}
+
+message MultipleChoiceOption {
+	optional string name = 1;
+	optional string value = 2;
+	repeated string choices = 3;
+}
+
+message ImagePrototype {
+	optional string name = 1;
+	optional int32 channels = 2;
+}
+
+message Error {
+	optional string msg = 1;
+}
+
+message RequestInference {
+	optional Model model = 1;
+	repeated Image images = 2;
+}
+
+message RespondInference {
+	optional int32 num_images = 1;
+	repeated Image images = 2;
+	optional int32 num_objects = 3;
+	repeated FieldValuePairAttrib objects = 4;
+}
+
+message Image {
+	optional int32 width = 1;
+	optional int32 height = 2;
+	optional int32 channels = 3;
+	optional bytes image = 4;
+}
+
+message BoolAttrib {
+	optional string name = 1;
+	repeated bool values = 2 [packed=true];
+}
+
+message IntAttrib {
+	optional string name = 1;
+	repeated int32 values = 2 [packed=true];
+}
+
+message FloatAttrib {
+	optional string name = 1;
+	repeated float values = 2 [packed=true];
+}
+
+message StringAttrib {
+	optional string name = 1;
+	repeated string values = 2;
+}
+
+message FieldValuePairAttrib {
+	optional string name = 1;
+	repeated FieldValuePair values = 2;
+}
+
+message FieldValuePair {
+	repeated IntAttrib int_attributes = 1;
+	repeated FloatAttrib float_attributes = 2;
+	repeated StringAttrib string_attributes = 3;
+	repeated FieldValuePairAttrib children = 4;
+}

@@ -157,7 +157,7 @@ class ImageProcessTCPHandler(socketserver.BaseRequestHandler):
         # Parse images
         img_list = []
         for byte_img in req.images:
-            img = np.fromstring(byte_img.image, dtype='<f4')     
+            img = np.fromstring(byte_img.image, dtype='<f4')
             height = byte_img.height
             width = byte_img.width
             channels = byte_img.channels
