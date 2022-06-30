@@ -13,6 +13,11 @@
 // limitations under the License.
 //*************************************************************************
 
+
+// https://learn.foundry.com/nuke/developers/130/ndkreference/Plugins/classDD_1_1Image_1_1Op.html#ad19589f141ad102c40fab9c26a87c5c8
+// https://learn.foundry.com/nuke/developers/130/ndkreference/Plugins/classDD_1_1Image_1_1Op.html#a009bdb3fc6cf7b4f33134c71585f2f4a
+// void DD::Image::Op::cached
+
 #include <cstring>
 #include <iostream>
 #include "MLClient.h"
