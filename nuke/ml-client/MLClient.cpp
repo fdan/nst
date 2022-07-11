@@ -413,6 +413,7 @@ bool MLClient::processImage(const std::string& hostStr, int port,
 
     // Parse image. TODO: Check for multiple inputs, different channel size
     for (int i = 0; i < node_inputs(); i++) {
+      const ChannelSet readChannels = input(i)->info().channels();
 
       std::stringstream ss1;
       ss1 << "\nimage: " << std::to_string(i) << "\n";
@@ -442,22 +443,15 @@ bool MLClient::processImage(const std::string& hostStr, int port,
       // Set our input bounding box, this is what our inputs can give us.
       // dan: this sounds ideal, we are getting the info per image
       Box imageBounds = inputIop->info();
-
-//      std::stringstream ss3;
-//      ss3 << "\nr: " << std::to_string(imageBounds.r());
-//      ss3 << "\nt: " << std::to_string(imageBounds.t());
-//      ss3 << "\n";
-//      MLClientComms::Vprint(ss3.str());
-
       const int fx = imageBounds.x();
       const int fy = imageBounds.y();
       const int fr = imageBounds.r();
       const int ft = imageBounds.t();
 
       // Request our default channels, for our own bounding box
-      inputIop->request(fx, fy, fr, ft, kDefaultChannels, 0);
+      inputIop->request(fx, fy, fr, ft, readChannels, 0);
       // Let's assume everything went fine, and fetch our plane
-      ImagePlane plane(imageBounds, /*packed*/ true, kDefaultChannels, kDefaultNumberOfChannels);
+      ImagePlane plane(imageBounds, /*packed*/ true, readChannels, readChannels.size());
       inputIop->fetchPlane(plane);
 
       // Sanity check that that the plane was filled successfully, and nothing
@@ -476,16 +470,12 @@ bool MLClient::processImage(const std::string& hostStr, int port,
       // Set up our message
       mlserver::Image* image = requestInference->add_images();
 
-      const ChannelSet readChannels = input(i)->info().channels();
-
       image->set_width(fr);
       image->set_height(ft);
       image->set_channels(readChannels.size());
-//      image->set_channels(kDefaultNumberOfChannels);
 
       // Set up our temp contiguous buffer
       size_t byteBufferSize = fr * ft * readChannels.size() * sizeof(float);
-//      size_t byteBufferSize = fr * ft * kDefaultNumberOfChannels * sizeof(float);
       if (byteBufferSize == 0) {
         errorMsg = "Image size is zero.";
         return false;
@@ -500,7 +490,10 @@ bool MLClient::processImage(const std::string& hostStr, int port,
       // expected way.
       float* floatBuffer = (float*)byteBuffer;
       for (int z = 0; z < readChannels.size(); z++) {
-//      for (int z = 0; z < kDefaultNumberOfChannels; z++) {
+
+      std::stringstream ss4;
+      ss4 << "\nchannel:: " << std::to_string(z);
+      MLClientComms::Vprint(ss4.str());
         const int chanStride = z * fr * ft;
 
         for (int ry = fy; ry < ft; ry++) {

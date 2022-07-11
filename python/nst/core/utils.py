@@ -41,9 +41,14 @@ def get_vgg(engine, model_path):
     return vgg, do_cuda
 
 
-def rescale_tensor(tensor, scale_factor):
+def rescale_tensor(tensor, scale_factor, requires_grad=False):
     b, c, w, h = tensor.size()
-    tensor = torch.nn.functional.interpolate(tensor, size=[int(w*scale_factor), int(h*scale_factor)], mode='bilinear')
+    tensor = torch.nn.functional.interpolate(tensor, size=[int(w*scale_factor), int(h*scale_factor)],
+                                             mode='bilinear')
+
+    if requires_grad:
+        tensor = Variable(tensor.data.clone(), requires_grad=True)
+
     return tensor
 
 

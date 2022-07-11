@@ -7,38 +7,49 @@ from torch import optim
 from . import guides
 from . import vgg
 from . import utils
-import nst.core as core
+import nst.settings as settings
 
 # https://pytorch.org/docs/stable/notes/randomness.html
 torch.manual_seed(0)
 torch.cuda.manual_seed(0)
-
 torch.backends.cudnn.deterministic = True
 torch.backends.cudnn.benchmark = False
 torch.backends.cudnn.enabled=False
 
 
+import torch
 
+
+class TorchStyle(object):
+    def __init__(self, tensor, alpha=torch.zeros(0), target_map=torch.zeros(0)):
+        self.tensor = tensor
+        self.alpha = alpha
+        self.target_map = target_map
+        self.scale = 1.0
 
 
 class Nst(torch.nn.Module):
     def __init__(self):
         super(Nst, self).__init__()
         self.vgg = vgg.VGG()
-        self.content = None
+        self.content = torch.zeros(0)
         self.content_scale = 1.0
         self.styles = []
-        self.opt_tensor = None
+        self.opt_tensor = torch.zeros(0)
         self.opt_guides = []
         self.optimiser = None
-        self.settings = core.NstSettings()
+        self.settings = settings.NstSettings()
 
     def prepare(self):
+        b, c, w, h = self.opt_tensor.size()
+        self.settings.opt_orig_scale = [w, h]
+
         if self.settings.cuda:
             self.settings.cuda_device = utils.get_cuda_device()
 
         for param in self.vgg.parameters():
             param.requires_grad = False
+
         if self.settings.engine == 'gpu':
             self.vgg.cuda()
             self.settings.cuda = True
@@ -48,19 +59,30 @@ class Nst(torch.nn.Module):
             self.vgg.load_state_dict(torch.load(self.settings.model_path))
             self.settings.cuda = False
 
-        if self.settings.optimiser_name == 'lbfgs':
-            self.optimiser = optim.LBFGS([self.opt_tensor], lr=self.settings.learning_rate)
-        elif self.settings.optimiser_name == 'adam':
-            self.optimiser = optim.Adam([self.opt_tensor], lr=self.settings.learning_rate)
-
         # handle rescale of tensors here
-        if self.settings.scale != 1:
+        if self.settings.scale != 1.0:
             self.content = utils.rescale_tensor(self.content, self.settings.scale)
-            self.opt_tensor = utils.rescale_tensor(self.opt_tensor, self.settings.scale)
+
+            self.opt_tensor = utils.rescale_tensor(self.opt_tensor, self.settings.scale, requires_grad=True)
 
             for style in self.styles:
                 i = self.styles.index(style)
                 self.styles[i].tensor = utils.rescale_tensor(style.tensor, self.settings.scale)
+
+                if self.styles[i].alpha.numel() != 0:
+                    self.styles[i].alpha = utils.rescale_tensor(style.alpha, self.settings.scale)
+
+                if self.styles[i].target_map.numel() != 0:
+                    self.styles[i].target_map = utils.rescale_tensor(style.target_map, self.settings.scale)
+
+        if self.settings.optimiser == 'lbfgs':
+            print('optimiser is lbfgs')
+            self.optimiser = optim.LBFGS([self.opt_tensor], lr=self.settings.learning_rate)
+        elif self.settings.optimiser == 'adam':
+            print('optimiser is adam')
+            self.optimiser = optim.Adam([self.opt_tensor], lr=self.settings.learning_rate)
+        else:
+            raise Exception("unsupported optimiser:", self.settings.optimiser)
 
         content_guide = guides.ContentGuide(self.content, self.vgg, self.settings.content_layer,
                                             self.settings.content_layer_weight, self.settings.cuda_device)
@@ -71,7 +93,7 @@ class Nst(torch.nn.Module):
         style_guide = guides.StyleGuide(self.styles, self.vgg, self.settings.style_mips,
                                         self.settings.pyramid_scale_factor, self.settings.style_mip_weights,
                                         self.settings.style_layers, self.settings.style_layer_weights,
-                                        self.settings.cuda_device, scale=1.0)
+                                        self.settings.cuda_device)
 
         style_guide.prepare()
         self.opt_guides.append(style_guide)
@@ -117,13 +139,17 @@ class Nst(torch.nn.Module):
                     msg += 'memory used: %s of %s' % (max_mem_cached, max_memory)
                 print(msg)
 
-                # print(1.1, self.opt_tensor[0][0][10][10])
             return loss
 
         if self.settings.iterations:
             max_iter = int(self.settings.iterations)
             while n_iter[0] <= max_iter:
                 self.optimiser.step(closure)
+
+        if self.settings.scale != 1.0:
+            if self.settings.rescale_output == True:
+                self.opt_tensor = torch.nn.functional.interpolate(self.opt_tensor, size=self.settings.opt_orig_scale, mode='bilinear')
+                # tensor = Variable(tensor.data.clone(), requires_grad=True)
 
         return self.opt_tensor
 

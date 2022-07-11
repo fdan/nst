@@ -162,8 +162,10 @@ class StyleGuide(OptGuide):
                                                         pyramid_scale_factor=self.pyramid_scale_factor)
 
             style_activations = []
+            # print('style', style.alpha)
             for layer_activation_pyramid in self.vgg(style_pyramid, self.layers, mask=style.alpha):
                 style_activations.append(layer_activation_pyramid)
+            # print('end style')
 
             vgg_layer_index = 0
             for vgg_layer in style_activations:
@@ -225,7 +227,6 @@ class StyleGuide(OptGuide):
 
             # if a target map is provided, apply it to the gradients
             if torch.is_tensor(self.target_maps[index]):
-                print('applying target map')
                 b, c, w, h = opt_tensor.grad.size()
 
                 for i in range(0, c):

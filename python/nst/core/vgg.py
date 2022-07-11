@@ -86,6 +86,7 @@ class VGG(nn.Module):
 
             masked_activations = layer_activations.clone()
 
+            # todo: this can be done better with torch index operations such as index_copy_
             for i in range(0, c):
                 masked_activations[0][i] *= mask_scaled[0][0]
                 # masked_activations[0][i] *= mask_normalised[0][0]

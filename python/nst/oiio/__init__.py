@@ -11,14 +11,16 @@ from . import utils
 
 from nst.core import model, loss
 from nst.core import utils as core_utils
-from nst import core
-
+import nst.settings as settings
 
 class StyleWriter(object):
 
-    def __init__(self, styles: List[core.StyleImage], opt_image: core.Image,
-                 content: core.Image=None):
-        self.settings = core.WriterSettings()
+    def __init__(self,
+                 styles: List[settings.StyleImage]=None,
+                 opt_image: settings.Image=None,
+                 content: settings.Image=None):
+
+        self.settings = settings.WriterSettings()
         self.settings.styles = styles
         self.settings.opt_image = opt_image
         self.settings.content = content
@@ -64,9 +66,6 @@ class StyleWriter(object):
 
         self.nst.styles = self.prepare_styles()
         self.nst.prepare()
-        # print(1.1, self.settings)
-        # print("\n\n")
-        # print(1.2, self.nst.settings)
         assert self.settings.core == self.nst.settings
 
         # call the forward method of the model, i.e. run inference
@@ -86,9 +85,10 @@ class StyleWriter(object):
             style_tensor = utils.image_to_tensor(style.rgb_filepath,
                                                  self.settings.core.cuda,
                                                  colorspace=style.colorspace)
-            s = core.TorchStyle(style_tensor)
+
+            s = model.TorchStyle(style_tensor)
             if style.alpha_filepath:
-                s.in_mask = utils.image_to_tensor(style.alpha_filepath,
+                s.alpha = utils.image_to_tensor(style.alpha_filepath,
                                                   self.settings.core.cuda,
                                                   raw=True)
             if style.target_map_filepath:
@@ -107,6 +107,7 @@ class StyleWriter(object):
     def prepare_opt(self):
         opt_tensor = utils.image_to_tensor(self.settings.opt_image.rgb_filepath, self.settings.core.cuda,
                                        colorspace=self.settings.opt_image.colorspace)
+
         opt_tensor = Variable(opt_tensor.data.clone(), requires_grad=True)
         return opt_tensor
 

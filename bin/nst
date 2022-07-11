@@ -8,9 +8,11 @@ def main():
     p = OptionParser()
     p.add_option("", "--load", dest='load_file', action='store')
     opts, args = p.parse_args()
-    style_imager = StyleWriter.load(opts.load_file)
-    print(style_imager)
-    style_imager.write_exr()
+
+    style_writer = StyleWriter()
+    style_writer.load(opts.load_file)
+    print(style_writer)
+    style_writer.write_exr()
 
 
 if __name__ == "__main__":

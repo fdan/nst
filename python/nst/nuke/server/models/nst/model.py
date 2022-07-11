@@ -12,9 +12,9 @@ from torchvision import transforms
 import torch.nn.functional as F
 from torch.autograd import Variable
 
-from nst.core.model import Nst
+from nst.core.model import Nst, TorchStyle
 import nst.core.utils as core_utils
-from nst.core import TorchStyle, Image, StyleImage, NstSettings, WriterSettings
+from nst.settings import Image, StyleImage, NstSettings, WriterSettings
 
 class Model(BaseModel):
 
@@ -36,17 +36,23 @@ class Model(BaseModel):
                         "scale",
                         "iterations",
                         "log_iterations",
+                        "enable_update",
 
                         # farm related
                         "farm_engine",
                         "farm_optimiser",
+                        "farm_learning_rate",
+                        "farm_scale",
+                        "farm_iterations",
                         "content_fp",
                         "opt_fp",
+                        "out_fp",
                         "style1_fp",
+                        "style1_target_fp",
                         "style2_fp",
+                        "style2_target_fp",
                         "style3_fp",
-                        "style_targets_fp",
-                        "out_fp"
+                        "style3_target_fp"
                         )
 
         self.buttons = ("run", "farm")
@@ -77,10 +83,12 @@ class Model(BaseModel):
         self.scale = 1.0
         self.iterations = 5
         self.log_iterations = 1
+        self.enable_update = 1
 
         # farm related
         self.farm_engine = "cpu"
         self.farm_optimiser = "lbfgs"
+        self.farm_learning_rate = ""
         self.content_fp = ""
         self.opt_fp = ""
         self.style1_fp = ""
@@ -91,6 +99,8 @@ class Model(BaseModel):
         self.style3_target_fp = ""
         self.style_targets_fp = ""
         self.out_fp = ""
+        self.farm_scale = 1.0
+        self.farm_iterations = 500
 
         # button states
         self.run = False
@@ -127,32 +137,34 @@ class Model(BaseModel):
         style1.rgb_filepath = self.style1_fp
         style1.target_map = self.style1_target_fp
 
-        style2 = StyleImage()
-        style2.rgb_filepath = self.style2_fp
-        style2.target_map = self.style2_target_fp
+        # style2 = StyleImage()
+        # style2.rgb_filepath = self.style2_fp
+        # style2.target_map = self.style2_target_fp
+        #
+        # style3 = StyleImage()
+        # style3.rgb_filepath = self.style3_fp
+        # style3.target_map = self.style3_target_fp
 
-        style3 = StyleImage()
-        style3.rgb_filepath = self.style3_fp
-        style3.target_map = self.style3_target_fp
-
-        writer_settings.core = nst_settings
-        writer_settings.styles = [style1, style2, style3]
-        writer_settings.content = content
-        writer_settings.opt_image = opt_image
-        writer_settings.out = self.out_fp
+        # writer_settings.core = nst_settings
+        # writer_settings.styles = [style1, style2, style3]
+        # writer_settings.content = content
+        # writer_settings.opt_image = opt_image
+        # writer_settings.out = self.out_fp
 
         self.nst = Nst()
-        self.nst.settings = writer_settings
+        self.nst.settings = nst_settings
 
 
     def inference(self, image_list: List[torch.Tensor]) -> List[torch.Tensor]:
         print('inference, run:', self.run)
 
-        # if not self.run:
-        #     print('inference was called but run is inactive, passing through content image')
-        #     return [image_list[0]]
+        if not self.enable_update:
+            print('inference was called but run is inactive, passing through content image')
+            return [image_list[0]]
 
         self.prepare_nst()
+
+        print(self.nst.settings)
 
         if self.engine == "gpu":
             cuda = True
@@ -176,12 +188,11 @@ class Model(BaseModel):
         except:
             raise RuntimeError("An optimisation image must be given")
 
-
         try:
             style1_np = image_list[2]
             style1_tensor = torch.Tensor(style1_np.copy())
             style1_tensor = style1_tensor.transpose(0, 2)
-            style1_tensor = style1_tensor[1::]
+            style1_tensor = style1_tensor[:3:]
             style1_tensor = style1_tensor.transpose(0, 2)
             style1_tensor = color_in(style1_tensor, do_cuda=cuda)
 
@@ -190,22 +201,20 @@ class Model(BaseModel):
             style1_alpha_tensor[0] = style1_alpha_tensor[3]
             style1_alpha_tensor[1] = style1_alpha_tensor[3]
             style1_alpha_tensor[2] = style1_alpha_tensor[3]
-            style1_alpha_tensor = style1_alpha_tensor[1::]
+            style1_alpha_tensor = style1_alpha_tensor[:3:]
             style1_alpha_tensor = style1_alpha_tensor.transpose(0, 2)
             style1_alpha_tensor = color_in(style1_alpha_tensor, do_cuda=cuda, raw=True)
+
+            style1_target_np = image_list[3]
+            style1_target_tensor = torch.Tensor(style1_target_np.copy())
+            style1_target_tensor = color_in(style1_target_tensor, do_cuda=cuda, raw=True)
+
             style1 = TorchStyle(style1_tensor, style1_alpha_tensor)
+            style1.target_map = style1_target_tensor
+            self.nst.styles.append(style1)
         except:
             raise RuntimeError("There must be at least one style image")
 
-        try:
-            style1_target_np = image_list[2]
-            style1_target_tensor = torch.Tensor(style1_target_np)
-            style1_target_tensor = color_in(style1_target_tensor, do_cuda=cuda, raw=True)
-        except:
-            style1_target_tensor = torch.zeros(0)
-        finally:
-            style1.target_map = style1_target_tensor
-            self.nst.styles.append(style1)
         #
         #
         # try:
@@ -251,11 +260,11 @@ class Model(BaseModel):
         #         style3.target_map = style3_target_tensor
         #         self.nst.styles.append(style3)
 
-        self.nst.prepare()
-        result_tensor = self.nst()
-        result_np = color_out(result_tensor)
-
-        return [result_np]
+        # self.nst.prepare()
+        # result_tensor = self.nst()
+        # result_np = color_out(result_tensor)
+        # return [result_np]
+        return [image_list[0]]
 
 
 def color_in(tensor, do_cuda: bool, raw: bool=False) -> torch.Tensor:
