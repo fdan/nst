@@ -108,7 +108,6 @@ class Model(BaseModel):
 
     def prepare_nst(self):
         nst_settings = NstSettings()
-        writer_settings = WriterSettings()
 
         nst_settings.cuda = True if self.engine == "gpu" else False
         nst_settings.engine = self.engine
@@ -126,30 +125,6 @@ class Model(BaseModel):
         nst_settings.scale = self.scale
         nst_settings.iterations = self.iterations
         nst_settings.log_iterations = self.log_iterations
-
-        content = Image()
-        content.rgb_filepath = self.content_fp
-
-        opt_image = Image()
-        opt_image.rgb_filepath = self.opt_fp
-
-        style1 = StyleImage()
-        style1.rgb_filepath = self.style1_fp
-        style1.target_map = self.style1_target_fp
-
-        # style2 = StyleImage()
-        # style2.rgb_filepath = self.style2_fp
-        # style2.target_map = self.style2_target_fp
-        #
-        # style3 = StyleImage()
-        # style3.rgb_filepath = self.style3_fp
-        # style3.target_map = self.style3_target_fp
-
-        # writer_settings.core = nst_settings
-        # writer_settings.styles = [style1, style2, style3]
-        # writer_settings.content = content
-        # writer_settings.opt_image = opt_image
-        # writer_settings.out = self.out_fp
 
         self.nst = Nst()
         self.nst.settings = nst_settings

@@ -12,7 +12,7 @@ class Image(object):
 class StyleImage(Image):
     def __init__(self):
         super(StyleImage, self).__init__()
-        self.alpha_filepath = ''
+        self.rgba_filepath = ''
         self.target_map_filepath = ''
         self.colorspace = 'srgb_texture'
 

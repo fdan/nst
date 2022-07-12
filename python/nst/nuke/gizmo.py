@@ -53,18 +53,18 @@ def create_expressions(mlc):
 
     # farm
     mlc.knob('farm_engine').setValue('[python {nuke.thisNode().parent()[\'engine_f\'].value().lower()}]')
-    mlc.knob('farm_optimiser').setValue('[python {nuke.thisNode().parent()[\'optimiser_f\'].value().lower()}]')
+    mlc.knob('farm_optimiser').setValue('[python {nuke.thisNode().parent()[\'optimiser_f\'].value().lower().replace(\'-\', \'\')}]')
     mlc.knob('farm_learning_rate').setValue('[python {nuke.thisNode().parent()[\'learning_rate_f\'].value()}]')
     mlc.knob('farm_scale').setExpression('[python {nuke.thisNode().parent()[\'scale_f\'].getValue()}]')
     mlc.knob('farm_iterations').setExpression('[python {nuke.thisNode().parent()[\'epochs_f\'].getValue()}]')
 
-    mlc.knob('content_fp').setValue('[python {nuke.thisNode().input(0).knob(\'file\').value()}]')
-    mlc.knob('opt_fp').setValue('[python {nuke.thisNode().input(1).knob(\'file\').value()}]')
-    mlc.knob('out_fp').setValue('[python {nuke.thisNode().parent().dependent()[0].knob(\'file\').value()}]')
-    mlc.knob('style1_fp').setValue('[python {nuke.thisNode().input(2).knob(\'file\').value()}]')
-    mlc.knob('style1_target_fp').setValue('[python {nuke.thisNode().input(3).knob(\'file\').value()}]')
-    mlc.knob('style2_fp').setValue('[python {nuke.thisNode().input(4).knob(\'file\').value()}]')
-    mlc.knob('style2_target_fp').setValue('[python {nuke.thisNode().input(5).knob(\'file\').value()}]')
-    mlc.knob('style3_fp').setValue('[python {nuke.thisNode().input(6).knob(\'file\').value()}]')
-    mlc.knob('style3_target_fp').setValue('[python {nuke.thisNode().input(7).knob(\'file\').value()}]')
+    mlc.knob('content_fp').setValue('[python {nuke.thisNode().input(0).knob(\'file\').getEvaluatedValue()}]')
+    mlc.knob('opt_fp').setValue('[python {nuke.thisNode().input(1).knob(\'file\').getEvaluatedValue()}]')
+    mlc.knob('out_fp').setValue('[python {nuke.thisNode().parent().dependent()[0].knob(\'file\').getEvaluatedValue()}]')
+    mlc.knob('style1_fp').setValue('[python {nuke.thisNode().input(2).knob(\'file\').getEvaluatedValue()}]')
+    mlc.knob('style1_target_fp').setValue('[python {nuke.thisNode().input(3).knob(\'file\').getEvaluatedValue()}]')
+    mlc.knob('style2_fp').setValue('[python {nuke.thisNode().input(4).knob(\'file\').getEvaluatedValue()}]')
+    mlc.knob('style2_target_fp').setValue('[python {nuke.thisNode().input(5).knob(\'file\').getEvaluatedValue()}]')
+    mlc.knob('style3_fp').setValue('[python {nuke.thisNode().input(6).knob(\'file\').getEvaluatedValue()}]')
+    mlc.knob('style3_target_fp').setValue('[python {nuke.thisNode().input(7).knob(\'file\').getEvaluatedValue()}]')
 

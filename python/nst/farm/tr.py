@@ -75,6 +75,9 @@ def submit(settings, service_key, job_name='nst_job'):
 
 
 def nuke_submit(node):
+    nst_inputs = {'content': 0, 'opt': 1, 'style1': 2, 'style1_target': 3, 'style2': 4,
+                  'style2_target': 5, 'style3': 6, 'style3_target': 7}
+
     c = [x for x in node.nodes() if x.Class() == "MLClient"]
     assert len(c) == 1
     mlc = c[0]
@@ -84,17 +87,21 @@ def nuke_submit(node):
     style1 = settings.StyleImage()
     style1.rgba_filepath = mlc.knob('style1_fp').value()
     style1.target_map_filepath = mlc.knob('style1_target_fp').value()
+    ws.styles = [style1]
 
-    # todo: check if inputs are connected
-    style2 = settings.StyleImage()
-    style2.rgba_filepath = mlc.knob('style2_fp').value()
-    style2.target_map_filepath = mlc.knob('style2_target_fp').value()
+    if node.input(nst_inputs['style2']):
+        style2 = settings.StyleImage()
+        style2.rgba_filepath = mlc.knob('style2_fp').value()
+        if node.input(nst_inputs['style2_target']):
+            style2.target_map_filepath = mlc.knob('style2_target_fp').value()
+        ws.styles.append(style2)
 
-    style3 = settings.StyleImage()
-    style3.rgba_filepath = mlc.knob('style3_fp').value()
-    style3.target_map_filepath = mlc.knob('style3_target_fp').value()
-
-    ws.styles = [style1, style2, style3]
+    if node.input(nst_inputs['style3']):
+        style3 = settings.StyleImage()
+        style3.rgba_filepath = mlc.knob('style3_fp').value()
+        if node.input(nst_inputs['style3_target']):
+            style3.target_map_filepath = mlc.knob('style3_target_fp').value()
+        ws.styles.append(style3)
 
     content = settings.Image()
     content.rgb_filepath = mlc.knob('content_fp').value()
@@ -108,17 +115,17 @@ def nuke_submit(node):
 
     ws.core.engine = mlc.knob('farm_engine').value()
     ws.core.optimiser = mlc.knob('farm_optimiser').value()
-    ws.core.pyramid_scale_factor = mlc.knob('pyramid_scale_factor').value()
-    ws.core.style_mips = mlc.knob('style_mips').value()
-    ws.core.style_mip_weights = mlc.knob('style_mip_weights').value()
-    ws.core.style_layers = mlc.knob('style_layers').value()
-    ws.core.style_layer_weights = mlc.knob('style_layer_weights').value()
+    ws.core.pyramid_scale_factor = float(mlc.knob('pyramid_scale_factor').value())
+    ws.core.style_mips = int(mlc.knob('style_mips').value())
+    ws.core.style_mip_weights = [float(x) for x in mlc.knob('style_mip_weights').value().replace(' ', '').split(',')]
+    ws.core.style_layers = mlc.knob('style_layers').value().replace(' ', '').split(',')
+    ws.core.style_layer_weights = [float(x) for x in mlc.knob('style_layer_weights').value().replace(' ', '').split(',')]
     ws.core.content_layer = mlc.knob('content_layer').value()
-    ws.core.content_layer_weight = mlc.knob('content_layer_weight').value()
-    ws.core.content_mips = mlc.knob('content_mips').value()
-    ws.core.learning_rate = mlc.knob('farm_learning_rate').value()
-    ws.core.scale = mlc.knob('farm_scale').value()
-    ws.core.iterations = mlc.knob('farm_iterations').value()
+    ws.core.content_layer_weight = float(mlc.knob('content_layer_weight').value())
+    ws.core.content_mips = int(mlc.knob('content_mips').value())
+    ws.core.learning_rate = float(mlc.knob('farm_learning_rate').value())
+    ws.core.scale = float(mlc.knob('farm_scale').value())
+    ws.core.iterations = int(mlc.knob('farm_iterations').value())
     ws.core.log_iterations = 1
 
     output_dir = os.path.abspath(os.path.join(ws.out, os.pardir))
@@ -131,9 +138,6 @@ def nuke_submit(node):
     # 4. cleanup, remove temp files
 
     # write out media cache for oiio
-
-    nst_inputs = {'content': 0, 'opt': 1, 'style1': 2, 'style1_target': 3, 'style2': 4, 'style2_target': 5,
-                  'style3': 6, 'style3_target': 7}
 
     varying_inputs = []
     if node.input(nst_inputs['content']):

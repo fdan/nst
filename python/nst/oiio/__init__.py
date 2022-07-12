@@ -82,15 +82,13 @@ class StyleWriter(object):
         styles = []
 
         for style in self.settings.styles:
-            style_tensor = utils.image_to_tensor(style.rgb_filepath,
-                                                 self.settings.core.cuda,
-                                                 colorspace=style.colorspace)
+            style_tensor, style_alpha = utils.style_image_to_tensors(style.rgba_filepath,
+                                                                          self.settings.core.cuda,
+                                                                          colorspace=style.colorspace)
 
             s = model.TorchStyle(style_tensor)
-            if style.alpha_filepath:
-                s.alpha = utils.image_to_tensor(style.alpha_filepath,
-                                                  self.settings.core.cuda,
-                                                  raw=True)
+            s.alpha = style_alpha
+
             if style.target_map_filepath:
                 s.target_map = utils.image_to_tensor(style.target_map_filepath,
                                                      self.settings.core.cuda,
