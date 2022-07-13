@@ -56,7 +56,7 @@ pip install --no-cache-dir kornia
 %environment
 export PATH=/mnt/ala/research/danielf/git/nst/bin:$PATH
 export PYTHONPATH=/mnt/ala/research/danielf/git/nst/python:$PYTHONPATH
-export NST_VGG_MODEL=/mnt/ala/research/danielf/git/nst/bin/Models/vgg_conv.pth
+export NST_VGG_MODEL=/mnt/ala/research/danielf/git/nst/models/vgg_conv.pth
 
 %startscript
 conda activate pytorch

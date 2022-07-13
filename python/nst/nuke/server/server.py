@@ -28,12 +28,19 @@ import numpy as np
 
 from message_pb2 import *
 
+ML_SERVER_DIR = os.getenv('ML_SERVER_DIR')
+
 class MLTCPServer(socketserver.TCPServer):
     def __init__(self, server_address, handler_class, auto_bind=True):
         self.verbose = True
+        model_dir = os.path.join(ML_SERVER_DIR, 'models')
+        os.chdir(model_dir)
+
         # Each directory in models/ containing a model.py file is an available ML model
-        self.available_models = [name for name in next(os.walk('models'))[1]
-            if os.path.isfile(os.path.join('models', name, 'model.py'))]
+        # self.available_models = [name for name in next(os.walk('models'))[1]
+        #     if os.path.isfile(os.path.join('models', name, 'model.py'))]
+        self.available_models = [name for name in next(os.walk(model_dir))[1]
+            if os.path.isfile(os.path.join(model_dir, name, 'model.py'))]
         self.available_models.sort()
         self.models = {}
         for model in self.available_models:

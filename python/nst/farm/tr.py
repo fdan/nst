@@ -8,18 +8,22 @@ import os
 import stat
 
 
-def write_cmd_file(output_dir):
+def write_cmd_file(output_dir, frame=None):
     cmd = []
     cmd += ['singularity']
     cmd += ['exec']
     cmd += ['--nv']
     cmd += ['--bind']
     cmd += ['/mnt/ala']
-    cmd += ['/mnt/ala/research/danielf/git/nst/python/nst/oiio/environment/singularity/nst_oiio.sif']
+    cmd += ['/mnt/ala/research/danielf/git/nst/environments/oiio/singularity/nst_oiio.sif']
     cmd += ['/mnt/ala/research/danielf/git/nst/bin/nst']
 
     cmd += ['--load']
-    cmd += [os.path.abspath(os.path.join(output_dir, 'nst.json'))]
+
+    if frame:
+        cmd += [os.path.abspath(os.path.join(output_dir, 'nst.%04d.json' % frame))]
+    else:
+        cmd += [os.path.abspath(os.path.join(output_dir, 'nst.json'))]
 
     cmd_sh = '#! /usr/bin/bash\n\n' + ' '.join(cmd) + '\n'
 
@@ -30,7 +34,10 @@ def write_cmd_file(output_dir):
         if os.path.isdir(output_dir):
             pass
 
-    cmd_fp = os.path.abspath(os.path.join(output_dir, 'cmd.sh'))
+    if frame:
+        cmd_fp = os.path.abspath(os.path.join(output_dir, 'cmd.sh'))
+    else:
+        cmd_fp = os.path.abspath(os.path.join(output_dir, 'cmd.%04d.sh' % frame))
 
     # python3
     # with open(cmd_fp, mode="wt", encoding="utf-8") as file:
@@ -57,7 +64,7 @@ def submit(settings, service_key, job_name='nst_job'):
     envkey = []
     envkey += ['setenv PYTHONPATH=/home/13448206/git/nst/python:/home/13448206/git/tractor/python:/opt/oiio/lib/python3.7/site-packages:$PYTHONPATH']
     envkey += ['setenv TRACTOR_ENGINE=frank:5600']
-    envkey += ['setenv NST_VGG_MODEL=/home/13448206/git/nst/bin/Models/vgg_conv.pth']
+    envkey += ['setenv NST_VGG_MODEL=/mnt/ala/research/danielf/git/nst/models/vgg_conv.pth']
     envkey += ['setenv OCIO=/home/13448206/git/OpenColorIO-Configs-master/aces_1.0.3/config.ocio']
     job.envkey = envkey
     job.service = service_key
@@ -128,9 +135,7 @@ def nuke_submit(node):
     ws.core.iterations = int(mlc.knob('farm_iterations').value())
     ws.core.log_iterations = 1
 
-    output_dir = os.path.abspath(os.path.join(ws.out, os.pardir))
-    nst_json = os.path.abspath(os.path.join(output_dir, 'nst.json'))
-    ws.save(nst_json)
+
 
     # 1. determine which inputs are single frame and which are image sequences
     # 2. tr task/s to write out inputs for frame range
@@ -176,41 +181,69 @@ def nuke_submit(node):
     envkey_nuke = ['rez-pkgs=nuke-12']
     envkey_nuke += ['setenv PYTHONPATH=/mnt/ala/research/danielf/git/nst/python:$PYTHONPATH']
     envkey_nuke += ['setenv NUKE_PATH=/mnt/ala/research/danielf/git/nst/nuke/build/ml-client:$NUKE_PATH']
-    envkey_nuke += ['setenv NST_VGG_MODEL=/mnt/ala/research/danielf/git/nst/bin/Models/vgg_conv.pth']
+    envkey_nuke += ['setenv NST_VGG_MODEL=/mnt/ala/research/danielf/git/nst/models/vgg_conv.pth']
 
-    if varying_inputs:
-        cmd_1 = ['$NUKE_BIN', '-X', varying_input_names, '-F', frames, nuke_script]
-        task_1 = job.newTask(title='nst_varying_input_cache')
-        command_1 = tractor.api.author.Command(argv=cmd_1, envkey=envkey_nuke)
-        task_1.addCommand(command_1)
+    cmd_1 = ['$NUKE_BIN', '-X', varying_input_names, '-F', frames, nuke_script]
+    task_1 = job.newTask(title='nst_varying_input_cache')
+    command_1 = tractor.api.author.Command(argv=cmd_1, envkey=envkey_nuke)
+    task_1.addCommand(command_1)
 
-    if static_inputs:
-        cmd_2 = ['$NUKE_BIN', '-X', static_input_names, '-F', "1", nuke_script]
-        task_2 = job.newTask(title='nst_static_input_cache')
-        command_2 = tractor.api.author.Command(argv=cmd_2, envkey=envkey_nuke)
-        task_2.addCommand(command_2)
+    cmd_2 = ['$NUKE_BIN', '-X', static_input_names, '-F', "1", nuke_script]
+    task_2 = job.newTask(title='nst_static_input_cache')
+    command_2 = tractor.api.author.Command(argv=cmd_2, envkey=envkey_nuke)
+    task_2.addCommand(command_2)
+    task_2.addChild(task_1)
 
     # oiio job
+    frame_list = eval_frames(frames)
+    for frame in frame_list:
+        ws.frame = frame
+        output_dir = os.path.abspath(os.path.join(ws.out, os.pardir))
+        nst_json = os.path.abspath(os.path.join(output_dir, 'nst.%04d.json' % frame))
+        ws.save(nst_json)
+        frame_cmd = write_cmd_file(output_dir, frame=frame)
+        frame_task = job.newTask(title="oiio_nst_job_%04d" % frame)
+        envkey_oiio = []
+        envkey_oiio += ['setenv PYTHONPATH=/mnt/ala/research/danielf/git/nst/python:/home/13448206/git/tractor/python:/opt/oiio/lib/python3.7/site-packages:$PYTHONPATH']
+        envkey_oiio += ['setenv TRACTOR_ENGINE=frank:5600']
+        envkey_oiio += ['setenv NST_VGG_MODEL=/mnt/ala/research/danielf/git/nst/models/vgg_conv.pth']
+        envkey_oiio += ['setenv OCIO=/mnt/ala/research/danielf/git/OpenColorIO-Configs-master/aces_1.0.3/config.ocio']
+        command_3 = tractor.api.author.Command(argv=frame_cmd, envkey=envkey_oiio)
+        frame_task.addCommand(command_3)
+        frame_task.addChild(task_2)
 
-    output_dir = os.path.abspath(os.path.join(ws.out, os.pardir))
-    cmd_3 = write_cmd_file(output_dir)
-    task_3 = job.newTask(title="oiio_nst_job")
-    envkey_oiio = []
-    envkey_oiio += ['setenv PYTHONPATH=/mnt/ala/research/danielf/git/nst/python:/home/13448206/git/tractor/python:/opt/oiio/lib/python3.7/site-packages:$PYTHONPATH']
-    envkey_oiio += ['setenv TRACTOR_ENGINE=frank:5600']
-    envkey_oiio += ['setenv NST_VGG_MODEL=/mnt/ala/research/danielf/git/nst/bin/Models/vgg_conv.pth']
-    envkey_oiio += ['setenv OCIO=/mnt/ala/research/danielf/git/OpenColorIO-Configs-master/aces_1.0.3/config.ocio']
-    command_3 = tractor.api.author.Command(argv=cmd_3, envkey=envkey_oiio)
-    task_3.addCommand(command_3)
-
-    if varying_inputs:
-        task_2.addChild(task_1)
-    if static_inputs:
-        task_3.addChild(task_2)
 
     print(job.asTcl())
 
     job.spool()
+
+def eval_frames(frames_list):
+    """
+    Return a list of all frame numbers to be rendered.
+    Step means every nth frame.
+    """
+    frames = []
+
+    token2 = frames_list.split('-')
+    if len(token2) == 2:
+        start = token2[0]
+        end = token2[1]
+        step = 1
+
+    token3 = end.split('x')
+    if len(token3) == 2:
+        end = token3[0]
+        step = token3[1]
+
+    frame_range = []
+    for i in range(int(start), int(end)+1):
+        frame_range.append(i)
+    frames += frame_range[::int(step)]
+
+    # remove any repeated frames
+    unique_frames = list(set(frames))
+    unique_frames.sort()
+    return unique_frames
 
 
 
