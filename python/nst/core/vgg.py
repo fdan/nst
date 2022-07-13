@@ -41,7 +41,7 @@ class VGG(nn.Module):
             self.pool4 = nn.AvgPool2d(kernel_size=pool_kernel_size, stride=pool_stride)
             self.pool5 = nn.AvgPool2d(kernel_size=pool_kernel_size, stride=pool_stride)
 
-    def forward(self, tensor_pyramid, out_keys, mask=None):
+    def forward(self, tensor_pyramid, out_keys, mask=torch.zeros(0)):
         """
         :param out_keys: [str]
         :return: [torch.Tensor]
@@ -75,7 +75,7 @@ class VGG(nn.Module):
             if layer_name not in out_keys:
                 return layer_activations
 
-            if not torch.is_tensor(mask):
+            if mask.numel() == 0:
                 return layer_activations
 
             mask_scaled = torch.nn.functional.interpolate(mask, size=(w, h))
@@ -86,6 +86,7 @@ class VGG(nn.Module):
 
             masked_activations = layer_activations.clone()
 
+            # todo: this can be done better with torch index operations such as index_copy_
             for i in range(0, c):
                 masked_activations[0][i] *= mask_scaled[0][0]
                 # masked_activations[0][i] *= mask_normalised[0][0]

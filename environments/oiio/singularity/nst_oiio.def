@@ -96,7 +96,7 @@ export PATH=/opt/conda/envs/pytorch/bin:$PATH
 #export PATH=/home/13448206/git/nst/bin:$PATH
 #export PYTHONPATH=/home/13448206/git/nst/python:/home/13448206/git/tractor/python:/opt/oiio/lib/python3.7/site-packages:$PYTHONPATH
 #export TRACTOR_ENGINE=frank:5600
-#export NST_VGG_MODEL=/home/13448206/git/nst/bin/Models/vgg_conv.pth
+#export NST_VGG_MODEL=/home/13448206/git/nst/models/vgg_conv.pth
 #export OCIO=/home/13448206/git/OpenColorIO-Configs-master/aces_1.0.3/config.ocio
 
 %startscript

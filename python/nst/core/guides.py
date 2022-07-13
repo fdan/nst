@@ -4,6 +4,7 @@ import torch.nn as nn
 
 from . import utils
 from . import loss
+from nst import core
 
 class OptGuide(nn.Module):
     def __init__(self, cuda=False):
@@ -147,21 +148,24 @@ class StyleGuide(OptGuide):
         for style in self.styles:
             tensor = style.tensor
 
-            if style.in_mask.nelement() != 0:
-                style_in_mask_tensor = style.in_mask
-            else:
-                style_in_mask_tensor = None
+            # if style.alpha.nelement() != 0:
+            #     style_alpha_tensor = style.alpha
+            # else:
+            #     style_alpha_tensor = None
 
-            if style.target_map.nelement() != 0:
+            if style.target_map.numel() != 0:
                 self.target_maps += [style.target_map] * len(self.layers)
             else:
                 self.target_maps += [None] * len(self.layers)
 
-            style_pyramid = utils.make_gaussian_pyramid(tensor, cuda=cuda, mips=self.style_mips, pyramid_scale_factor=self.pyramid_scale_factor)
+            style_pyramid = utils.make_gaussian_pyramid(tensor, cuda=cuda, mips=self.style_mips,
+                                                        pyramid_scale_factor=self.pyramid_scale_factor)
 
             style_activations = []
-            for layer_activation_pyramid in self.vgg(style_pyramid, self.layers, mask=style_in_mask_tensor):
+            # print('style', style.alpha)
+            for layer_activation_pyramid in self.vgg(style_pyramid, self.layers, mask=style.alpha):
                 style_activations.append(layer_activation_pyramid)
+            # print('end style')
 
             vgg_layer_index = 0
             for vgg_layer in style_activations:

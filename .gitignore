@@ -1,4 +1,5 @@
 .idea/
+cmake-build-debug/
 Models/*
 .ipynb_checkpoints/
 build/

@@ -1,26 +1,19 @@
 # import json
 # import os
-# import torch
-#
-#
-# class TorchStyle(object):
-#     def __init__(self, tensor, alpha=torch.zeros(0), target_map=torch.zeros(0)):
-#         self.tensor = tensor
-#         self.alpha = alpha
-#         self.target_map = target_map
-#         self.scale = 1.0
+# from platform import python_version
 #
 #
 # class Image(object):
-#     def __init__(self) -> None:
-#         self.rgb_filepath: str = ''
-#         self.colorspace: str = 'acescg'
+#     def __init__(self):
+#         self.rgb_filepath = ''
+#         self.colorspace = 'acescg'
 #
 #
 # class StyleImage(Image):
-#     def __init__(self) -> None:
+#     def __init__(self):
 #         super(StyleImage, self).__init__()
-#         self.alpha_filepath: str = ''
+#         self.alpha_filepath = ''
+#         self.rgba_filepath = ''
 #         self.target_map_filepath: str = ''
 #         self.colorspace: str = 'srgb_texture'
 #
@@ -34,7 +27,17 @@
 #
 #     def save(self, fp):
 #         pardir = os.path.abspath(os.path.join(fp, os.path.pardir))
-#         os.makedirs(pardir, exist_ok=True)
+#
+#         v = python_version().split('.')[0]
+#         if v == 3:
+#             os.makedirs(pardir, exist_ok=True)
+#         else:
+#             try:
+#                 os.makedirs(pardir)
+#             except:
+#                 if os.path.isdir(pardir):
+#                     pass
+#
 #         with open(fp, 'w') as outfile:
 #             json.dump(json.dumps(self.__dict__, default=lambda o: o.__dict__, indent=4), outfile)
 #
@@ -69,12 +72,12 @@
 #
 #
 # class WriterSettings(BaseSettings):
-#     def __init__(self) -> None:
+#     def __init__(self):
 #         super(WriterSettings, self).__init__()
 #         self.styles = [StyleImage()]
 #         self.content = Image()
 #         self.opt_image = Image()
-#         self.out: str = ''
+#         self.out = ''
 #         self.progressive_output = False
 #         self.progressive_ext = 'jpg'
 #         self.write_gradients = False

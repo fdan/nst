@@ -1,6 +1,7 @@
 """
 Repetitive utility functions that have nothing to do with style transfer
 """
+from typing import List
 import math
 import copy
 import subprocess
@@ -131,7 +132,109 @@ def tensor_to_image(tensor):
     return out_img
 
 
-def image_to_tensor(image: str, do_cuda: bool, resize:float=None, colorspace=None, sharpen:float=1.0, raw=False) -> torch.Tensor:
+
+def rgba_style_image_to_tensors(image: str, do_cuda: bool, resize: float=None, colorspace=None,
+                                raw=False) -> List[torch.Tensor]:
+
+    buf = ImageBuf(image)
+    rgba_np = buf.get_pixels()
+    # style1_np = image_list[2]
+    rgb_tensor = torch.Tensor(rgba_np.copy())
+    rgb_tensor = rgb_tensor.transpose(0, 2)
+    rgb_tensor = rgb_tensor[:3:]
+    rgb_tensor = rgb_tensor.transpose(0, 2)
+    # rgb_tensor = color_in(style1_tensor, do_cuda=cuda)
+
+    alpha_tensor = torch.Tensor(rgba_np.copy())
+    alpha_tensor = alpha_tensor.transpose(0, 2)
+    alpha_tensor[0] = alpha_tensor[3]
+    alpha_tensor[1] = alpha_tensor[3]
+    alpha_tensor[2] = alpha_tensor[3]
+    alpha_tensor = alpha_tensor[:3:]
+    alpha_tensor = alpha_tensor.transpose(0, 2)
+    # style1_alpha_tensor = color_in(style1_alpha_tensor, do_cuda=cuda, raw=True)
+
+    pass
+
+
+
+# new - handle rgba inputs, return alpha as a second tensor
+def style_image_to_tensors(image: str, do_cuda: bool, resize: float = None, colorspace=None) -> List[torch.Tensor]:
+    tensors = []
+
+    buf = ImageBuf(image)
+
+    print(1.1, image, buf.nchannels)
+
+    o_width = buf.oriented_full_width
+    o_height = buf.oriented_full_height
+
+    if resize:
+        n_width = int(float(o_width) * resize)
+        n_height = int(float(o_height) * resize)
+        buf = oiio.ImageBufAlgo.resize(buf, roi=ROI(0, n_width, 0, n_height, 0, 1, 0, 3))
+
+    if colorspace:
+        if colorspace != 'srgb_texture':
+            buf = oiio.ImageBufAlgo.colorconvert(buf, colorspace, 'srgb_texture')
+
+    if buf.nchannels == 3:
+        rgb_tensor = torch.Tensor(buf.get_pixels().copy())
+        rgb_tensor = transform_image_tensor(rgb_tensor, do_cuda)
+        tensors += [rgb_tensor]
+
+    elif buf.nchannels == 4:
+        rgb_tensor = torch.Tensor(buf.get_pixels().copy())
+        rgb_tensor = rgb_tensor.transpose(0, 2)
+        rgb_tensor = rgb_tensor[:3:]
+        rgb_tensor = rgb_tensor.transpose(0, 2)
+        rgb_tensor = transform_image_tensor(rgb_tensor, do_cuda)
+
+        alpha_tensor = torch.Tensor(buf.get_pixels().copy())
+        alpha_tensor = alpha_tensor.transpose(0, 2)
+        alpha_tensor[0] = alpha_tensor[3]
+        alpha_tensor[1] = alpha_tensor[3]
+        alpha_tensor[2] = alpha_tensor[3]
+        alpha_tensor = alpha_tensor[:3:]
+        alpha_tensor = alpha_tensor.transpose(0, 2)
+        alpha_tensor = transform_image_tensor(alpha_tensor, do_cuda, raw=True)
+        tensors += [rgb_tensor, alpha_tensor]
+
+    return tensors
+
+
+# new
+def transform_image_tensor(tensor: torch.Tensor, do_cuda: bool, raw=False) -> torch.Tensor:
+
+    tforms_ = []
+
+    #  turn to BGR
+    tforms_ += [transforms.Lambda(lambda x: x[torch.LongTensor([2, 1, 0])])]
+
+    if not raw:
+        # subtract imagenet mean
+        tforms_ += [transforms.Normalize(mean=[0.40760392, 0.45795686, 0.48501961], std=[1, 1, 1])]
+
+        # scale to imagenet values
+        tforms_ += [transforms.Lambda(lambda x: x.mul_(255.))]
+
+    tforms = transforms.Compose(tforms_)
+
+    tensor = torch.transpose(tensor, 2, 0)
+    tensor = torch.transpose(tensor, 2, 1)
+
+    tensor = tforms(tensor)
+
+    if do_cuda:
+        device = core_utils.get_cuda_device()
+        tensor = tensor.detach().to(torch.device(device))
+        return tensor.unsqueeze(0).cuda()
+    else:
+        return tensor.unsqueeze(0)
+
+
+# deprecate
+def image_to_tensor(image: str, do_cuda: bool, resize: float=None, colorspace=None, raw=False) -> torch.Tensor:
         # note: oiio implicitely converts to 0-1 floating point data here regardless of format:
         buf = ImageBuf(image)
 
@@ -141,32 +244,18 @@ def image_to_tensor(image: str, do_cuda: bool, resize:float=None, colorspace=Non
         if resize:
             n_width = int(float(o_width) * resize)
             n_height = int(float(o_height) * resize)
-            # print(2.0, image, resize, n_width, n_height)
             buf = oiio.ImageBufAlgo.resize(buf, roi=ROI(0, n_width, 0, n_height, 0, 1, 0, 3))
-        #
-        # if sharpen:
-        #     buf = oiio.ImageBufAlgo.unsharp_mask(buf, kernel="gaussian", width=50.0, contrast=1.0, threshold=0.0, roi=oiio.ROI.All, nthreads=0)
-        #
-        #     # based on the reduction in size, set an appropriate sharpening level for style transfer
-        #     # "good" sharpen values
-        #     #
-        #     # 4k: 50
-        #     # 2k: 27
-        #     # 1k: 12.8
-        #     # 512: 7.3
-        #     # 256: 4.3
-        #     #
-        #     # close enough to say, for each halving of image.x, halve sharpen filter width.
-        #     #
-        #     # however the initial sharpen filter width for the highest mip needs to be eyeballed by the user.  generally for nst, you want "sharper than you think is necessary".
 
         if colorspace:
             if colorspace != 'srgb_texture':
                 buf = oiio.ImageBufAlgo.colorconvert(buf, colorspace, 'srgb_texture')
 
-        return buf_to_tensor(buf, do_cuda, raw=raw)
+        tensor = buf_to_tensor(buf, do_cuda, raw=raw)
+
+        return tensor
 
 
+# deprecate
 def buf_to_tensor(buf: oiio.ImageBuf, do_cuda: bool, raw=False) -> torch.Tensor:
 
     tforms_ = []
