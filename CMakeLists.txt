@@ -10,6 +10,11 @@ rez_install_dirs(
 )
 
 rez_install_dirs(
+    nuke/gizmos
+    DESTINATION .
+)
+
+rez_install_dirs(
     bin
     DESTINATION .
     EXECUTABLE
