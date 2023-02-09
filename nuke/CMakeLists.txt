@@ -27,4 +27,8 @@ set( BUILDDATE_FULL "${BUILDDATE_FULL_INTERNAL}" CACHE STRING "Exact time of the
 
 #===------------------------------------------------------------------------===
 # Compile CMakeLists found in subdirectories
-add_subdirectory(ml-client)
+#add_subdirectory(ml-client)
+add_subdirectory(ml-client-live)
+#add_subdirectory(ml-client-live2)
+#add_subdirectory(live-render)
+#add_subdirectory(socket)

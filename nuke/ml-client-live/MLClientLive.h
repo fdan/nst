@@ -13,8 +13,10 @@
 // limitations under the License.
 //*************************************************************************
 
-#ifndef MLCLIENT_H
-#define MLCLIENT_H
+#ifndef MLCLIENTLIVE_H
+#define MLCLIENTLIVE_H
+
+#include <mutex>
 
 // Standard plug-in include files.
 #include "DDImage/PlanarIop.h"
@@ -29,6 +31,10 @@
 #include "MLClientComms.h"
 #include "MLClientModelManager.h"
 
+enum Status{ReadyToSend, Sending, Waiting, HasReceived};
+
+using namespace DD::Image;
+
 //! The Machine Learning (ML) Client plug-in connects Nuke to a Python server to apply ML models to images.
 /*! This plug-in can connect to a server (given a host and port), which responds
     with a list of available Machine Learning (ML) models and options.
@@ -36,7 +42,7 @@
     there the server can process the image by doing Machine Learning inference,
     finally the resulting image is sent back to Nuke.
 */
-class MLClient : public DD::Image::PlanarIop
+class MLClientLive : public DD::Image::PlanarIop
 {
 
 public:
@@ -46,6 +52,18 @@ public:
 
   static const char* const kDefaultHostName;
   static const int         kDefaultPortNumber;
+  bool killthread;
+  Status status;
+  int batch;
+  int hashCtr;
+  mlserver::RespondWrapper responseWrapper;
+
+  std::mutex m;
+  std::string _host;
+  int _port;
+  int iterations;
+  int batch_size;
+  int batches;
 
 private:
   static const DD::Image::ChannelSet kDefaultChannels;
@@ -53,10 +71,13 @@ private:
 
 public:
   //! Constructor. Initialize user controls to their default values.
-  MLClient(Node* node);
-  virtual ~MLClient();
+  MLClientLive(Node* node);
+  virtual ~MLClientLive();
 
 public:
+  void trigger();
+  void append(Hash& hash);
+
   // DDImage::Iop overrides
 
   //! The maximum number of input connections the operator can have.
@@ -98,6 +119,10 @@ public:
   int getNumNewKnobs();
   void setNumNewKnobs(int i);
 
+  bool getInferenceRequest(const std::string& hostStr, int port, std::string& errorMsg,
+                           mlserver::RequestInference* requestInference, bool clearCache,
+                           int batch_total, int batch_current);
+
 private:
   // Private functions for talking to the server
   //! Try connect to the server and set-up the relevant knobs. Return true on
@@ -109,14 +134,10 @@ private:
   //! valid.
   bool haveValidModelInfo() const;
 
-  //! Connect to server, then send inference request and read inference response.
-  //! Return true on success, false otherwise filling in the errorMsg.
-  bool processImage(const std::string& hostStr, int port, mlserver::RespondWrapper& responseWrapper, std::string& errorMsg);
-
   //! Parse the response messge from the server, and if it contains
   //! an image, attempt to copy the image to the imagePlane. Return
   //! true on success, false otherwise and fill in the error string.
-  bool renderOutputBuffer(mlserver::RespondWrapper& responseWrapper, DD::Image::ImagePlane& imagePlane, std::string& errorMsg);
+  bool fillImagePlane(DD::Image::ImagePlane& imagePlane, std::string& errorMsg);
 
   //! Return whether the dynamic knobs should be shown or not.
   bool getShowDynamic() const;
@@ -126,9 +147,7 @@ private:
   void restoreKnobValue(const std::string& knobName, const std::string& value);
 
 private:
-  std::string _host;
   bool _hostIsValid;
-  int _port;
   bool _portIsValid;
   int _chosenModel;
   bool _modelSelected;
@@ -146,4 +165,4 @@ private:
 
 };
 
-#endif // MLCLIENT_H
+#endif // MLCLIENTLIVE_H

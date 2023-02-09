@@ -1,6 +1,7 @@
 import torch
-import torch.nn.functional as F
 from torch.autograd import Variable # deprecated - use Tensor
+import torchvision.transforms.functional
+import math
 
 import numpy as np
 
@@ -52,10 +53,68 @@ def rescale_tensor(tensor, scale_factor, requires_grad=False):
     return tensor
 
 
-def make_gaussian_pyramid(img, mips=5, cuda=True, pyramid_scale_factor=0.63):
+def zoom_image(img, zoom):
+    if zoom == 1.0:
+        return img
+
+    if zoom >= 1:
+        return centre_crop_image(img, zoom)
+    else:
+        return tile(img, zoom)
+
+
+def tile(img, zoom, cuda=False):
+    # zoom out, i.e. zoom is between zero and one
+    b, c, old_width, old_height = img.size()
+    img = torch.nn.functional.interpolate(img, scale_factor=zoom)
+    b, c, new_width, new_height = img.size()
+
+    # determine how many tiles are needed
+    # does torchscript allow math?  need to use torch ceil?
+    x_tile = math.ceil(old_width / new_width)
+    y_tile = math.ceil(old_height / new_height)
+
+    img = img.tile((x_tile, y_tile))
+    img = torchvision.transforms.functional.center_crop(img, (old_width, old_height))
+
+    return img
+
+
+def centre_crop_image(img, zoom):
+    b, c, old_x, old_y = img.size()
+
+    if zoom != 1.0:
+        crop_width = int(old_x / zoom)
+        crop_height = int(old_y / zoom)
+        top = int((old_y - crop_height) / 2.)
+        left = int((old_x - crop_width) / 2.)
+        img = torchvision.transforms.functional.crop(img, top, left, crop_height, crop_width)
+
+    out_x = int(old_x)
+    out_y = int(old_y)
+    img = torch.nn.functional.interpolate(img, size=(out_x, out_y))
+    return img
+
+
+def make_gaussian_pyramid(img, span, mips, cuda=True):
+    """
+    given an image, generate a series of guassian pyramids to fill a given span.
+    the span is a multipler of the scale for the limit pyramid.
+
+    mips defines the total number of mips (minimum 2).  more mips results
+    in better sampling of the style, at the cost of more memory.
+
+    """
     kernel = _build_gauss_kernel(cuda)
+
+    if mips > 1:
+        pyramid_scale_factor = span**(1/(mips-1))
+    else:
+        pyramid_scale_factor = 1.0
+
     gaus_pyramid = _gaussian_pyramid(img, kernel, mips, pyramid_scale_factor)
     return gaus_pyramid
+
 
 # todo: replace with kornia to avoid numpy dependency, which breaks torchscript
 def _build_gauss_kernel(cuda, size=5, sigma=1.0, n_channels=3):
@@ -74,8 +133,8 @@ def _build_gauss_kernel(cuda, size=5, sigma=1.0, n_channels=3):
 def _conv_gauss(img, kernel):
     """ convolve img with a gaussian kernel that has been built with build_gauss_kernel """
     n_channels, _, kw, kh = kernel.shape
-    img = F.pad(img, (kw//2, kh//2, kw//2, kh//2), mode='replicate')
-    result = F.conv2d(img, kernel, groups=n_channels)
+    img = torch.nn.functional.pad(img, (kw//2, kh//2, kw//2, kh//2), mode='replicate')
+    result = torch.nn.functional.conv2d(img, kernel, groups=n_channels)
     return result
 
 def _gaussian_pyramid(img, kernel, max_levels, pyramid_scale_factor):
@@ -84,7 +143,7 @@ def _gaussian_pyramid(img, kernel, max_levels, pyramid_scale_factor):
 
     for level in range(0, max_levels-1):
         filtered = _conv_gauss(current, kernel)
-        current = F.interpolate(filtered, scale_factor=pyramid_scale_factor)
+        current = torch.nn.functional.interpolate(filtered, scale_factor=pyramid_scale_factor)
         pyr.append(current)
 
     return pyr

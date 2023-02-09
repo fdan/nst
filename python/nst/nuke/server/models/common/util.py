@@ -19,9 +19,7 @@ import re
 
 import numpy as np
 import OpenEXR, Imath
-import cv2
-
-# import tensorflow as tf
+# import cv2
 
 def print_(str, colour='', bold=False):
     if colour == 'w': # yellow warning
@@ -95,15 +93,6 @@ def get_saved_model_list(ckpt_dir):
             ckpt_list += [filename]
     ckpt_list.sort(key=natural_keys)
     return ckpt_list
-
-## PROCESS DATA ##
-
-# def im2uint8(x):
-#     if x.__class__ == tf.Tensor:
-#         return tf.cast(tf.clip_by_value(x, 0.0, 1.0) * 255.0, tf.uint8)
-#     else:
-#         t = np.clip(x, 0.0, 1.0) * 255.0
-#         return t.astype(np.uint8)
 
 def srgb_to_linear(x):
     """Transform the image from sRGB to linear"""
@@ -182,13 +171,16 @@ def read_exr(exr_path, channel_names=['R', 'G', 'B']):
     exr_numpy = np.stack(exr_numpy, axis=-1)
     return exr_numpy
 
-def read_resize_exr(exr_path, patch_size, channel_names=['R', 'G', 'B']):
-    """Read requested channels of an exr as numpy array
-    and return them resized to (patch_size, patch_size)
-    """
-    exr = read_exr(exr_path, channel_names)
-    exr_resize = cv2.resize(exr, dsize=(patch_size, patch_size))
-    return exr_resize
+# def read_resize_exr(exr_path, patch_size, channel_names=['R', 'G', 'B']):
+#     """Read requested channels of an exr as numpy array
+#     and return them resized to (patch_size, patch_size)
+#     """
+#     exr = read_exr(exr_path, channel_names)
+#     exr_resize = cv2.resize(exr, dsize=(patch_size, patch_size))
+#
+#     # todo: resize with torch interpolate
+#
+#     return exr_resize
 
 def read_crop_exr(exr_file, size, crop_w, crop_h, crop_size=256, channel_names=['R', 'G', 'B']):
     """Read requested channels of an exr file, crop it and return it as numpy array

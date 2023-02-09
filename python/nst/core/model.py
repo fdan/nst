@@ -1,6 +1,3 @@
-import json
-import os
-
 import torch
 from torch import optim
 
@@ -15,9 +12,6 @@ torch.cuda.manual_seed(0)
 torch.backends.cudnn.deterministic = True
 torch.backends.cudnn.benchmark = False
 torch.backends.cudnn.enabled=False
-
-
-import torch
 
 
 class TorchStyle(object):
@@ -39,11 +33,9 @@ class Nst(torch.nn.Module):
         self.opt_guides = []
         self.optimiser = None
         self.settings = settings.NstSettings()
+        self.start_iter = 1
 
     def prepare(self):
-        b, c, w, h = self.opt_tensor.size()
-        self.settings.opt_orig_scale = [w, h]
-
         if self.settings.cuda:
             self.settings.cuda_device = utils.get_cuda_device()
 
@@ -58,22 +50,6 @@ class Nst(torch.nn.Module):
         elif self.settings.engine == 'cpu':
             self.vgg.load_state_dict(torch.load(self.settings.model_path))
             self.settings.cuda = False
-
-        # handle rescale of tensors here
-        if self.settings.scale != 1.0:
-            self.content = utils.rescale_tensor(self.content, self.settings.scale)
-
-            self.opt_tensor = utils.rescale_tensor(self.opt_tensor, self.settings.scale, requires_grad=True)
-
-            for style in self.styles:
-                i = self.styles.index(style)
-                self.styles[i].tensor = utils.rescale_tensor(style.tensor, self.settings.scale)
-
-                if self.styles[i].alpha.numel() != 0:
-                    self.styles[i].alpha = utils.rescale_tensor(style.alpha, self.settings.scale)
-
-                if self.styles[i].target_map.numel() != 0:
-                    self.styles[i].target_map = utils.rescale_tensor(style.target_map, self.settings.scale)
 
         if self.settings.optimiser == 'lbfgs':
             print('optimiser is lbfgs')
@@ -90,16 +66,21 @@ class Nst(torch.nn.Module):
         content_guide.prepare()
         self.opt_guides.append(content_guide)
 
-        style_guide = guides.StyleGuide(self.styles, self.vgg, self.settings.style_mips,
-                                        self.settings.pyramid_scale_factor, self.settings.style_mip_weights,
-                                        self.settings.style_layers, self.settings.style_layer_weights,
-                                        self.settings.cuda_device)
+        style_guide = guides.StyleGuide(self.styles,
+                                        self.vgg,
+                                        self.settings.style_mips,
+                                        self.settings.mip_weights,
+                                        self.settings.style_layers,
+                                        self.settings.style_layer_weights,
+                                        self.settings.style_pyramid_span,
+                                        self.settings.style_zoom,
+                                        cuda_device=self.settings.cuda_device)
 
         style_guide.prepare()
         self.opt_guides.append(style_guide)
 
     def forward(self):
-        n_iter = [1]
+        n_iter = [self.start_iter]
         current_loss = [9999999]
 
         if self.settings.cuda:
@@ -145,11 +126,6 @@ class Nst(torch.nn.Module):
             max_iter = int(self.settings.iterations)
             while n_iter[0] <= max_iter:
                 self.optimiser.step(closure)
-
-        if self.settings.scale != 1.0:
-            if self.settings.rescale_output == True:
-                self.opt_tensor = torch.nn.functional.interpolate(self.opt_tensor, size=self.settings.opt_orig_scale, mode='bilinear')
-                # tensor = Variable(tensor.data.clone(), requires_grad=True)
 
         return self.opt_tensor
 

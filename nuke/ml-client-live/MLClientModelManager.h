@@ -18,7 +18,7 @@
 
 #include <string>
 #include <vector>
-#include "message.pb.h"
+#include "messageLive.pb.h"
 
 #include "DDImage/Op.h"
 #include "DDImage/Knobs.h"

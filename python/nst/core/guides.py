@@ -4,7 +4,7 @@ import torch.nn as nn
 
 from . import utils
 from . import loss
-from nst import core
+
 
 class OptGuide(nn.Module):
     def __init__(self, cuda=False):
@@ -47,7 +47,7 @@ class ContentGuide(OptGuide):
         else:
             cuda = False
 
-        opt_pyramid = utils.make_gaussian_pyramid(opt_tensor, cuda=cuda, mips=1)
+        opt_pyramid = utils.make_gaussian_pyramid(opt_tensor, 1, 1, cuda=cuda)
         opt_activation = self.vgg(opt_pyramid, [self.layer])[0]
 
         optimiser.zero_grad()
@@ -121,8 +121,19 @@ class DerivativeGuide(OptGuide):
 
 class StyleGuide(OptGuide):
 
-    def __init__(self, styles, vgg, style_mips, pyramid_scale_factor, mip_weights, layers, layer_weights,
-                 cuda_device=None, write_gradients=False, outdir='', gradient_ext='jpg', scale=1.0):
+    def __init__(self,
+                 styles,
+                 vgg,
+                 style_mips,
+                 mip_weights,
+                 layers,
+                 layer_weights,
+                 style_pyramid_span,
+                 style_zoom,
+                 cuda_device=None,
+                 write_gradients=False,
+                 outdir='',
+                 gradient_ext='jpg'):
         super(StyleGuide, self).__init__()
         self.styles = styles
         self.target = []
@@ -132,12 +143,12 @@ class StyleGuide(OptGuide):
         self.vgg = vgg
         self.cuda_device = cuda_device
         self.style_mips = style_mips
-        self.pyramid_scale_factor = pyramid_scale_factor
         self.mip_weights = mip_weights
         self.write_gradients = write_gradients
         self.outdir = outdir
         self.gradient_ext = gradient_ext
-        self.scale = scale
+        self.zoom = style_zoom
+        self.style_pyramid_span = style_pyramid_span
 
     def prepare(self, *args):
         if self.cuda_device:
@@ -148,24 +159,22 @@ class StyleGuide(OptGuide):
         for style in self.styles:
             tensor = style.tensor
 
-            # if style.alpha.nelement() != 0:
-            #     style_alpha_tensor = style.alpha
-            # else:
-            #     style_alpha_tensor = None
-
             if style.target_map.numel() != 0:
                 self.target_maps += [style.target_map] * len(self.layers)
             else:
                 self.target_maps += [None] * len(self.layers)
 
-            style_pyramid = utils.make_gaussian_pyramid(tensor, cuda=cuda, mips=self.style_mips,
-                                                        pyramid_scale_factor=self.pyramid_scale_factor)
+            if self.zoom != 1.0:
+                tensor = utils.zoom_image(tensor, self.zoom)
+                style.alpha = utils.zoom_image(style.alpha, self.zoom)
+
+            style_pyramid = utils.make_gaussian_pyramid(tensor, self.style_pyramid_span, self.style_mips,
+                                                        cuda=cuda)
 
             style_activations = []
-            # print('style', style.alpha)
+
             for layer_activation_pyramid in self.vgg(style_pyramid, self.layers, mask=style.alpha):
                 style_activations.append(layer_activation_pyramid)
-            # print('end style')
 
             vgg_layer_index = 0
             for vgg_layer in style_activations:
@@ -193,7 +202,8 @@ class StyleGuide(OptGuide):
         else:
             cuda = False
 
-        opt_pyramid = utils.make_gaussian_pyramid(opt_tensor, cuda=cuda, mips=self.style_mips, pyramid_scale_factor=self.pyramid_scale_factor)
+        opt_pyramid = utils.make_gaussian_pyramid(opt_tensor, self.style_pyramid_span, self.style_mips, cuda=cuda)
+
         opt_activations = []
 
         for opt_layer_activation_pyramid in self.vgg(opt_pyramid, self.layers):

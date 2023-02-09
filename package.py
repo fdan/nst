@@ -12,7 +12,9 @@ requires = [
             'tractor',
            ]
 
-build_requires = ['cmake-3.10+']
+build_requires = ['cmake-3.10+'
+                  # 'devtoolset-6'
+                  ]
 
 
 def commands():

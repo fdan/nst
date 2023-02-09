@@ -7,6 +7,7 @@ FILE(GLOB_RECURSE py_files "python/*.py")
 rez_install_dirs(
     python
     DESTINATION .
+    LOCAL_SYMLINK
 )
 
 rez_install_dirs(

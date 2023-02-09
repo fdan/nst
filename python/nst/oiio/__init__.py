@@ -1,17 +1,16 @@
 from typing import List
-import json
-
 import os
-import yaml
 
 import OpenImageIO as oiio
 from torch.autograd import Variable
+import torch
 
 from . import utils
 
 from nst.core import model, loss
 from nst.core import utils as core_utils
 import nst.settings as settings
+
 
 class StyleWriter(object):
 
@@ -40,13 +39,19 @@ class StyleWriter(object):
             self.output_dir = os.path.abspath(os.path.join(self.settings.out, (os.path.pardir)))
         return self.output_dir
 
-    def write_exr(self, frame: int=None) -> None:
+    def write_exr(self) -> None:
+
+        frame = self.settings.frame
+
         if self.settings.content:
             if self.settings.content.rgb_filepath:
                 if '####' in self.settings.content.rgb_filepath and frame:
                     self.settings.content.rgb_filepath = self.settings.content.rgb_filepath.replace('####', '%04d' % frame)
-                else:
-                    self.settings.content.rgb_filepath = self.settings.content.rgb_filepath
+
+        if self.settings.opt_image:
+            if self.settings.opt_image.rgb_filepath:
+                if '####' in self.settings.opt_image.rgb_filepath and frame:
+                    self.settings.opt_image.rgb_filepath = self.settings.opt_image.rgb_filepath.replace('####', '%04d' % frame)
 
         if self.settings.out:
             if '####' in self.settings.out and frame:
@@ -68,7 +73,10 @@ class StyleWriter(object):
         self.nst.prepare()
         assert self.settings.core == self.nst.settings
 
-        # call the forward method of the model, i.e. run inference
+        # set num cpus
+        torch.set_num_threads = int(self.settings.core.cpu_threads)
+
+        # do style transfer
         tensor = self.nst()
 
         buf = utils.tensor_to_buf(tensor)

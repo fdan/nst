@@ -17,7 +17,7 @@
 #define MLCLIENTCOMMS_H
 
 // Protobuf headers
-#include "message.pb.h"
+#include "messageLive.pb.h"
 
 using byte = unsigned char;
 
@@ -45,6 +45,8 @@ public:
   //! Constructor. Initialize user controls to their default values, then try to
   //! connect to the specified host / port. Following the c-tor, you can test for
   //! a valid connection by calling isConnected().
+  MLClientComms();
+
   MLClientComms(const std::string& hostStr, int port);
 
   //! Destructor. Tear down any existing connection.
@@ -52,6 +54,8 @@ public:
 
 public:
   // Public static methods for client-server communication
+  void setPort(int port);
+  void setHost(std::string& hostStr);
 
   //! Test if a given hostname is valid, returning true if it is, false otherwise
   static bool ValidateHostName(const std::string& hostStr);
@@ -73,13 +77,23 @@ public:
   //! Return true on success, false otherwise with the errorMsg filled in.
   bool sendInferenceRequestAndReadInferenceResponse(mlserver::RequestInference& requestInference, mlserver::RespondWrapper& responseWrapper, std::string& errorMsg);
 
+  //! Send a messaged image to to the server. Return true on success, false otherwise.
+  bool sendInferenceRequest(mlserver::RequestInference& requestInference);
+
+  //! Marshall the returned image into a float buffer of the original image size. Note, this
+  //! expects the size of result to have been set to the same size as the image that was
+  //! previously sent to the server. Return true on success, false otherwise.
+  bool readInferenceResponse(mlserver::RespondWrapper& responseWrapper);
+
+  void connectLoop();
+
 private:
   // Private client / server comms functions
 
   //! Try to connect to the server with the specified hostStr & port, by repeatedly
   //! calling setupConnection() below until a connection is made or times out. After it
   //! returns, you can test if it was successful by calling isConnected().
-  void connectLoop();
+
 
   //! Create a socket to connect to the server specified by hostStr and port.
   //! Return true on success, false otherwise with a message filled in errorStr.
@@ -94,13 +108,7 @@ private:
   //! elsewhere. Return true on success, false otherwise.
   bool readInfoResponse(mlserver::RespondWrapper& responseWrapper);
 
-  //! Send a messaged image to to the server. Return true on success, false otherwise.
-  bool sendInferenceRequest(mlserver::RequestInference& requestInference);
 
-  //! Marshall the returned image into a float buffer of the original image size. Note, this
-  //! expects the size of result to have been set to the same size as the image that was
-  //! previously sent to the server. Return true on success, false otherwise.
-  bool readInferenceResponse(mlserver::RespondWrapper& responseWrapper);
 
   //! Pull the data after determining the size 'siz' from the header.
   //! Helper to the above 'readInfoResponse' function.

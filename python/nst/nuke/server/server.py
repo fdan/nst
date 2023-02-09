@@ -13,26 +13,30 @@
 # limitations under the License.
 ##############################################################################
 
+from multiprocessing import Process
+import math
 import argparse
 import os
 import importlib
-import socket           # to get machine hostname
+import socket  # to get machine hostname
 import traceback
 
-try: # python3
+try:  # python3
     import socketserver
-except ImportError: # python2
+except ImportError:  # python2
     import SocketServer as socketserver
 
 import numpy as np
 
-from message_pb2 import *
+#from message_pb2 import *
+from messageLive_pb2 import *
 
 ML_SERVER_DIR = os.getenv('ML_SERVER_DIR')
 
+
 class MLTCPServer(socketserver.TCPServer):
     def __init__(self, server_address, handler_class, auto_bind=True):
-        self.verbose = True
+        self.verbose = False
         model_dir = os.path.join(ML_SERVER_DIR, 'models')
         os.chdir(model_dir)
 
@@ -40,14 +44,36 @@ class MLTCPServer(socketserver.TCPServer):
         # self.available_models = [name for name in next(os.walk('models'))[1]
         #     if os.path.isfile(os.path.join('models', name, 'model.py'))]
         self.available_models = [name for name in next(os.walk(model_dir))[1]
-            if os.path.isfile(os.path.join(model_dir, name, 'model.py'))]
+                                 if os.path.isfile(os.path.join(model_dir, name, 'model.py'))]
         self.available_models.sort()
         self.models = {}
         for model in self.available_models:
             print('Importing models.{}.model'.format(model))
             self.models[model] = importlib.import_module('models.{}.model'.format(model)).Model()
+
+        print(self.models['nst'])
+
         socketserver.TCPServer.__init__(self, server_address, handler_class, auto_bind)
         return
+
+
+def send_msg(handler, msg):
+    handler.vprint('Serializing message')
+    s = msg.SerializeToString()
+    msg_len = msg.ByteSize()
+    totallen = 12 + msg_len
+    msg_ = bytes(str(totallen).zfill(12).encode('utf-8')) + s
+    handler.vprint('Sending response message of size: {}'.format(totallen))
+
+    totalsent = 0
+    while totalsent < msg_len:
+        sent = handler.request.send(msg_[totalsent:])
+        if sent == 0:
+            raise RuntimeError("Socket connection broken")
+        totalsent = totalsent + sent
+
+    handler.vprint('-----------------------------------------------')
+
 
 class ImageProcessTCPHandler(socketserver.BaseRequestHandler):
     """This request handler is instantiated once per connection."""
@@ -55,6 +81,7 @@ class ImageProcessTCPHandler(socketserver.BaseRequestHandler):
     def handle(self):
         # Read the data headers
         data_hdr = self.request.recv(12)
+        self.vprint('Received data header: {}'.format(data_hdr))
         sz = int(data_hdr)
         self.vprint('Receiving message of size: {}'.format(sz))
 
@@ -68,27 +95,18 @@ class ImageProcessTCPHandler(socketserver.BaseRequestHandler):
         self.vprint('Message parsed')
 
         # Process message
-        resp_msg = self.process_message(req_msg)
-        # Serialize response
-        self.vprint('Serializing message')
-        s = resp_msg.SerializeToString()
-        msg_len = resp_msg.ByteSize()
-        totallen = 12 + msg_len
-        msg = bytes(str(totallen).zfill(12).encode('utf-8')) + s
-        self.vprint('Sending response message of size: {}'.format(totallen))
-        self.sendmsg(msg, totallen)
-        self.vprint('-----------------------------------------------')
+        self.process_message(req_msg)
 
     def process_message(self, message):
         if message.HasField('r1'):
             self.vprint('Received info request')
-            return self.process_info(message)
+            self.process_info(message)
         elif message.HasField('r2'):
             self.vprint('Received inference request')
-            return self.process_inference(message)
+            self.process_inference(message)
         else:
-            # Pass error message to the client
-            return self.errormsg("Server received unindentified request from client.")            
+            msg = "Server received unindentified request from client."
+            send_msg(self, msg)
 
     def process_info(self, message):
         resp_msg = RespondWrapper()
@@ -124,14 +142,14 @@ class ImageProcessTCPHandler(socketserver.BaseRequestHandler):
                 else:
                     # Send an error response message to the Nuke Client
                     option_error = ("Model option of type {} is not implemented. "
-                        "Broadcasted options need to be one of bool, int, float, str."
-                    ).format(type(opt_value))
+                                    "Broadcasted options need to be one of bool, int, float, str."
+                                    ).format(type(opt_value))
                     return self.errormsg(option_error)
                 opt.name = opt_name
                 opt.values.extend([opt_value])
             # Add buttons
             for button_name, button_value in self.server.models[model].get_buttons().items():
-                if type (button_value) == bool:
+                if type(button_value) == bool:
                     button = m.button_options.add()
                 else:
                     return self.errormsg("Model button needs to be of type bool.")
@@ -140,12 +158,14 @@ class ImageProcessTCPHandler(socketserver.BaseRequestHandler):
 
         # Add RespondInfo message to RespondWrapper
         resp_msg.r1.CopyFrom(resp_info)
-
-        return resp_msg
+        send_msg(self, resp_msg)
 
     def process_inference(self, message):
         req = message.r2
         m = req.model
+
+        model = self.server.models[m.name]
+
         self.vprint('Requesting inference on model: {}'.format(m.name))
 
         # Parse model options
@@ -158,63 +178,71 @@ class ImageProcessTCPHandler(socketserver.BaseRequestHandler):
         # Parse model buttons
         btn = {}
         for button in m.button_options:
-            btn[button.name] = button.values[0]       
+            btn[button.name] = button.values[0]
         self.server.models[m.name].set_buttons(btn)
 
-        # Parse images
-        img_list = []
-        for byte_img in req.images:
-            img = np.fromstring(byte_img.image, dtype='<f4')
-            height = byte_img.height
-            width = byte_img.width
-            channels = byte_img.channels
-            img = np.reshape(img, (channels, height, width))
-            img = np.transpose(img, (1, 2, 0))
-            img = np.flipud(img)
-            img_list.append(img)
+        # determine where we are in a job/batch
+        job_progress = float(req.batch_current + 1) / float(req.batch_total) * 100
+
+        # Parse images if in first batch
+        if req.clearcache:
+            print('clearcache called')
+            model.prepared = False
+            img_list = []
+            for byte_img in req.images:
+                img = np.frombuffer(byte_img.image, dtype='<f4')
+                height = byte_img.height
+                width = byte_img.width
+                channels = byte_img.channels
+                img = np.reshape(img, (channels, height, width))
+                img = np.transpose(img, (1, 2, 0))
+                img = np.flipud(img)
+                img_list.append(img)
+            model.prepare(img_list)
+            model.set_iterations(model.batch_size)
+        else:
+            print('not clearing cache')
+
         try:
             # Running inference
             self.vprint('Starting inference')
-            res = self.server.models[m.name].inference(img_list)
-            # Creating response messsage
+
+            # main call:
+            res = self.server.models[m.name].inference()
+
+            print('job progress: %d' % job_progress + '%')
+            if job_progress == 100:
+                print('job complete')
+                print('-----------------------------------------------')
+
             resp_msg = RespondWrapper()
             resp_msg.info = True
             resp_inf = RespondInference()
-            num_images = 0
-            num_objects = 0
-            for obj in res:
-                # Send an image back to Nuke
-                if isinstance(obj, np.ndarray):
-                    num_images += 1
-                    img = np.flipud(obj)
-                    image = resp_inf.images.add()
-                    image.width = np.shape(img)[1]
-                    image.height = np.shape(img)[0]
-                    image.channels = np.shape(img)[2]
-                    img = np.transpose(img, (2, 0, 1))
-                    image.image = img.tobytes()
-                # Send a general object back to Nuke
-                elif isinstance(obj, FieldValuePairAttrib):
-                    num_objects += 1
-                    resp_inf.objects.extend([obj])
-                else:
-                    exception_msg = ("Object returned from model inference is of type {}."
-                        "It should be an np.array image or a general FieldValuePairAttrib".format(type(obj)))
-                    raise Exception(exception_msg)
-            resp_inf.num_images = num_images
-            resp_inf.num_objects = num_objects
-            self.vprint('Infering back {} image(s) and {} object(s)'.format(num_images, num_objects))
-            if num_images == 0 and num_objects == 0:
-                raise Exception("No images or non-image objects were returned from model inference")
-            # Add RespondInference message to RespondWrapper
+            img = np.flipud(res)
+            image = resp_inf.images.add()
+            image.width = np.shape(img)[1]
+            image.height = np.shape(img)[0]
+            image.channels = np.shape(img)[2]
+            img = np.transpose(img, (2, 0, 1))
+            image.image = img.tobytes()
+            resp_inf.num_images = 1
             resp_msg.r2.CopyFrom(resp_inf)
+            self.vprint('sending inteference response')
+
+            send_msg(self, resp_msg)
+            # p = Process(target=send_msg, args=(self, resp_msg))
+            # p.start()
+            # if it's the last batch, join to avoid main proc hangup
+            # if b == batches-1:
+            #     p.join()
+
+
         except Exception as e:
             # Pass error message to the client
             self.vprint('Exception caught on inference on model:')
             self.vprint(str(traceback.print_exc()))
             resp_msg = self.errormsg(str(e))
-            
-        return resp_msg
+            send_msg(self, resp_msg)
 
     def recvall(self, n):
         """Helper function to receive n bytes or return None if EOF is hit"""
@@ -238,7 +266,7 @@ class ImageProcessTCPHandler(socketserver.BaseRequestHandler):
         """Create an error message to send a Server error to the Nuke Client"""
         resp_msg = RespondWrapper()
         resp_msg.info = True
-        error_msg = Error() # from message_pb2.py
+        error_msg = Error()  # from message_pb2.py
         error_msg.msg = error
         resp_msg.error.CopyFrom(error_msg)
         return resp_msg
@@ -246,6 +274,7 @@ class ImageProcessTCPHandler(socketserver.BaseRequestHandler):
     def vprint(self, string):
         if self.server.verbose:
             print('Server -> ' + string)
+
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='Machine Learning inference server.')
@@ -258,8 +287,8 @@ if __name__ == "__main__":
     server = MLTCPServer((server_hostname, args.port), ImageProcessTCPHandler, False)
 
     # Bind and activate the server
-    server.allow_reuse_address = True 
-    server.server_bind()     
+    server.allow_reuse_address = True
+    server.server_bind()
     server.server_activate()
     print('Server -> Listening on port: {}'.format(args.port))
     server.serve_forever()

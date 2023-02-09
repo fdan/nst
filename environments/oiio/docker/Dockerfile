@@ -5,80 +5,47 @@ ENV PATH /opt/conda/bin:$PATH
 ENV DEBIAN_FRONTEND=noninteractive
 
 RUN apt-get update --fix-missing && apt-get install -y \
-  cmake \
-  libopenjp2-7-dev \
-  libsquish-dev \
-  libraw-dev \
-  libjpeg-turbo8-dev \
-  libgif-dev \
-  libdcmtk-dev \
-  libtinyxml-dev \
-  liblcms2-dev \
-  libyaml-cpp-dev \
-  unzip \
-  libboost-all-dev \
-  libjpeg-dev \
-  libtiff-dev \
-  libpng-dev \
-  libilmbase-dev \
-  libopenexr-dev \
-  python-numpy \
+  build-essential \
+  python3 \
+  libopenimageio-dev \
+  python3-openimageio \
+  libopencolorio-dev \
+  python3-pyopencolorio \
+  protobuf-compiler \
   wget \
   git \
-  bzip2 \
   ca-certificates \
-  libglib2.0-0 \
-  libxext6 \
-  libsm6 \
-  libxrender1 \
-  mercurial \
-  emacs \
-  subversion
+  emacs
 
-RUN wget --quiet https://repo.anaconda.com/archive/Anaconda3-2020.11-Linux-x86_64.sh -O ~/anaconda.sh && \
-    /bin/bash ~/anaconda.sh -b -p /opt/conda && \
-    rm ~/anaconda.sh && \
-    ln -s /opt/conda/etc/profile.d/conda.sh /etc/profile.d/conda.sh && \
-    echo ". /opt/conda/etc/profile.d/conda.sh" >> ~/.bashrc && \
-    echo "conda activate base" >> ~/.bashrc
+# Install Python 3.8
+RUN apt-get update && apt-get install -y --no-install-recommends \
+        python3-pip \
+        python3.8-dev && \
+    rm -rf /var/lib/apt/lists/*
 
-RUN conda update -n base -c defaults conda
-RUN conda create -y --name pytorch
-RUN conda install -n pytorch -y -c pytorch pytorch=1.10 torchvision cudatoolkit=11 memory_profiler opencv matplotlib jupyterlab scikit-learn scikit-image imageio
-RUN conda install -n pytorch -y -c conda-forge kornia
-RUN conda install -n pytorch -y pybind11
-ENV PATH /opt/conda/envs/pytorch/bin:$PATH
-RUN echo "source activate pytorch" >> ~/.bashrc
-RUN echo "alias la='ls -lah'" >> ~/.bashrc
-RUN echo "alias ..='cd ..'" >> ~/.bashrc
-RUN /bin/bash -c "source activate pytorch"
+# Have aliases python3->python and pip3->pip
+RUN ln -s /usr/bin/python3 /usr/bin/python
 
-# compile OCIO pybindings using anaconda3 python
-RUN cd /tmp && \
-  wget https://github.com/AcademySoftwareFoundation/OpenColorIO/archive/refs/heads/RB-1.1.zip && \
-  unzip RB-1.1.zip && cd OpenColorIO-RB-1.1 && \
-  mkdir build && \
-  cd build && \
-  /usr/bin/cmake -DPYTHON_LIBRARY=/opt/conda/envs/pytorch/lib -DPYTHON_INCLUDE_DIR=/opt/conda/envs/pytorch/include -DOCIO_BUILD_TESTS=OFF -DOCIO_BUILD_DOCS=OFF -DOCIO_BUILD_APPS=OFF -DCMAKE_INSTALL_PREFIX=/opt/ocio .. && \
-  make -j12 && \
-  make install -j12 && \
-  cd /tmp && \
-  rm -rf OpenColorIO-RB-1.1 && \
-  rm RB-1.1.zip
+RUN python3.8 -m pip install --upgrade pip
 
-# compile OIIO pybindings using anaconda3 python
-RUN cd /tmp && \
-  wget https://github.com/OpenImageIO/oiio/archive/refs/tags/v2.2.15.1.tar.gz && \
-  tar -xvf v2.2.15.1.tar.gz && \
-  cd oiio-2.2.15.1 && \
-  mkdir build && \
-  cd build && \
-  /usr/bin/cmake -DUSE_PYTHON=1 -DOIIO_BUILD_TESTS=0 -DOIIO_BUILD_TOOLS=1 -DPYTHON_VERSION=3.7 -DCMAKE_INSTALL_PREFIX=/opt/oiio -DOPENCOLORIO_INCLUDE_PATH=/opt/ocio/include -DOPENCOLORIO_LIBRARY_PATH=/opt/ocio/lib .. && \
-  make -j12 && \
-  make install -j12 && \
-  cd /tmp && \
-  rm -rf oiio-2.2.15.1 && \
-  rm v2.2.15.1.tar.gz
+RUN python3.8 -m pip install --no-cache-dir setuptools wheel && \
+    python3.8 -m pip install --no-cache-dir \
+    future \
+    gast==0.2.2 \
+    protobuf==3.0.0 \
+    setuptools \
+    pyyaml==3.13 \
+    scikit-image \
+    typing \
+    imageio
+
+RUN python3.8 -m pip install --no-cache-dir torch==1.10.1+cu111 torchvision==0.11.2+cu111 torchaudio==0.10.1 -f https://download.pytorch.org/whl/torch_stable.html
+RUN python3.8 -m pip install --no-cache-dir cupy-cuda110
+RUN python3.8 -m pip install --no-cache-dir cython
+RUN python3.8 -m pip install --no-cache-dir kornia
+RUN python3.8 -m pip install --no-cache-dir memory_profiler
+RUN python3.8 -m pip install --no-cache-dir matplotlib
+RUN python3.8 -m pip install --no-cache-dir jupyterlab
 
 RUN mkdir -p /.local/share/jupyter/runtime/
 RUN chmod -R 777 /.local

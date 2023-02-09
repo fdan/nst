@@ -50,22 +50,21 @@ class NstSettings(BaseSettings):
     def __init__(self):
         super(NstSettings, self).__init__()
         self.engine = 'gpu'
+        self.cpu_threads = 48
         self.cuda = True
         self.model_path = os.getenv('NST_VGG_MODEL')
         self.cuda_device = 0
-        self.pyramid_scale_factor = 0.63
-        self.style_mips = 4
         self.style_layers = ['p1', 'p2', 'r31', 'r42']
         self.style_layer_weights = [1.0, 1.0, 1.0, 1.0]
         self.content_layer = 'r41'
         self.content_layer_weight = 1.0
-        self.style_mip_weights = [1.0, 1.0, 1.0, 1.0]
+        self.style_mips = 4
+        self.mip_weights = [1.0, 1.0, 1.0, 1.0]
+        self.style_pyramid_span = 0.5
         self.content_mips = 1
         self.optimiser = 'adam'
-        self.learning_rate = 1.0
-        self.scale = 1.0
-        self.rescale_output = True
-        self.opt_orig_scale = []
+        self.learning_rate = 10.0
+        self.style_zoom = 1.0
         self.iterations = 500
         self.log_iterations = 20
 

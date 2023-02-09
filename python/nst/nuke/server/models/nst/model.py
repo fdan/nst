@@ -1,15 +1,10 @@
-import numpy as np
+import os
+from typing import List
 
 from models.baseModel import BaseModel
-# from models.common.model_builder import baseline_model
-from models.common.util import print_, get_ckpt_list, linear_to_srgb, srgb_to_linear
-import message_pb2
-
-from typing import List
 
 import torch
 from torchvision import transforms
-import torch.nn.functional as F
 from torch.autograd import Variable
 
 from nst.core.model import Nst, TorchStyle
@@ -20,30 +15,39 @@ class Model(BaseModel):
 
     def __init__(self):
         super(Model, self).__init__()
+
+        print('nst model constructor called')
+
         self.name = "Neural Style Transfer"
 
         self.options = ("engine",
                         "optimiser",
-                        "pyramid_scale_factor",
+                        "style_pyramid_span",
                         "style_mips",
+                        "style_mip_weights",
                         "style_layers",
                         "style_layer_weights",
-                        "style_mip_weights",
                         "content_layer",
                         "content_layer_weight",
                         "content_mips",
                         "learning_rate",
-                        "scale",
                         "iterations",
                         "log_iterations",
                         "enable_update",
+                        "batch_size",
 
                         # farm related
+                        "job_name",
+                        "service_key",
+                        "tier",
+                        "frames",
                         "farm_engine",
+                        "farm_cpu_threads",
                         "farm_optimiser",
                         "farm_learning_rate",
-                        "farm_scale",
                         "farm_iterations",
+                        "farm_pyramid_span",
+                        "farm_style_zoom",
                         "content_fp",
                         "opt_fp",
                         "out_fp",
@@ -55,7 +59,7 @@ class Model(BaseModel):
                         "style3_target_fp"
                         )
 
-        self.buttons = ("run", "farm")
+        self.buttons = ["farm"]
 
         self.inputs = {'content': 3,
                        'opt_img': 3,
@@ -71,24 +75,32 @@ class Model(BaseModel):
         # option states
         self.engine = "gpu"
         self.optimiser = "adam"
-        self.pyramid_scale_factor = 0.63
-        self.style_mips = 4
+        self.style_mips = 2
+        self.style_mip_weights = '1.0,1.0,1.0,1.0'
         self.style_layers = 'p1,p2,r31,r42'
         self.style_layer_weights = '1.0,1.0,1.0,1.0'
-        self.style_mip_weights = "1.0,1.0,1.0,1.0"
+        self.style_pyramid_span = "0.7"
         self.content_layer = 'r41'
         self.content_layer_weight = "1.0"
         self.content_mips = 1
         self.learning_rate = 10.0
-        self.scale = 1.0
-        self.iterations = 5
+        self.iterations = 50
         self.log_iterations = 1
         self.enable_update = 1
 
         # farm related
+        self.job_name = "nst_job"
+        self.service_key = "ac1"
+        self.tier = "batch"
+        self.frames = 1
         self.farm_engine = "cpu"
+        self.farm_cpu_threads = 48
         self.farm_optimiser = "lbfgs"
-        self.farm_learning_rate = ""
+        self.farm_learning_rate = 1.0
+        self.farm_style_mips = 2
+        self.farm_pyramid_span = 0.7
+        self.farm_style_zoom = 1.0
+
         self.content_fp = ""
         self.opt_fp = ""
         self.style1_fp = ""
@@ -103,43 +115,46 @@ class Model(BaseModel):
         self.farm_iterations = 500
 
         # button states
-        self.run = False
         self.farm = False
 
-    def prepare_nst(self):
-        nst_settings = NstSettings()
+        # internal
+        self.batch_size = 10
+        self.prepared = False
 
-        nst_settings.cuda = True if self.engine == "gpu" else False
-        nst_settings.engine = self.engine
-        nst_settings.model_path = '/mnt/ala/research/danielf/git/nst/bin/Models/vgg_conv.pth'
-        nst_settings.optimiser = self.optimiser
-        nst_settings.pyramid_scale_factor = self.pyramid_scale_factor
-        nst_settings.style_mips = self.style_mips
-        nst_settings.style_layers = self.style_layers.split(',')
-        nst_settings.style_layer_weights = [float(x) for x in self.style_layer_weights.split(',')]
-        nst_settings.style_mip_weights = [float(x) for x in self.style_mip_weights.split(',')]
-        nst_settings.content_layer = self.content_layer
-        nst_settings.content_layer_weight = float(self.content_layer_weight)
-        nst_settings.content_mips = self.content_mips
-        nst_settings.learning_rate = self.learning_rate
-        nst_settings.scale = self.scale
-        nst_settings.iterations = self.iterations
-        nst_settings.log_iterations = self.log_iterations
+        self.nst_settings = NstSettings()
+        self.last_result = torch.zeros(0)
+
+    def set_iterations(self, iterations):
+        self.iterations = iterations
+        self.nst.settings.iterations = iterations
+
+    def prepare(self, image_list):
+
+        if self.prepared:
+            print('mid-job, skipping preparation')
+            return
+
+        print('preparing nst model')
 
         self.nst = Nst()
-        self.nst.settings = nst_settings
 
+        self.nst_settings.cuda = True if self.engine == "gpu" else False
+        self.nst_settings.engine = self.engine
+        self.nst_settings.model_path = os.getenv('NST_VGG_MODEL')
+        self.nst_settings.optimiser = self.optimiser
+        self.nst_settings.style_pyramid_span = float(self.style_pyramid_span)
+        self.nst_settings.style_mips = int(self.style_mips)
+        self.nst_settings.mip_weights = [float(x) for x in self.style_mip_weights.split(',')]
+        self.nst_settings.style_layers = self.style_layers.split(',')
+        self.nst_settings.style_layer_weights = [float(x) for x in self.style_layer_weights.split(',')]
+        self.nst_settings.content_layer = self.content_layer
+        self.nst_settings.content_layer_weight = float(self.content_layer_weight)
+        self.nst_settings.content_mips = int(self.content_mips)
+        self.nst_settings.learning_rate = float(self.learning_rate)
+        self.nst_settings.iterations = int(self.iterations)
+        self.nst_settings.log_iterations = int(self.log_iterations)
 
-    def inference(self, image_list: List[torch.Tensor]) -> List[torch.Tensor]:
-        print('inference, run:', self.run)
-
-        if not self.enable_update:
-            print('inference was called but run is inactive, passing through content image')
-            return [image_list[0]]
-
-        self.prepare_nst()
-
-        print(self.nst.settings)
+        self.nst.settings = self.nst_settings
 
         if self.engine == "gpu":
             cuda = True
@@ -190,56 +205,21 @@ class Model(BaseModel):
         except:
             raise RuntimeError("There must be at least one style image")
 
-        #
-        #
-        # try:
-        #     style2_np = image_list[3]
-        #     style2_tensor = torch.Tensor(style2_np).transpose(0, 2)[1::].transpose(0, 2)
-        #     style2_tensor = color_in(style2_tensor, do_cuda=cuda)
-        #     style2_alpha_tensor = torch.Tensor(style2_np).transpose(0, 2)[3].transpose(0, 2)
-        #     style2_alpha_tensor = color_in(style2_alpha_tensor, do_cuda=cuda, raw=True)
-        #     style2 = TorchStyle(style2_tensor, style2_alpha_tensor)
-        # except:
-        #     style2 = None
-        #
-        # try:
-        #     style2_target_np = image_list[4]
-        #     style2_target_tensor = torch.Tensor(style2_target_np)
-        #     style2_target_tensor = color_in(style2_target_tensor, do_cuda=cuda, raw=True)
-        # except:
-        #     style2_target_tensor = None
-        # finally:
-        #     if style2:
-        #         style2.target_map = style2_target_tensor
-        #         self.nst.styles.append(style2)
-        #
-        #
-        # try:
-        #     style3_np = image_list[5]
-        #     style3_tensor = torch.Tensor(style3_np).transpose(0, 2)[1::].transpose(0, 2)
-        #     style3_tensor = color_in(style3_tensor, do_cuda=cuda)
-        #     style3_alpha_tensor = torch.Tensor(style3_np).transpose(0, 2)[3].transpose(0, 2)
-        #     style3_alpha_tensor = color_in(style3_alpha_tensor, do_cuda=cuda, raw=True)
-        #     style3 = TorchStyle(style3_tensor, style3_alpha_tensor)
-        # except:
-        #     style3 = None
-        #
-        # try:
-        #     style3_target_np = image_list[6]
-        #     style3_target_tensor = torch.Tensor(style3_target_np)
-        #     style3_target_tensor = color_in(style3_target_tensor, do_cuda=cuda, raw=True)
-        # except:
-        #     style3_target_tensor = None
-        # finally:
-        #     if style3:
-        #         style3.target_map = style3_target_tensor
-        #         self.nst.styles.append(style3)
+        self.nst.prepare()
 
-        # self.nst.prepare()
-        # result_tensor = self.nst()
-        # result_np = color_out(result_tensor)
-        # return [result_np]
-        return [image_list[0]]
+        print("finished preparing")
+        print('-----------------------------------------------')
+
+        self.prepared = True
+
+    def inference(self) -> List[torch.Tensor]:
+        print(self.nst.settings)
+
+        self.nst.start_iter = 1
+
+        result = self.nst()
+        result_np = color_out(result)
+        return result_np
 
 
 def color_in(tensor, do_cuda: bool, raw: bool=False) -> torch.Tensor:

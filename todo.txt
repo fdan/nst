@@ -1,0 +1,28 @@
+dev to do
+
+milestone 2:
+1. test out a variety of styles, combine multiple styles
+
+
+nice to have's:
+* ability to cancel once started (should be possible with batches)
+* caching of inputs on server to avoid repeated prepare
+
+...
+
+milestone descriptions
+
+milestone 1:
+* nuke user can work at a proxy resolution, which combined with mlc live update give a reasonable response time
+* nuke user can lookdev at proxy resolution, then send to farm for full res on cpu
+* limited to single style, but can use style alpha, target map
+* nuke user can adjust quality via several parameters (epocs, mips)
+* utilisation of various debug outputs (activations, gradients, pyramids, style-only nst) for assisting lookdev
+* demonstrate in a video
+
+milestone 2:
+* nuke user can combine multiple style images
+* substantially demonstrate the quality and variety of possible results
+
+milestone 3:
+* temporal coherence of farm jobs using ruder et al

@@ -59,11 +59,24 @@ MLClientComms::MLClientComms(const std::string& hostStr, int port)
   connectLoop();
 }
 
+MLClientComms::MLClientComms()
+: _isConnected(false)
+, _socket(0)
+{}
+
 //! Destructor. Tear down any existing connection.
 MLClientComms::~MLClientComms()
 {
   // On destruction, we need to close the socket and reset our connection variable
   closeConnection();
+}
+
+void MLClientComms::setPort(int port){
+    _port = port;
+}
+
+void MLClientComms::setHost(std::string& hostStr){
+    _hostStr = hostStr;
 }
 
 //! Test if a given hostname is valid, returning true if it is, false otherwise
@@ -94,7 +107,8 @@ bool MLClientComms::isConnected() const
 
 //! Function for discovering & negotiating the available models and their parameters.
 //! Return true on success, false otherwise with the errorMsg filled in.
-bool MLClientComms::sendInfoRequestAndReadInfoResponse(mlserver::RespondWrapper& responseWrapper, std::string& errorMsg)
+bool MLClientComms::sendInfoRequestAndReadInfoResponse(mlserver::RespondWrapper& responseWrapper,
+                                                       std::string& errorMsg)
 {
   // Try connect if we haven't already
   connectLoop();
@@ -124,7 +138,9 @@ bool MLClientComms::sendInfoRequestAndReadInfoResponse(mlserver::RespondWrapper&
   return true;
 }
 
-bool MLClientComms::sendInferenceRequestAndReadInferenceResponse(mlserver::RequestInference& requestInference, mlserver::RespondWrapper& responseWrapper, std::string& errorMsg)
+bool MLClientComms::sendInferenceRequestAndReadInferenceResponse(mlserver::RequestInference& requestInference,
+                                                                 mlserver::RespondWrapper& responseWrapper,
+                                                                 std::string& errorMsg)
 {
   // Try connect if we haven't already
   connectLoop();
@@ -430,7 +446,7 @@ bool MLClientComms::sendInfoRequest()
   std::string requestStr;
   requestWrapper.SerializeToString(&requestStr);
   size_t length = requestStr.size();
-  MLClientComms::Vprint("Serialized message");
+  MLClientComms::Vprint("Serialized message of length");
 
   // Creating header
   char hdrSend[kNumberOfBytesHeaderSize];
@@ -517,18 +533,26 @@ bool MLClientComms::readInfoResponse(google::protobuf::uint32 siz, mlserver::Res
 //! Send a messaged image to to the server.
 bool MLClientComms::sendInferenceRequest(mlserver::RequestInference& requestInference) {
   int bytecount;
+  MLClientComms::Vprint("Sending inference request");
 
   // Create message
   mlserver::RequestWrapper requestWrapper;
   requestWrapper.set_info(true);
 
+  // for some reason if we re-use the requestInference we will segfault when serialised to string
+//  std::cout << requestInference;
+// need to deep copy the data being pointed to
   requestWrapper.set_allocated_r2(&requestInference);
+  MLClientComms::Vprint("Created message");
 
   // Serialize message
   std::string requestStr;
+
+  // this will crash if ran twice:
   requestWrapper.SerializeToString(&requestStr);
+  MLClientComms::Vprint("success");
   size_t length = requestStr.size();
-  MLClientComms::Vprint("Serialized message");
+  MLClientComms::Vprint("Serialized message of length");
 
   // Creating header
   char hdrSend[kNumberOfBytesHeaderSize];
@@ -551,7 +575,7 @@ bool MLClientComms::sendInferenceRequest(mlserver::RequestInference& requestInfe
 
   // Send header with number of bytes
   if ((bytecount = send(_socket, (const char *)&toSend[0], kNumberOfBytesHeaderSize + length, 0)) == -1) {
-    isConnected();
+//    isConnected();
     std::stringstream ss;
     ss << "Error sending data " << errno;
     MLClientComms::Vprint(ss.str());
@@ -573,20 +597,35 @@ bool MLClientComms::readInferenceResponse(mlserver::RespondWrapper& responseWrap
 
   // Read header first
   MLClientComms::Vprint("Reading header data");
+
   char hdrBuffer[kNumberOfBytesHeaderSize];
+
+  // get the message header.  this will block because the header is the first few bytes
+  // of the whole message, so we don't get it until after the first send
   if ((bytecount = recv(_socket, hdrBuffer, kNumberOfBytesHeaderSize, 0)) == -1) {
     MLClientComms::Vprint("Error receiving data.");
     return false;
   }
-  google::protobuf::uint32 siz = readHdr(hdrBuffer);
 
+//  MLClientComms::Vprint("received header");
+  google::protobuf::uint32 siz = readHdr(hdrBuffer);
+//  MLClientComms::Vprint("read header");
+
+  if (siz == 0){
+      MLClientComms::Vprint("hdr size is zero, returning");
+      return false;
+  }
+
+  // this is called after the first batch
   return readInferenceResponse(siz, responseWrapper);
 }
 
 //! Pull the data after determining the size 'siz' from the header.
 //! Helper to the above 'readInferenceResponse' function.
-bool MLClientComms::readInferenceResponse(google::protobuf::uint32 siz, mlserver::RespondWrapper& responseWrapper)
+bool MLClientComms::readInferenceResponse(google::protobuf::uint32 siz,
+                                          mlserver::RespondWrapper& responseWrapper)
 {
+  // we enter this function after the first batch is sent
   MLClientComms::Vprint("Reading data of size: " + std::to_string(siz));
   responseWrapper.set_info(true);
 
@@ -594,21 +633,12 @@ bool MLClientComms::readInferenceResponse(google::protobuf::uint32 siz, mlserver
   std::string output;
   char buffer[1024];
   size_t bytecount;
-#ifdef _WIN32
-  do {
-    bytecount = recv(_socket, buffer, sizeof(buffer), 0);
-    if (bytecount > 0) {
-      output.append(buffer, bytecount);
-    }
-  } while (bytecount > 0); // as long as data is received and there are no error
-#else
-  while ((errno = 0, (bytecount = recv(_socket, buffer, sizeof(buffer), 0)) > 0) ||
-    errno == EINTR) {
+
+  while ((errno = 0, (bytecount = recv(_socket, buffer, sizeof(buffer), 0)) > 0) || errno == EINTR) {
     if (bytecount > 0) {
       output.append(buffer, bytecount);
     }
   }
-#endif
 
   if (bytecount < 0) {
     MLClientComms::Vprint("Error receiving data.");
@@ -620,6 +650,8 @@ bool MLClientComms::readInferenceResponse(google::protobuf::uint32 siz, mlserver
   google::protobuf::io::ArrayInputStream ais(output.c_str(), siz);
   google::protobuf::io::CodedInputStream codedInput(&ais);
   google::protobuf::io::CodedInputStream::Limit msgLimit = codedInput.PushLimit(siz);
+
+  // update responseWrapper - at this point nuke has all it needs to update the viewer
   responseWrapper.ParseFromCodedStream(&codedInput);
   codedInput.PopLimit(msgLimit);
 

@@ -1,3 +1,3 @@
 #! /usr/bin/bash
 
-docker build -t ffdanff/pytorch-oiio:v11 -f Dockerfile .
+docker build -t ffdanff/nst-oiio:v2 -f Dockerfile .

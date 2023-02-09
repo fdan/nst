@@ -55,8 +55,12 @@ message Error {
 message RequestInference {
 	optional Model model = 1;
 	repeated Image images = 2;
+	optional int32 clearcache = 3;
+	optional int32 batch_total = 4;	
+	optional int32 batch_current = 5;		
 }
 
+// add batch or epoch info for client op hash
 message RespondInference {
 	optional int32 num_images = 1;
 	repeated Image images = 2;

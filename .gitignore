@@ -1,3 +1,4 @@
+.vscode/vc.db*
 .idea/
 cmake-build-debug/
 Models/*

@@ -15,7 +15,7 @@
 
 #include "MLClientModelManager.h"
 #include "DDImage/Knob.h"
-#include "MLClient.h"
+#include "MLClientLive.h"
 
 MLClientModelKnob::MLClientModelKnob(DD::Image::Knob_Closure* kc, DD::Image::Op* op, const char* name)
 : DD::Image::Knob(kc, name)
@@ -55,9 +55,9 @@ void MLClientModelKnob::to_script (std::ostream &out, const DD::Image::OutputCon
       DD::Image::Enumeration_KnobI* eKnob = k->enumerationKnob();
       if(eKnob != nullptr) {
         ss << "model:" << eKnob->getItemValueString(modelIndex) << ";";
-        MLClient* mlClient = dynamic_cast<MLClient*>(_op);
-        if(mlClient != nullptr) {
-          MLClientModelManager& mlManager = mlClient->getModelManager();
+        MLClientLive* mlClientLive = dynamic_cast<MLClientLive*>(_op);
+        if(mlClientLive != nullptr) {
+          MLClientModelManager& mlManager = mlClientLive->getModelManager();
           toScriptT(mlManager, ss, &MLClientModelManager::getNumOfInts, &MLClientModelManager::getDynamicIntName);
           toScriptT(mlManager, ss, &MLClientModelManager::getNumOfFloats, &MLClientModelManager::getDynamicFloatName);
           toScriptT(mlManager, ss, &MLClientModelManager::getNumOfBools, &MLClientModelManager::getDynamicBoolName);
