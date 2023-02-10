@@ -1,8 +1,6 @@
 dev to do
 
-milestone 2:
-1. test out a variety of styles, combine multiple styles
-
+* finish temporal coherence
 
 nice to have's:
 * ability to cancel once started (should be possible with batches)

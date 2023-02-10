@@ -8,13 +8,17 @@ authors = ['daniel.flood']
 
 requires = [
             'ocio_configs',
-            'nuke-12',
-            'tractor',
+            'tractor'
            ]
 
 build_requires = ['cmake-3.10+'
                   # 'devtoolset-6'
                   ]
+
+variants = [
+           ['nuke-12'],
+            ['nuke-13', 'devtoolset-9']
+           ]
 
 
 def commands():

@@ -1,12 +1,13 @@
 cmake_minimum_required(VERSION 3.10)
 project(MachineLearningPlugins VERSION 1.0.0)
 
-
+message("nuke install path" $ENV{NUKE_LOCATION})
 set(NUKE_INSTALL_PATH $ENV{NUKE_LOCATION})
 
 #===------------------------------------------------------------------------===
 # Global settings some based on the external configuration settings
-set( CMAKE_CXX_STANDARD 11 )
+#set( CMAKE_CXX_STANDARD 11 )
+set( CMAKE_CXX_STANDARD 14 )
 set( CMAKE_CXX_EXTENSIONS OFF )
 set( CMAKE_CXX_VISIBILITY_PRESET hidden )
 set( CMAKE_POSITION_INDEPENDENT_CODE True )
