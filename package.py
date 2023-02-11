@@ -2,7 +2,7 @@
 
 name = 'nst'
 
-version = '3.0.0'
+version = '3.0.1'
 
 authors = ['daniel.flood']
 
@@ -11,13 +11,11 @@ requires = [
             'tractor'
            ]
 
-build_requires = ['cmake-3.10+'
-                  # 'devtoolset-6'
-                  ]
+build_requires = ['cmake-3.10+']
 
 variants = [
            ['nuke-12'],
-            ['nuke-13', 'devtoolset-9']
+            ['nuke-13', 'devtoolset-6']
            ]
 
 
