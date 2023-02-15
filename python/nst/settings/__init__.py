@@ -15,6 +15,14 @@ class StyleImage(Image):
         self.rgba_filepath = ''
         self.target_map_filepath = ''
         self.colorspace = 'srgb_texture'
+        ## to do
+        # self.mips = 4
+        # self.mip_weights = [1.0]*4
+        # self.layers = ['r31', 'r42']
+        # self.layer_weights = [0.01, 0.005]
+        # self.pyramid_span = 0.5
+        # self.zoom = 1.0
+        ##
 
 
 class BaseSettings(object):
@@ -54,19 +62,22 @@ class NstSettings(BaseSettings):
         self.cuda = True
         self.model_path = os.getenv('NST_VGG_MODEL')
         self.cuda_device = 0
-        self.style_layers = ['p1', 'p2', 'r31', 'r42']
-        self.style_layer_weights = [1.0, 1.0, 1.0, 1.0]
         self.content_layer = 'r41'
         self.content_layer_weight = 1.0
-        self.style_mips = 4
-        self.mip_weights = [1.0, 1.0, 1.0, 1.0]
-        self.style_pyramid_span = 0.5
         self.content_mips = 1
         self.optimiser = 'adam'
         self.learning_rate = 10.0
-        self.style_zoom = 1.0
         self.iterations = 500
         self.log_iterations = 20
+
+        ## to do: migrate these to TorchStyle and StyleImage classes
+        self.style_zoom = 1.0
+        self.style_pyramid_span = 0.5
+        self.style_mips = 4
+        self.mip_weights = [1.0, 1.0, 1.0, 1.0]
+        self.style_layers = ['p1', 'p2', 'r31', 'r42']
+        self.style_layer_weights = [1.0, 1.0, 1.0, 1.0]
+        ##
 
 
 class WriterSettings(BaseSettings):

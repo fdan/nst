@@ -1,8 +1,8 @@
 """
 Repetitive utility functions that have nothing to do with style transfer
 """
+import random
 from typing import List
-import math
 import subprocess
 import shutil
 
@@ -108,9 +108,7 @@ def transform_image_tensor(tensor: torch.Tensor, do_cuda: bool, raw=False) -> to
 
 def image_to_tensor(image: str, do_cuda: bool, resize: float=None, colorspace=None, raw=False) -> torch.Tensor:
         # note: oiio implicitely converts to 0-1 floating point data here regardless of format:
-        print(2, image)
         buf = ImageBuf(image)
-        print(3, buf.get_pixels().shape)
 
         o_width = buf.oriented_full_width
         o_height = buf.oriented_full_height
@@ -332,3 +330,15 @@ def write_gram(tensor, fp):
     d = torch.transpose(c, 0, 1)
     e = d.cpu().numpy()
     np_write(e, fp, ext='exr', silent=True)
+
+
+def write_noise_img(x, y, filepath):
+    t = torch.rand(3, x, y)
+    t = torch.transpose(t, 2, 0)
+    t = torch.transpose(t, 0, 1)
+    t = t.contiguous()
+    n = t.numpy()
+    x, y, z = n.shape
+    buf = oiio.ImageBuf(oiio.ImageSpec(y, x, z, oiio.FLOAT))
+    buf.set_pixels(oiio.ROI(), n)
+    write_exr(buf, filepath)

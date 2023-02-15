@@ -161,6 +161,7 @@ class Model(BaseModel):
         else:
             cuda = False
 
+        # handle no content scenario
         try:
             content_np = image_list[0]
             content_tensor = torch.Tensor(content_np.copy())

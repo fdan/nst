@@ -72,7 +72,7 @@ class HistogramGuide(OptGuide):
 
     def prepare(self):
         # self.target = torch.histc(self.tensor, bins=100, min=0, max=1)
-
+        print(self.tensor.size())
         _, c, x, y = self.tensor.size()
 
         r = self.tensor[0][0].sum() / x * y
@@ -139,12 +139,12 @@ class StyleGuide(OptGuide):
     def __init__(self,
                  styles,
                  vgg,
-                 style_mips,
-                 mip_weights,
-                 layers,
-                 layer_weights,
-                 style_pyramid_span,
-                 style_zoom,
+                 # style_mips,
+                 # mip_weights,
+                 # layers,
+                 # layer_weights,
+                 # style_pyramid_span,
+                 # style_zoom,
                  cuda_device=None,
                  write_gradients=False,
                  outdir='',
@@ -155,12 +155,12 @@ class StyleGuide(OptGuide):
         self.target_maps = []
         self.vgg = vgg
         self.cuda_device = cuda_device
-        self.style_mips = style_mips
-        self.mip_weights = mip_weights
-        self.layers = layers
-        self.layer_weight = layer_weights
-        self.style_pyramid_span = style_pyramid_span
-        self.zoom = style_zoom
+        # self.style_mips = style_mips
+        # self.mip_weights = mip_weights
+        # self.layers = layers
+        # self.layer_weight = layer_weights
+        # self.style_pyramid_span = style_pyramid_span
+        # self.zoom = style_zoom
         self.write_gradients = write_gradients
         self.outdir = outdir
         self.gradient_ext = gradient_ext
@@ -176,20 +176,28 @@ class StyleGuide(OptGuide):
             tensor = style.tensor
 
             if style.target_map.numel() != 0:
-                self.target_maps += [style.target_map] * len(self.layers)
+                # self.target_maps += [style.target_map] * len(self.layers)
+                self.target_maps += [style.target_map] * len(style.layers)
             else:
-                self.target_maps += [None] * len(self.layers)
+                # self.target_maps += [None] * len(self.layers)
+                self.target_maps += [None] * len(style.layers)
 
-            if self.zoom != 1.0:
-                tensor = utils.zoom_image(tensor, self.zoom)
-                style.alpha = utils.zoom_image(style.alpha, self.zoom)
+            # if self.zoom != 1.0:
+            if style.zoom != 1.0:
+                tensor = utils.zoom_image(tensor, style.zoom)
+                style.alpha = utils.zoom_image(style.alpha, style.zoom)
+                # tensor = utils.zoom_image(tensor, self.zoom)
+                # style.alpha = utils.zoom_image(style.alpha, self.zoom)
 
-            style_pyramid = utils.make_gaussian_pyramid(tensor, self.style_pyramid_span, self.style_mips,
+            style_pyramid = utils.make_gaussian_pyramid(tensor, style.pyramid_span, style.mips,
                                                         cuda=cuda)
+            # style_pyramid = utils.make_gaussian_pyramid(tensor, self.style_pyramid_span, self.style_mips,
+            #                                             cuda=cuda)
 
             style_activations = []
 
-            for layer_activation_pyramid in self.vgg(style_pyramid, self.layers, mask=style.alpha):
+            # for layer_activation_pyramid in self.vgg(style_pyramid, self.layers, mask=style.alpha):
+            for layer_activation_pyramid in self.vgg(style_pyramid, style.layers, mask=style.alpha):
                 style_activations.append(layer_activation_pyramid)
 
             vgg_layer_index = 0
@@ -221,22 +229,39 @@ class StyleGuide(OptGuide):
             cuda = False
 
         opt_activations = []
+        for style in self.styles:
+            opt_pyramid = utils.make_gaussian_pyramid(opt_tensor, style.pyramid_span, style.mips, cuda=cuda)
+            style_opt_activations = []
+            for opt_layer_activation_pyramid in self.vgg(opt_pyramid, style.layers):
+                style_opt_activations.append(opt_layer_activation_pyramid)
+            opt_activations.append(style_opt_activations)
 
-        opt_pyramid = utils.make_gaussian_pyramid(opt_tensor, self.style_pyramid_span, self.style_mips, cuda=cuda)
-        opt_activations = []
-        for opt_layer_activation_pyramid in self.vgg(opt_pyramid, self.layers):
-            opt_activations.append(opt_layer_activation_pyramid)
+        # this is where it gets challenging, the opt image must have the same mips as the style/s
+        # opt_pyramid = utils.make_gaussian_pyramid(opt_tensor, self.style_pyramid_span, self.style_mips, cuda=cuda)
+        # opt_activations = []
+        # for opt_layer_activation_pyramid in self.vgg(opt_pyramid, self.layers):
+        #     opt_activations.append(opt_layer_activation_pyramid)
 
         # define an array to store gradients for each vgg layer
         style_gradients = []
 
-        for index, opt_layer_activation_pyramid in enumerate(opt_activations):
+        # for index, opt_layer_activation_pyramid in enumerate(opt_activations):
+        for style_index, style_opt_layer_activation_pyramid in enumerate(opt_activations):
+            for layer_index, layer in enumerate(style_opt_layer_activation_pyramid):
 
             # clear gradients, so we can calculate per layer
             optimiser.zero_grad()
+
+            # the gram pyramids can have different attributes such as num mips
             target_layer_activation_pyramid = self.target[index]
-            layer_loss = self.loss(opt_layer_activation_pyramid, target_layer_activation_pyramid, self.mip_weights)
-            layer_weight = self.layer_weight[index]
+
+            style_mip_weights = self.styles[style_index].mip_weights
+            style_layer_weights = self.styles[style_index].layer_weights
+
+            layer_loss = self.loss(opt_layer_activation_pyramid, target_layer_activation_pyramid, style_mip_weights)
+            # layer_loss = self.loss(opt_layer_activation_pyramid, target_layer_activation_pyramid, self.mip_weights)
+            # layer_weight = self.layer_weight[index]
+            layer_weight = style_layer_weights[layer_index]
             weighted_layer_loss = layer_weight * layer_loss
 
             # backpropagate our weighted loss to calculate gradients

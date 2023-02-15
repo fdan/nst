@@ -19,7 +19,15 @@ class TorchStyle(object):
         self.tensor = tensor
         self.alpha = alpha
         self.target_map = target_map
-        self.scale = 1.0
+        # self.scale = 1.0
+        ## to do
+        # self.mips = 4
+        # self.mip_weights = [1.0]*4
+        # self.layers = ['r31', 'r42']
+        # self.layer_weights = [0.01, 0.005]
+        # self.pyramid_span = 0.5
+        # self.zoom = 1.0
+        ##
 
 
 class Nst(torch.nn.Module):
@@ -60,12 +68,19 @@ class Nst(torch.nn.Module):
         else:
             raise Exception("unsupported optimiser:", self.settings.optimiser)
 
-        content_guide = guides.ContentGuide(self.content, self.vgg, self.settings.content_layer,
-                                            self.settings.content_layer_weight, self.settings.cuda_device)
+        # content can be null
+        if self.content.numel() != 0:
+            print('creating content guide')
+            content_guide = guides.ContentGuide(self.content, self.vgg, self.settings.content_layer,
+                                                self.settings.content_layer_weight, self.settings.cuda_device)
 
-        content_guide.prepare()
-        self.opt_guides.append(content_guide)
+            content_guide.prepare()
 
+            self.opt_guides.append(content_guide)
+        else:
+            print('not using content guide')
+
+        # a style is always required
         style_guide = guides.StyleGuide(self.styles,
                                         self.vgg,
                                         self.settings.style_mips,
@@ -78,6 +93,12 @@ class Nst(torch.nn.Module):
 
         style_guide.prepare()
         self.opt_guides.append(style_guide)
+
+        # hist_guide = guides.HistogramGuide(self.styles[0].tensor, 1.0, cuda_device=self.settings.cuda_device)
+        # hist_guide.prepare()
+        # self.opt_guides.append(hist_guide)
+
+
 
     def forward(self):
         n_iter = [self.start_iter]

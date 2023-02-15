@@ -1,5 +1,43 @@
 dev to do
 
+what happens if the pyramid mips also encode zoom?  ie the last mip in the pyraid
+encompasses the pyramid scale span and also the zoom span.  if feasible this would make
+variable texture scale possible via masks (although it would require significant
+restruturing of the optimisation code.  I kind of doubt it will work.
+
+make a git branch to investigate being able to mask mip contributions.  this allows
+a user to control receptive field scale locally.  however with fixed zoom, they
+cannot really control the stroke size.  a workaround could be a second zoom pyramid
+(not really a pyramid) where we accumulate gradient contributions to the opt image
+at varying zoom levels.  however this would be n times slower, where n is the number
+of zoom levels.  and is quite a big overhaul of the optimisation logic.
+
+
+current pyramid struture:
+
+pyramid
+  mip level
+     layer activations
+
+
+proposed new structure could be:
+
+pyramid
+  zoom level
+    mip level
+      layer activations
+
+the performance impact might actually not be as great as I thought.  worth finding out.
+I think it's actually not a massive change, but would require alot of clear thought.
+
+
+
+* restore cpu memory_profiler (requites env rebuild)
+* allow style images with no alpha (assume alpha of ones)
+* migrate style layers, layer weights, mips,  mip weights, pyramid span, style zoom out of settings, into
+  properties of TorchStyle / StyleImage, as they are rightly properties of the style image, not globals
+
+
 * finish temporal coherence
 
 nice to have's:
@@ -14,7 +52,7 @@ milestone 1:
 * nuke user can work at a proxy resolution, which combined with mlc live update give a reasonable response time
 * nuke user can lookdev at proxy resolution, then send to farm for full res on cpu
 * limited to single style, but can use style alpha, target map
-* nuke user can adjust quality via several parameters (epocs, mips)
+* nuke user can adjust quality via several parameters (epochs, mips)
 * utilisation of various debug outputs (activations, gradients, pyramids, style-only nst) for assisting lookdev
 * demonstrate in a video
 
