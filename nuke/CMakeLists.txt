@@ -4,10 +4,22 @@ project(MachineLearningPlugins VERSION 1.0.0)
 message("nuke install path" $ENV{NUKE_LOCATION})
 set(NUKE_INSTALL_PATH $ENV{NUKE_LOCATION})
 
+
+find_program(LSB_RELEASE_EXEC lsb_release)
+execute_process(COMMAND ${LSB_RELEASE_EXEC} -is
+    OUTPUT_VARIABLE LSB_RELEASE_ID_SHORT
+    OUTPUT_STRIP_TRAILING_WHITESPACE
+)
+
+if (LSB_RELEASE_ID_SHORT MATCHES "Ubuntu")
+  add_definitions(-D_GLIBCXX_USE_CXX11_ABI=0)
+  set( CMAKE_CXX_STANDARD 14 )
+  set(CMAKE_C_COMPILER /usr/bin/gcc-6)
+  set(CMAKE_CXX_COMPILER /usr/bin/g++-6)  
+endif()
+
 #===------------------------------------------------------------------------===
 # Global settings some based on the external configuration settings
-#set( CMAKE_CXX_STANDARD 11 )
-set( CMAKE_CXX_STANDARD 14 )
 set( CMAKE_CXX_EXTENSIONS OFF )
 set( CMAKE_CXX_VISIBILITY_PRESET hidden )
 set( CMAKE_POSITION_INDEPENDENT_CODE True )
@@ -28,8 +40,5 @@ set( BUILDDATE_FULL "${BUILDDATE_FULL_INTERNAL}" CACHE STRING "Exact time of the
 
 #===------------------------------------------------------------------------===
 # Compile CMakeLists found in subdirectories
-#add_subdirectory(ml-client)
 add_subdirectory(ml-client-live)
-#add_subdirectory(ml-client-live2)
-#add_subdirectory(live-render)
-#add_subdirectory(socket)
+
