@@ -147,6 +147,7 @@ class StyleGuide(OptGuide):
                  style_zoom,
                  cuda_device=None,
                  write_gradients=False,
+                 write_pyramids = False,
                  outdir='',
                  gradient_ext='jpg'):
         super(StyleGuide, self).__init__()
@@ -162,6 +163,7 @@ class StyleGuide(OptGuide):
         self.style_pyramid_span = style_pyramid_span
         self.zoom = style_zoom
         self.write_gradients = write_gradients
+        self.write_pyramids = write_pyramids
         self.outdir = outdir
         self.gradient_ext = gradient_ext
 
@@ -186,6 +188,9 @@ class StyleGuide(OptGuide):
 
             style_pyramid = utils.make_gaussian_pyramid(tensor, self.style_pyramid_span, self.style_mips,
                                                         cuda=cuda)
+
+            if self.write_pyramids:
+                utils.write_pyramid(style_pyramid, self.outdir)
 
             style_activations = []
 

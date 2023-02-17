@@ -1,3 +1,5 @@
+import os
+
 import torch
 from torch.autograd import Variable # deprecated - use Tensor
 import torchvision.transforms.functional
@@ -96,6 +98,15 @@ def centre_crop_image(img, zoom):
     return img
 
 
+def write_pyramid(pyramid, outdir):
+    outdir = outdir + '/pyramids'
+    os.makedirs(outdir, exist_ok=True)
+
+    for mip in range(0, len(pyramid)):
+        filepath = outdir + "/%02d.pt" % mip
+        torch.save(pyramid[mip], filepath)
+
+
 def make_gaussian_pyramid(img, span, mips, cuda=True):
     """
     given an image, generate a series of guassian pyramids to fill a given span.
@@ -141,7 +152,8 @@ def _gaussian_pyramid(img, kernel, max_levels, pyramid_scale_factor):
     current = img
     pyr = [current]
 
-    for level in range(0, max_levels-1):
+    # for level in range(0, max_levels-1):
+    for level in range(1, max_levels):
         filtered = _conv_gauss(current, kernel)
         current = torch.nn.functional.interpolate(filtered, scale_factor=pyramid_scale_factor)
         pyr.append(current)

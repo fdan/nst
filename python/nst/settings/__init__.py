@@ -69,6 +69,9 @@ class NstSettings(BaseSettings):
         self.learning_rate = 10.0
         self.iterations = 500
         self.log_iterations = 20
+        self.outdir = ''
+        self.write_gradients = False
+        self.write_pyramids = False
 
         ## to do: migrate these to TorchStyle and StyleImage classes
         self.style_zoom = 1.0

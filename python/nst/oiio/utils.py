@@ -77,6 +77,20 @@ def style_image_to_tensors(image: str, do_cuda: bool, resize: float = None, colo
     return tensors
 
 
+def pts_to_exrs(outdir):
+    pts = [x for x in os.listdir(outdir) if x.endswith('.pt')]
+    for p in pts:
+        fp = outdir + '/' + p
+        pt_to_exr(fp)
+
+
+def pt_to_exr(inpath):
+    tensor = torch.load(inpath)
+    buf = tensor_to_buf(tensor)
+    outpath = inpath.replace('.pt', '.exr')
+    write_exr(buf, outpath)
+
+
 def transform_image_tensor(tensor: torch.Tensor, do_cuda: bool, raw=False) -> torch.Tensor:
 
     tforms_ = []

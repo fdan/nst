@@ -89,6 +89,9 @@ class Nst(torch.nn.Module):
                                         self.settings.style_layer_weights,
                                         self.settings.style_pyramid_span,
                                         self.settings.style_zoom,
+                                        outdir=self.settings.outdir,
+                                        write_pyramids=self.settings.write_pyramids,
+                                        write_gradients=self.settings.write_gradients,
                                         cuda_device=self.settings.cuda_device)
 
         style_guide.prepare()
