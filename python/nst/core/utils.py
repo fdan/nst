@@ -55,14 +55,22 @@ def rescale_tensor(tensor, scale_factor, requires_grad=False):
     return tensor
 
 
-def zoom_image(img, zoom):
+def zoom_image(img, zoom, output_path=''):
+
     if zoom == 1.0:
         return img
 
     if zoom >= 1:
-        return centre_crop_image(img, zoom)
+        result = centre_crop_image(img, zoom)
     else:
-        return tile(img, zoom)
+        result = tile(img, zoom)
+
+    # for debug purposes, write out the zoomed image as a .pt
+    if output_path:
+        print('writing zoom tensor')
+        torch.save(result, output_path)
+
+    return result
 
 
 def tile(img, zoom, cuda=False):
@@ -90,12 +98,18 @@ def centre_crop_image(img, zoom):
         crop_height = int(old_y / zoom)
         top = int((old_y - crop_height) / 2.)
         left = int((old_x - crop_width) / 2.)
-        img = torchvision.transforms.functional.crop(img, top, left, crop_height, crop_width)
+        img = torchvision.transforms.functional.crop(img, top, left, crop_width, crop_height)
 
     out_x = int(old_x)
     out_y = int(old_y)
     img = torch.nn.functional.interpolate(img, size=(out_x, out_y))
     return img
+
+
+def log_cuda_memory():
+    max_memory = torch.cuda.get_device_properties(torch.cuda.current_device()).total_memory / 1000000
+    max_mem_cached = torch.cuda.max_memory_reserved(0) / 1000000
+    print('memory used: %s of %s' % (max_mem_cached, max_memory))
 
 
 def write_pyramid(pyramid, outdir):

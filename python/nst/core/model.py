@@ -101,8 +101,6 @@ class Nst(torch.nn.Module):
         # hist_guide.prepare()
         # self.opt_guides.append(hist_guide)
 
-
-
     def forward(self):
         n_iter = [self.start_iter]
         current_loss = [9999999]

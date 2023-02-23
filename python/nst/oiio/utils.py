@@ -1,7 +1,7 @@
 """
 Repetitive utility functions that have nothing to do with style transfer
 """
-import random
+import math
 from typing import List
 import subprocess
 import shutil
@@ -75,6 +75,36 @@ def style_image_to_tensors(image: str, do_cuda: bool, resize: float = None, colo
         tensors += [rgb_tensor, alpha_tensor]
 
     return tensors
+
+
+def pad_exrs(pad, outdir):
+    exrs = [x for x in os.listdir(outdir) if x.endswith('.exr')]
+    for exr in exrs:
+        fp = outdir + '/' + exr
+        pad_exr(pad, fp)
+
+
+def pad_exr(pad, filepath):
+    tensor = image_to_tensor(filepath, True)
+    _, c, h, w = tensor.size()
+    print(h, w)
+    ph = int(pad * h) - h
+    pw = int(pad * w) - w
+
+    # ensure pad amounts are even:
+    ph = int(math.ceil(ph / 2.) * 2.)
+    pw = int(math.ceil(pw / 2.) * 2.)
+
+    tensor = torch.nn.functional.pad(tensor, (pw, pw, ph, ph), 'reflect')
+    buf = tensor_to_buf(tensor)
+    outpath = filepath.replace('.exr', '.pad.exr')
+    write_exr(buf, outpath)
+
+
+def log_cuda_memory():
+    max_memory = torch.cuda.get_device_properties(torch.cuda.current_device()).total_memory / 1000000
+    max_mem_cached = torch.cuda.max_memory_reserved(0) / 1000000
+    print('memory used: %s of %s' % (max_mem_cached, max_memory))
 
 
 def pts_to_exrs(outdir):

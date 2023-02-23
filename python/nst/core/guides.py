@@ -167,7 +167,6 @@ class StyleGuide(OptGuide):
         self.outdir = outdir
         self.gradient_ext = gradient_ext
 
-
     def prepare(self, *args):
         if self.cuda_device:
             cuda = True
@@ -224,8 +223,6 @@ class StyleGuide(OptGuide):
             cuda = True
         else:
             cuda = False
-
-        opt_activations = []
 
         opt_pyramid = utils.make_gaussian_pyramid(opt_tensor, self.style_pyramid_span, self.style_mips, cuda=cuda)
         opt_activations = []

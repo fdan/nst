@@ -98,6 +98,7 @@ class WriterSettings(BaseSettings):
         self.write_style_activations = False
         self.write_content_activations = False
         self.write_gram = False
+        self.output_format = 'exr'
         self.frame = ''
         self.out_colorspace = 'srgb_texture'
         self.core = NstSettings()

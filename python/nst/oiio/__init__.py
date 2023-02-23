@@ -29,8 +29,15 @@ class StyleWriter(object):
         self.settings.load(fp)
 
     def prepare_model(self):
-        self.vgg, self.settings.core.cuda = core_utils.get_vgg(self.settings.core.engine,
-                                                               self.settings.core.model_path)
+        # pretty sure this is unecessary
+        # self.vgg, self.settings.core.cuda = core_utils.get_vgg(self.settings.core.engine,
+        #                                                        self.settings.core.model_path)
+
+        if self.settings.core.engine == "gpu":
+            self.settings.core.cuda = True
+        elif self.settings.core.engine == "cpu":
+            self.settings.core.cuda = False
+
         self.nst = model.Nst()
         self.nst.settings = self.settings.core
 
@@ -39,7 +46,7 @@ class StyleWriter(object):
             self.output_dir = os.path.abspath(os.path.join(self.settings.out, (os.path.pardir)))
         return self.output_dir
 
-    def write_exr(self) -> None:
+    def write(self) -> None:
 
         frame = self.settings.frame
 
@@ -79,17 +86,20 @@ class StyleWriter(object):
         # do style transfer
         tensor = self.nst()
 
-        buf = utils.tensor_to_buf(tensor)
+        if self.settings.output_format == 'exr':
+            buf = utils.tensor_to_buf(tensor)
+            if self.settings.out_colorspace != 'srgb_texture':
+                buf = oiio.ImageBufAlgo.colorconvert(buf, 'srgb_texture', self.settings.out_colorspace)
+            buf.write(out_fp)
 
-        if self.settings.out_colorspace != 'srgb_texture':
-            buf = oiio.ImageBufAlgo.colorconvert(buf, 'srgb_texture', self.settings.out_colorspace)
-
-        buf.write(out_fp)
+        elif self.settings.output_format == 'pt':
+            torch.save(tensor, out_fp)
 
     def prepare_styles(self):
         styles = []
 
         for style in self.settings.styles:
+
             style_tensor, style_alpha = utils.style_image_to_tensors(style.rgba_filepath,
                                                                           self.settings.core.cuda,
                                                                           colorspace=style.colorspace)
@@ -106,18 +116,25 @@ class StyleWriter(object):
         return styles
 
     def prepare_content(self):
+        print(2.3, self.settings.core.cuda)
         content_tensor = utils.image_to_tensor(self.settings.content.rgb_filepath, self.settings.core.cuda,
                                                colorspace=self.settings.content.colorspace)
         return content_tensor
 
     def prepare_opt(self):
-        opt_tensor = utils.image_to_tensor(self.settings.opt_image.rgb_filepath, self.settings.core.cuda,
-                                       colorspace=self.settings.opt_image.colorspace)
+        opt_filepath = self.settings.opt_image.rgb_filepath
+
+        if opt_filepath.endswith('.exr'):
+            opt_tensor = utils.image_to_tensor(opt_filepath, self.settings.core.cuda,
+                                           colorspace=self.settings.opt_image.colorspace)
+
+        elif opt_filepath.endswith('.pt'):
+            opt_tensor = torch.load(opt_filepath)
 
         opt_tensor = Variable(opt_tensor.data.clone(), requires_grad=True)
         return opt_tensor
 
-    def write_style_gram(self, ext='exr'):
+    def write_style_gram(self, ext='jpg'):
         s_index = 0
         for s in self.settings.styles:
 
