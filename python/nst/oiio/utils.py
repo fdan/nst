@@ -5,6 +5,7 @@ import math
 from typing import List
 import subprocess
 import shutil
+import copy
 
 import torch
 from torchvision import transforms
@@ -15,7 +16,8 @@ import OpenImageIO as oiio
 from OpenImageIO import ImageBuf, ImageSpec, ROI
 import os
 import numpy as np
-
+import numba
+import kornia
 
 def tensor_to_image(tensor):
     postpa = transforms.Compose([transforms.Lambda(lambda x: x.mul_(1. / 255)),
@@ -386,3 +388,115 @@ def write_noise_img(x, y, filepath):
     buf = oiio.ImageBuf(oiio.ImageSpec(y, x, z, oiio.FLOAT))
     buf.set_pixels(oiio.ROI(), n)
     write_exr(buf, filepath)
+
+
+@numba.guvectorize([(numba.float32[:, :, :], numba.float32[:, :, :], numba.int64, numba.float32[:, :, :])],"(m,n,o),(m,n,o),()->(m,n,o)")
+def _warp_np(pos_np, vec_np, radius, output):
+    x, y, z = vec_np.shape
+
+    for old_x in range(0, x):
+        for old_y in range(0, y):
+            my, mx, _ = vec_np[old_x][old_y]  # flip axis
+            nx = old_x + int(mx)
+            ny = old_y + int(my)
+
+            if nx not in range(0, x) or ny not in range(0, y):
+                continue
+
+            if radius:
+                for px in range(nx - radius, nx + radius):
+                    for py in range(ny - radius, ny + radius):
+                        ox = old_x + px - nx
+                        oy = old_y + py - ny
+                        if px in range(0, x) and py in range(0, y):
+                            if ox in range(0, x) and oy in range(0, y):
+                                output[px][py] = pos_np[ox][oy]
+            else:
+                output[nx][ny] = pos_np[old_x][old_y]
+
+
+def calc_disocclusion(mvec_fore, mvec_back, this_frame, output, step=1, radius=2):
+    # mvec_fore = '/mnt/ala/mav/2021/wip/s121/sequences/id01/id01_030/light/lighting/daniel.student/katana/renders/static/v020/data/motionFore/motionFore.####.exr'
+    # mvec_back = '/mnt/ala/mav/2021/wip/s121/sequences/id01/id01_030/light/lighting/daniel.student/katana/renders/static/v020/data/motionBack/motionBack.####.exr'
+    # output = '/mnt/ala/mav/2021/wip/s121/sequences/id01/id01_030/light/lighting/daniel.student/katana/renders/static/v020/data/motionFore/030_disocc.exr'
+    # disocc_mask(mvec_fore, mvec_back, 1020, output, step=4, radius=1)
+
+    # numba vectorize requires numpy arrays
+    mvec_back_frame = mvec_back.replace('####', '%04d' % this_frame)
+    mvec_back_buf = oiio.ImageBuf(mvec_back_frame)
+    mvec_back_np = mvec_back_buf.get_pixels(roi=mvec_back_buf.roi_full)
+
+    x, y, z = mvec_back_np.shape
+
+    back_warp_np = np.zeros((x, y, z), dtype=np.float32)
+    back_col_np = np.ones((x, y, z), dtype=np.float32)
+
+    render_input = back_col_np
+
+    for s in range(0, step):
+        _warp_np(render_input, mvec_back_np, radius, back_warp_np)
+        render_input = copy.deepcopy(back_warp_np)
+
+    back_frame = this_frame - step
+
+    mvec_fore_frame = mvec_fore.replace('####', '%04d' % back_frame)
+    mvec_fore_buf = oiio.ImageBuf(mvec_fore_frame)
+    mvec_fore_np = mvec_fore_buf.get_pixels(roi=mvec_fore_buf.roi_full)
+
+    fore_warp_np = np.zeros((x, y, z), dtype=np.float32)
+    fore_col_np = back_warp_np
+
+    render_input = fore_col_np
+
+    for s in range(0, step):
+        _warp_np(render_input, mvec_fore_np, radius, fore_warp_np)
+        render_input = copy.deepcopy(fore_warp_np)
+
+    # convert to pytorch tensor from here to avoid opencv 
+    fore_warp_tensor = torch.Tensor(fore_warp_np)
+
+    dilation_kernel = torch.ones(2, 2)
+    kornia.morphology.dilation(fore_warp_tensor, dilation_kernel)
+
+    erosion_kernel = torch.ones(3, 3)
+    kornia.morphology.erosion(fore_warp_tensor, erosion_kernel)
+
+    blur_kernel = (10, 10)
+    blur_sigma = (10, 10)
+    kornia.filters.gaussian_blur2d(fore_warp_tensor, blur_kernel, blur_sigma)
+
+    np_write(fore_warp_np, output, ext='exr')
+
+
+def warp(render_seq, mvec_seq, to_frame, output, step=1, radius=3):
+    # render_seq = '/mnt/ala/mav/2021/wip/s121/sequences/id01/id01_030/light/lighting/daniel.student/katana/renders/static/v020/primary/beauty/2048x858/acescg/exr/id01_030_static_primary_beauty_v020_acescg_rgb.####.exr'
+    # mvec_seq = '/mnt/ala/mav/2021/wip/s121/sequences/id01/id01_030/light/lighting/daniel.student/katana/renders/static/v020/data/motionFore/motionFore.####.exr'
+    # output = '/mnt/ala/mav/2021/wip/s121/sequences/id01/id01_030/light/lighting/daniel.student/katana/renders/static/v020/data/motionFore/021.exr'
+    # warp(render_seq, mvec_seq, 1020, output, step=1)
+
+    # numba vectorize requires numpy arrays hence no tensors
+
+    from_frame = to_frame - step
+
+    render_from = render_seq.replace('####', '%04d' % from_frame)
+    render_from_buf = oiio.ImageBuf(render_from)
+    render_from_np = render_from_buf.get_pixels(roi=render_from_buf.roi_full)
+
+    mvec_frame = mvec_seq.replace('####', '%04d' % from_frame)
+    mvec_frame_buf = oiio.ImageBuf(mvec_frame)
+    mvec_frame_np = mvec_frame_buf.get_pixels(roi=mvec_frame_buf.roi_full)
+
+    output_np = copy.deepcopy(render_from_np)
+
+    render_input = render_from_np
+
+    for s in range(0, step):
+        _warp_np(render_input, mvec_frame_np, radius, output_np)
+        render_input = copy.deepcopy(output_np)
+
+    np_write(output_np, output, ext='exr')
+
+
+
+
+

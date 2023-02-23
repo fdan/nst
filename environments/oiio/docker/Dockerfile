@@ -37,7 +37,8 @@ RUN python3.8 -m pip install --no-cache-dir setuptools wheel && \
     pyyaml==3.13 \
     scikit-image \
     typing \
-    imageio
+    imageio \
+    numba
 
 RUN python3.8 -m pip install --no-cache-dir torch==1.10.1+cu111 torchvision==0.11.2+cu111 torchaudio==0.10.1 -f https://download.pytorch.org/whl/torch_stable.html
 RUN python3.8 -m pip install --no-cache-dir cupy-cuda110

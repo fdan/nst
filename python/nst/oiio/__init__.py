@@ -12,7 +12,9 @@ from nst.core import utils as core_utils
 import nst.settings as settings
 
 
-class StyleWriter(object):
+
+
+class FrameWriter(object):
 
     def __init__(self,
                  styles: List[settings.StyleImage]=None,
@@ -233,3 +235,50 @@ class StyleWriter(object):
                         utils.write_activations(mip_activations, outdir, layer_limit=layer_limit, ext=ext)
                         mip_index += 1
                     vgg_layer_index += 1
+
+
+class AnimWriter(FrameWriter):
+
+    def __init__(self,
+                 styles: List[settings.StyleImage] = None,
+                 opt_image: settings.Image = None,
+                 content: settings.Image = None):
+
+        super(AnimWriter, self).__init__(styles, opt_image, content)
+        self.settings = settings.AnimSettings()
+
+    def run(self):
+        for pass_ in range(self.settings.starting_pass, self.settings.passes):
+            direction = pass_ % 2
+            start = self.settings.last_frame if direction == 0 else self.settings.first_frame
+            end = self.settings.first_frame if direction == 0 else self.settings.last_frame
+            increment_by = -1 if direction == 0 else 1
+
+            for this_frame in range(start, end, increment_by):
+
+                if prev_frame != -1:
+                    utils.warp()
+
+                # is there a previous frame?
+                #    yes:
+                #        * calculate disocclusion from prev_frame->frame using motion vectors
+                #        * open prev_frame.pt and warp prev_frame->frame
+                #        * comp over content using disocclusion mask as alpha
+                #        * use result as opt_image
+                #    no:
+                #        * the content image is the opt image
+                # * do nst on the current frame for i iterations
+                # * write to .pt when done
+                #
+                # frames.append(frame)
+                # "we blend frames with non-disoccluded parts of previous frames warped according to the optical flow"
+
+                if this_frame == self.settings.first_frame and pass_ == 1:
+                    prev_frame = -1
+                elif this_frame == self.settings.first_frame:
+                    prev_frame = this_frame + 1
+                elif this_frame == self.settings.last_frame:
+                    prev_frame = this_frame - 1
+                else:
+                    prev_frame = this_frame + 1 if direction == 0 else this_frame - 1
+
