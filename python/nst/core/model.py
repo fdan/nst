@@ -70,7 +70,6 @@ class Nst(torch.nn.Module):
 
         # content can be null
         if self.content.numel() != 0:
-            print('creating content guide')
             content_guide = guides.ContentGuide(self.content, self.vgg, self.settings.content_layer,
                                                 self.settings.content_layer_weight, self.settings.cuda_device)
 

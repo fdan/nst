@@ -19,6 +19,7 @@ import numpy as np
 import numba
 import kornia
 
+
 def tensor_to_image(tensor):
     postpa = transforms.Compose([transforms.Lambda(lambda x: x.mul_(1. / 255)),
                                  transforms.Normalize(mean=[-0.40760392, -0.45795686, -0.48501961],  # add imagenet mean
@@ -391,14 +392,14 @@ def write_noise_img(x, y, filepath):
 
 
 @numba.guvectorize([(numba.float32[:, :, :], numba.float32[:, :, :], numba.int64, numba.float32[:, :, :])],"(m,n,o),(m,n,o),()->(m,n,o)")
-def _warp_np(pos_np, vec_np, radius, output):
+def _warp_np(col_np, vec_np, radius, output):
     x, y, z = vec_np.shape
 
     for old_x in range(0, x):
         for old_y in range(0, y):
             my, mx, _ = vec_np[old_x][old_y]  # flip axis
-            nx = old_x + int(mx)
-            ny = old_y + int(my)
+            nx = old_x + int(mx) # floor?
+            ny = old_y + int(my) # floor?
 
             if nx not in range(0, x) or ny not in range(0, y):
                 continue
@@ -410,18 +411,61 @@ def _warp_np(pos_np, vec_np, radius, output):
                         oy = old_y + py - ny
                         if px in range(0, x) and py in range(0, y):
                             if ox in range(0, x) and oy in range(0, y):
-                                output[px][py] = pos_np[ox][oy]
+                                output[px][py] = col_np[ox][oy]
             else:
-                output[nx][ny] = pos_np[old_x][old_y]
+                output[nx][ny] = col_np[old_x][old_y]
+
+
+
+def calc_flow_weights(motionFore, motionBack, start_frame, end_frame, step, output, radius=2):
+    # output motionForeWeight, motionBackWeight
+    # ie for a given frame's motionFore vector, create what is effectively an alpha channel for it
+    _start_frame = motionFore.replace('####', '%04d' % start_frame)
+    _start_buf = oiio.ImageBuf(_start_frame)
+    np_array = _start_buf.get_pixels(roi=_start_buf.roi_full)
+    x, y, z = np_array.shape
+
+    black_img = np.zeros((x, y, z), dtype=np.float32)
+    white_img = np.ones((x, y, z), dtype=np.float32)
+
+    for i in range(start_frame, end_frame):
+        j = i + step
+
+        fore_flow = motionFore.replace('####', '%04d' % i) # eg 1010
+        back_flow = motionBack.replace('####', '%04d' % j) # eg 1011
+
+        # backwards->forwards aka disocclusionFore mask
+        fore_warp = np.zeros((x, y, z), dtype=np.float32)
+        _warp_np(white_img, fore_flow, radius, fore_warp)
+        # now warp the fore warp backwards
+        back_warp = np.zeros((x, y, z), dtype=np.float32)
+        _warp_np(fore_warp, back_flow, radius, back_warp)
+
+        # forewards-backwards aka disocclusionBack mask
+
+
+
+
+
+    # renders/Studio/v011/data/motionFore/2048x858/acescg/exr/id01_060_Studio_data_motionFore_v011_acescg.####.exr
+    # renders/Studio/v011/data/motionBack/2048x858/acescg/exr/id01_060_Studio_data_motionBack_v011_acescg.####.exr
+
+    # ruder et al name the flo files with from->to embedded in the filename, eg:
+    # for a step of 1, at frame 1010, the fore flo file would be:
+    # foreward_1001_1002.flo
+    # FROM 1001 TO 1002
+    # the operative frame being 1002
+    #
+    # in prman, we don't control the "from", it is always the adjacent frame.
+    # so for frame 1002:
+    # * motionFore 1001 is a forward warp to this frame
+    # * motionBack 1003 is a backward warp to this frame
+
 
 
 def calc_disocclusion(mvec_fore, mvec_back, this_frame, output, step=1, radius=2):
-    # mvec_fore = '/mnt/ala/mav/2021/wip/s121/sequences/id01/id01_030/light/lighting/daniel.student/katana/renders/static/v020/data/motionFore/motionFore.####.exr'
-    # mvec_back = '/mnt/ala/mav/2021/wip/s121/sequences/id01/id01_030/light/lighting/daniel.student/katana/renders/static/v020/data/motionBack/motionBack.####.exr'
-    # output = '/mnt/ala/mav/2021/wip/s121/sequences/id01/id01_030/light/lighting/daniel.student/katana/renders/static/v020/data/motionFore/030_disocc.exr'
-    # disocc_mask(mvec_fore, mvec_back, 1020, output, step=4, radius=1)
 
-    # numba vectorize requires numpy arrays
+    # note: numba vectorize requires numpy arrays
     mvec_back_frame = mvec_back.replace('####', '%04d' % this_frame)
     mvec_back_buf = oiio.ImageBuf(mvec_back_frame)
     mvec_back_np = mvec_back_buf.get_pixels(roi=mvec_back_buf.roi_full)

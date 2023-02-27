@@ -12,9 +12,7 @@ from nst.core import utils as core_utils
 import nst.settings as settings
 
 
-
-
-class FrameWriter(object):
+class StyleWriter(object):
 
     def __init__(self,
                  styles: List[settings.StyleImage]=None,
@@ -118,7 +116,6 @@ class FrameWriter(object):
         return styles
 
     def prepare_content(self):
-        print(2.3, self.settings.core.cuda)
         content_tensor = utils.image_to_tensor(self.settings.content.rgb_filepath, self.settings.core.cuda,
                                                colorspace=self.settings.content.colorspace)
         return content_tensor
@@ -237,7 +234,7 @@ class FrameWriter(object):
                     vgg_layer_index += 1
 
 
-class AnimWriter(FrameWriter):
+class AnimWriter(StyleWriter):
 
     def __init__(self,
                  styles: List[settings.StyleImage] = None,
@@ -249,36 +246,31 @@ class AnimWriter(FrameWriter):
 
     def run(self):
         for pass_ in range(self.settings.starting_pass, self.settings.passes):
+            # if direction is 1, we are in a forward pass.  if 0, negative.
             direction = pass_ % 2
             start = self.settings.last_frame if direction == 0 else self.settings.first_frame
             end = self.settings.first_frame if direction == 0 else self.settings.last_frame
             increment_by = -1 if direction == 0 else 1
 
+             # if direction is backwards, use the forewards disocclusion mask
+
             for this_frame in range(start, end, increment_by):
 
-                if prev_frame != -1:
-                    utils.warp()
-
-                # is there a previous frame?
-                #    yes:
-                #        * calculate disocclusion from prev_frame->frame using motion vectors
-                #        * open prev_frame.pt and warp prev_frame->frame
-                #        * comp over content using disocclusion mask as alpha
-                #        * use result as opt_image
-                #    no:
-                #        * the content image is the opt image
-                # * do nst on the current frame for i iterations
-                # * write to .pt when done
-                #
-                # frames.append(frame)
-                # "we blend frames with non-disoccluded parts of previous frames warped according to the optical flow"
-
+                # warp_from_frame is the temporal prior in the context of pass direction
+                # i.e. the color image we are wanting to warp
                 if this_frame == self.settings.first_frame and pass_ == 1:
-                    prev_frame = -1
+                    warp_from_frame = -1
                 elif this_frame == self.settings.first_frame:
-                    prev_frame = this_frame + 1
+                    warp_from_frame = this_frame + 1
                 elif this_frame == self.settings.last_frame:
-                    prev_frame = this_frame - 1
+                    warp_from_frame = this_frame - 1
                 else:
-                    prev_frame = this_frame + 1 if direction == 0 else this_frame - 1
+                    warp_from_frame = this_frame + 1 if direction == 0 else this_frame - 1
 
+                # backwards->forwards pass
+                if direction == 1:
+                    flow_weight = self.settings.motion_back.replace('####', '%04d' % this_frame - 1)
+                elif direction == 0:
+                    flow_weight = self.settings.motion_fore.replace('')
+
+                # if direction is backwards->forwards, use the motionBackWeight at prev_frame

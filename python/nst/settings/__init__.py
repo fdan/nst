@@ -142,6 +142,7 @@ class AnimSettings(WriterSettings):
         self.use_temporal_loss_after = 8
         self.motion_fore = ''
         self.motion_back = ''
+        self.disocclusion_mask = ''
 
 
 
