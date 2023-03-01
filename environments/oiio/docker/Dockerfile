@@ -44,6 +44,7 @@ RUN python3.10 -m pip install --no-cache-dir torch==1.13.1+cu117 torchvision==0.
 RUN python3.10 -m pip install --no-cache-dir cupy-cuda11x
 RUN python3.10 -m pip install --no-cache-dir cython
 RUN python3.10 -m pip install --no-cache-dir kornia
+RUN python3.10 -m pip install --no-cache-dir opencv-python
 RUN python3.10 -m pip install --no-cache-dir memory_profiler
 RUN python3.10 -m pip install --no-cache-dir matplotlib
 RUN python3.10 -m pip install --no-cache-dir jupyterlab
