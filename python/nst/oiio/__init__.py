@@ -269,8 +269,10 @@ class AnimWriter(StyleWriter):
 
                 # backwards->forwards pass
                 if direction == 1:
-                    flow_weight = self.settings.motion_back.replace('####', '%04d' % this_frame - 1)
+                    flow = self.settings.motion_fore.replace('####', '%04d' % this_frame - 1)
+                    flow_weight = self.settings.motion_fore_weight.replace('####', '%04d' % this_frame - 1)
                 elif direction == 0:
-                    flow_weight = self.settings.motion_fore.replace('')
+                    flow = self.settings.motion_back.replace('####', '%04d' % this_frame + 1)
+                    flow_weight = self.settings.motion_back_weight.replace('####', '%04d' % this_frame + 1)
 
                 # if direction is backwards->forwards, use the motionBackWeight at prev_frame

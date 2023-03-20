@@ -141,8 +141,9 @@ class AnimSettings(WriterSettings):
         self.passes = 15
         self.use_temporal_loss_after = 8
         self.motion_fore = ''
+        self.motion_fore_weight = ''
         self.motion_back = ''
-        self.disocclusion_mask = ''
+        self.motion_back_weight = ''
 
 
 
