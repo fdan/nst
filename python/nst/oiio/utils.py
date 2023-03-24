@@ -138,6 +138,7 @@ def transform_image_tensor(tensor: torch.Tensor, do_cuda: bool, raw=False) -> to
         # scale to imagenet values
         tforms_ += [transforms.Lambda(lambda x: x.mul_(255.))]
 
+
     tforms = transforms.Compose(tforms_)
 
     tensor = torch.transpose(tensor, 2, 0)
@@ -148,9 +149,11 @@ def transform_image_tensor(tensor: torch.Tensor, do_cuda: bool, raw=False) -> to
     if do_cuda:
         device = core_utils.get_cuda_device()
         tensor = tensor.detach().to(torch.device(device))
-        return tensor.unsqueeze(0).cuda()
+        result = tensor.unsqueeze(0).cuda()
+        return result
     else:
-        return tensor.unsqueeze(0)
+        result = tensor.unsqueeze(0)
+        return result
 
 
 def image_to_tensor(image: str, do_cuda: bool, resize: float=None, colorspace=None, raw=False) -> torch.Tensor:

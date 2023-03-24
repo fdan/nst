@@ -45,7 +45,7 @@ python3.10 -m pip install --no-cache-dir setuptools wheel && \
     imageio \
     numba
 
-python3.10 -m pip install --no-cache-dir torch==1.13.1+cu117 torchvision==0.14.1+cu117 torchaudio==0.13.1 -f https://download.pytorch.org/whl/torch_stable.html
+python3.10 -m pip install --no-cache-dir torch==2.0.0+cu117 torchvision==0.15.1+cu117 torchaudio==2.0.1+cu117 -f https://download.pytorch.org/whl/torch_stable.html
 python3.10 -m pip install --no-cache-dir cupy-cuda11x
 python3.10 -m pip install --no-cache-dir cython
 python3.10 -m pip install --no-cache-dir kornia
@@ -53,6 +53,7 @@ python3.10 -m pip install --no-cache-dir opencv-python
 python3.10 -m pip install --no-cache-dir memory_profiler
 python3.10 -m pip install --no-cache-dir matplotlib
 python3.10 -m pip install --no-cache-dir jupyterlab
+python3.10 -m pip install --no-cache-dir lion-pytorch
 
 %environment
 export PATH=/mnt/ala/research/danielf/git/nst/bin:$PATH

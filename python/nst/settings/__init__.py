@@ -87,7 +87,7 @@ class WriterSettings(BaseSettings):
     def __init__(self):
         super(WriterSettings, self).__init__()
         self.styles = [StyleImage()]
-        self.content = Image()
+        self.content = None
         self.opt_image = Image()
         self.out = ''
         self.progressive_output = False

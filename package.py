@@ -7,14 +7,14 @@ version = '3.0.1'
 authors = ['daniel.flood']
 
 requires = [
-            'ocio_configs',
+#            'ocio_configs',
             'tractor'
            ]
 
 build_requires = ['cmake-3.10+']
 
 variants = [
-           ['nuke-12'],
+#           ['nuke-12'],
             ['nuke-13', 'devtoolset-6']
            ]
 
