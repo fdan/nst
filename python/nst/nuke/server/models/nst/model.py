@@ -23,6 +23,7 @@ class Model(BaseModel):
         self.options = ("engine",
                         "optimiser",
                         "style_pyramid_span",
+                        "style_zoom",
                         "style_mips",
                         "style_mip_weights",
                         "style_layers",
@@ -61,14 +62,19 @@ class Model(BaseModel):
 
         self.buttons = ["farm"]
 
-        self.inputs = {'content': 3,
-                       'opt_img': 3,
+        self.inputs = {'opt_img': 3,
                        'style1': 4,
                        'style1_target': 1,
-                       'style2': 4,
-                       'style2_target': 1,
-                       'style3': 4,
-                       'style3_target': 1}
+                       'content': 3}
+
+        # self.inputs = {'content': 3,
+        #                'opt_img': 3,
+        #                'style1': 4,
+        #                'style1_target': 1,
+        #                'style2': 4,
+        #                'style2_target': 1,
+        #                'style3': 4,
+        #                'style3_target': 1}
 
         self.outputs = {'output': 3}
 
@@ -76,6 +82,7 @@ class Model(BaseModel):
         self.engine = "gpu"
         self.optimiser = "adam"
         self.style_mips = 2
+        self.style_zoom = 1.0
         self.style_mip_weights = '1.0,1.0,1.0,1.0'
         self.style_layers = 'p1,p2,r31,r42'
         self.style_layer_weights = '1.0,1.0,1.0,1.0'
@@ -143,6 +150,7 @@ class Model(BaseModel):
         self.nst_settings.model_path = os.getenv('NST_VGG_MODEL')
         self.nst_settings.optimiser = self.optimiser
         self.nst_settings.style_pyramid_span = float(self.style_pyramid_span)
+        self.nst_settings.style_zoom = float(self.style_zoom)
         self.nst_settings.style_mips = int(self.style_mips)
         self.nst_settings.mip_weights = [float(x) for x in self.style_mip_weights.split(',')]
         self.nst_settings.style_layers = self.style_layers.split(',')
@@ -163,7 +171,7 @@ class Model(BaseModel):
 
         # handle no content scenario
         try:
-            content_np = image_list[0]
+            content_np = image_list[3]
             content_tensor = torch.Tensor(content_np.copy())
             content_tensor = color_in(content_tensor, do_cuda=cuda)
             self.nst.content = content_tensor
@@ -171,7 +179,7 @@ class Model(BaseModel):
             self.nst.content = torch.zeros(0)
 
         try:
-            opt_np = image_list[1]
+            opt_np = image_list[0]
             opt_tensor = torch.Tensor(opt_np.copy())
             opt_tensor = color_in(opt_tensor, do_cuda=cuda)
             opt_tensor = Variable(opt_tensor.data.clone(), requires_grad=True)
@@ -180,7 +188,7 @@ class Model(BaseModel):
             raise RuntimeError("An optimisation image must be given")
 
         try:
-            style1_np = image_list[2]
+            style1_np = image_list[1]
             style1_tensor = torch.Tensor(style1_np.copy())
             style1_tensor = style1_tensor.transpose(0, 2)
             style1_tensor = style1_tensor[:3:]
@@ -196,11 +204,12 @@ class Model(BaseModel):
             style1_alpha_tensor = style1_alpha_tensor.transpose(0, 2)
             style1_alpha_tensor = color_in(style1_alpha_tensor, do_cuda=cuda, raw=True)
 
-            style1_target_np = image_list[3]
+            style1_target_np = image_list[2]
             style1_target_tensor = torch.Tensor(style1_target_np.copy())
             style1_target_tensor = color_in(style1_target_tensor, do_cuda=cuda, raw=True)
 
             style1 = TorchStyle(style1_tensor, style1_alpha_tensor)
+            self.style1 = style1
             style1.target_map = style1_target_tensor
             self.nst.styles.append(style1)
         except:
@@ -214,7 +223,7 @@ class Model(BaseModel):
         self.prepared = True
 
     def inference(self) -> List[torch.Tensor]:
-        print(self.nst.settings)
+        # print(self.nst.settings)
 
         self.nst.start_iter = 1
 

@@ -53,10 +53,11 @@ python3.8 -m pip install --no-cache-dir \
     imageio \
     OpenEXR
 
-python3.8 -m pip install --no-cache-dir torch==1.10.1+cu111 torchvision==0.11.2+cu111 torchaudio==0.10.1 -f https://download.pytorch.org/whl/torch_stable.html
-python3.8 -m pip install --no-cache-dir cupy-cuda110
+python3.8 -m pip install --no-cache-dir torch==2.0.0+cu117 torchvision==0.15.1+cu117 torchaudio==2.0.1+cu117 -f https://download.pytorch.org/whl/torch_stable.html
+python3.8 -m pip install --no-cache-dir cupy-cuda11x
 python3.8 -m pip install --no-cache-dir cython
 python3.8 -m pip install --no-cache-dir kornia
+python3.8 -m pip install --no-cache-dir lion-pytorch
 
 %environment
 export PATH=/mnt/ala/research/danielf/git/nst/bin:$PATH

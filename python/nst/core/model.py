@@ -1,6 +1,8 @@
 import torch
 from torch import optim
 
+from lion_pytorch import Lion
+
 from . import guides
 from . import vgg
 from . import utils
@@ -61,16 +63,24 @@ class Nst(torch.nn.Module):
 
         if self.settings.optimiser == 'lbfgs':
             print('optimiser is lbfgs')
-            self.optimiser = optim.LBFGS([self.opt_tensor], lr=self.settings.learning_rate)
+            self.optimiser = optim.LBFGS([self.opt_tensor],
+                                         lr=self.settings.learning_rate)
+
         elif self.settings.optimiser == 'adam':
             print('optimiser is adam')
             self.optimiser = optim.Adam([self.opt_tensor], lr=self.settings.learning_rate)
         else:
             raise Exception("unsupported optimiser:", self.settings.optimiser)
 
+        # self.optimiser = Lion(
+        #     [self.opt_tensor],
+        #     lr=0.95,
+        #     weight_decay=0.98
+            # use_triton=True  # set this to True to use cuda kernel w/ Triton lang (Tillet et al)
+        # )
+
         # content can be null
         if self.content.numel() != 0:
-            print('creating content guide')
             content_guide = guides.ContentGuide(self.content, self.vgg, self.settings.content_layer,
                                                 self.settings.content_layer_weight, self.settings.cuda_device)
 

@@ -87,7 +87,7 @@ class WriterSettings(BaseSettings):
     def __init__(self):
         super(WriterSettings, self).__init__()
         self.styles = [StyleImage()]
-        self.content = Image()
+        self.content = None
         self.opt_image = Image()
         self.out = ''
         self.progressive_output = False
@@ -130,3 +130,20 @@ class WriterSettings(BaseSettings):
             style_.__dict__= style
             styles.append(style_)
         self.styles = styles
+
+
+class AnimSettings(WriterSettings):
+    def __init__(self):
+        super(AnimSettings, self).__init__()
+        self.first_frame = 1001
+        self.last_frame = 1010
+        self.starting_pass = 1
+        self.passes = 15
+        self.use_temporal_loss_after = 8
+        self.motion_fore = ''
+        self.motion_fore_weight = ''
+        self.motion_back = ''
+        self.motion_back_weight = ''
+
+
+
