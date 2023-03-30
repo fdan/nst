@@ -8,6 +8,7 @@ export LANG=C.UTF-8
 export LC_ALL=C.UTF-8
 export PATH=/opt/conda/bin:$PATH
 export DEBIAN_FRONTEND=noninteractive
+export TORCH_CUDA_ARCH_LIST=Ampere
 
 apt-get update --fix-missing && apt-get install -y \
   build-essential \
@@ -20,6 +21,7 @@ apt-get update --fix-missing && apt-get install -y \
   wget \
   git \
   ca-certificates \
+  unzip \
   emacs
 
 # Install Python 3.10
@@ -53,7 +55,13 @@ python3.10 -m pip install --no-cache-dir opencv-python
 python3.10 -m pip install --no-cache-dir memory_profiler
 python3.10 -m pip install --no-cache-dir matplotlib
 python3.10 -m pip install --no-cache-dir jupyterlab
-python3.10 -m pip install --no-cache-dir lion-pytorch
+python3.10 -m pip install --no-cache-dir pybind11
+python3.10 -m pip install --no-cache-dir ninja
+
+wget --quiet https://github.com/fdan/NeuralTextureSynthesis/archive/refs/heads/nomedia.zip && \
+    unzip nomedia.zip && \
+    cd NeuralTextureSynthesis-nomedia && \
+    python setup.py install
 
 %environment
 export PATH=/mnt/ala/research/danielf/git/nst/bin:$PATH
@@ -61,4 +69,4 @@ export PYTHONPATH=/mnt/ala/research/danielf/git/nst/python:/home/13448206/git/tr
 export TRACTOR_ENGINE=frank:5600
 export NST_VGG_MODEL=/mnt/ala/research/danielf/git/nst/models/vgg_conv.pth 
 export OCIO=/home/13448206/git/OpenColorIO-Configs-master/aces_1.0.3/config.ocio
-
+export LD_LIBRARY_PATH=/usr/local/lib/python3.10/dist-packages/torch/lib

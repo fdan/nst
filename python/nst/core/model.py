@@ -1,8 +1,6 @@
 import torch
 from torch import optim
 
-from lion_pytorch import Lion
-
 from . import guides
 from . import vgg
 from . import utils
@@ -91,18 +89,18 @@ class Nst(torch.nn.Module):
             print('not using content guide')
 
         # a style is always required
-        style_guide = guides.StyleGuide(self.styles,
-                                        self.vgg,
-                                        self.settings.style_mips,
-                                        self.settings.mip_weights,
-                                        self.settings.style_layers,
-                                        self.settings.style_layer_weights,
-                                        self.settings.style_pyramid_span,
-                                        self.settings.style_zoom,
-                                        outdir=self.settings.outdir,
-                                        write_pyramids=self.settings.write_pyramids,
-                                        write_gradients=self.settings.write_gradients,
-                                        cuda_device=self.settings.cuda_device)
+        style_guide = guides.StyleGramGuide(self.styles,
+                                            self.vgg,
+                                            self.settings.style_mips,
+                                            self.settings.mip_weights,
+                                            self.settings.style_layers,
+                                            self.settings.style_layer_weights,
+                                            self.settings.style_pyramid_span,
+                                            self.settings.style_zoom,
+                                            outdir=self.settings.outdir,
+                                            write_pyramids=self.settings.write_pyramids,
+                                            write_gradients=self.settings.write_gradients,
+                                            cuda_device=self.settings.cuda_device)
 
         style_guide.prepare()
         self.opt_guides.append(style_guide)
@@ -110,6 +108,10 @@ class Nst(torch.nn.Module):
         # hist_guide = guides.HistogramGuide(self.styles[0].tensor, 1.0, cuda_device=self.settings.cuda_device)
         # hist_guide.prepare()
         # self.opt_guides.append(hist_guide)
+
+        # tv_guide = guides.TVGuide(self.settings.cuda)
+        # self.opt_guides.append(tv_guide)
+
 
     def forward(self):
         n_iter = [self.start_iter]

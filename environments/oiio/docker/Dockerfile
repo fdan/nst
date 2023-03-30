@@ -3,6 +3,7 @@ FROM nvidia/cuda:11.8.0-cudnn8-devel-ubuntu22.04
 ENV LANG=C.UTF-8 LC_ALL=C.UTF-8
 ENV PATH /opt/conda/bin:$PATH
 ENV DEBIAN_FRONTEND=noninteractive
+ENV TORCH_CUDA_ARCH_LIST=Ampere
 
 RUN apt-get update --fix-missing && apt-get install -y \
   build-essential \
@@ -15,6 +16,7 @@ RUN apt-get update --fix-missing && apt-get install -y \
   wget \
   git \
   ca-certificates \
+  unzip \
   emacs
 
 # Install Python 3.10
@@ -48,6 +50,13 @@ RUN python3.10 -m pip install --no-cache-dir opencv-python
 RUN python3.10 -m pip install --no-cache-dir memory_profiler
 RUN python3.10 -m pip install --no-cache-dir matplotlib
 RUN python3.10 -m pip install --no-cache-dir jupyterlab
+RUN python3.10 -m pip install --no-cache-dir pybind11
+RUN python3.10 -m pip install --no-cache-dir ninja
+
+RUN wget --quiet https://github.com/fdan/NeuralTextureSynthesis/archive/refs/heads/nomedia.zip && \
+    unzip nomedia.zip && \
+    cd NeuralTextureSynthesis-nomedia && \
+    python setup.py install
 
 RUN mkdir -p /.local/share/jupyter/runtime/
 RUN chmod -R 777 /.local
@@ -65,3 +74,6 @@ ENV NST_VGG_MODEL /workspace/git/nst/bin/Models/vgg_conv.pth
 ENV OCIO /workspace/git/OpenColorIO-Configs-master/aces_1.0.3/config.ocio
 
 ENV MPLCONFIGDIR /mnt/ala/tmp
+
+# necessary for pytorch extensions:
+ENV LD_LIBRARY_PATH /usr/local/lib/python3.10/dist-packages/torch/lib
