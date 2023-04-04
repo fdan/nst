@@ -102,7 +102,9 @@ class TVGuide(OptGuide):
         if self.cuda_device:
             loss_fn = loss_fn.cuda()
 
-        return loss_fn(opt_tensor)
+        tv_weight = 5.0
+
+        return loss_fn(opt_tensor) * tv_weight
 
     def forward(self, optimiser, opt_tensor, loss, iteration):
         optimiser.zero_grad()
@@ -231,7 +233,10 @@ class StyleGramGuide(OptGuide):
         if self.cuda_device:
             loss_fn = loss_fn.cuda()
 
-        return loss_fn(opt, target, weight)
+        # gram_weight = 0.0002
+        gram_weight = 1.0
+
+        return loss_fn(opt, target, weight) * gram_weight
 
     def forward(self, optimiser, opt_tensor, loss, iteration):
         if self.cuda_device:
@@ -360,12 +365,14 @@ class StyleHistogramGuide(OptGuide):
                 self.target += [histogram_pyramid]
 
     def loss(self, opt, target, weight):
-        loss_fn = loss.MipGramMSELoss()
+        loss_fn = loss.MipHistogramMSELoss()
 
         if self.cuda_device:
             loss_fn = loss_fn.cuda()
 
-        return loss_fn(opt, target, weight)
+        hist_weight = 10000.0
+
+        return loss_fn(opt, target, weight) * hist_weight
 
     def forward(self, optimiser, opt_tensor, loss, iteration):
         if self.cuda_device:

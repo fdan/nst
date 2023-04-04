@@ -89,7 +89,7 @@ class Nst(torch.nn.Module):
             print('not using content guide')
 
         # a style is always required
-        style_guide = guides.StyleGramGuide(self.styles,
+        style_gram_guide = guides.StyleGramGuide(self.styles,
                                             self.vgg,
                                             self.settings.style_mips,
                                             self.settings.mip_weights,
@@ -102,15 +102,27 @@ class Nst(torch.nn.Module):
                                             write_gradients=self.settings.write_gradients,
                                             cuda_device=self.settings.cuda_device)
 
-        style_guide.prepare()
-        self.opt_guides.append(style_guide)
+        style_gram_guide.prepare()
+        self.opt_guides.append(style_gram_guide)
 
-        # hist_guide = guides.HistogramGuide(self.styles[0].tensor, 1.0, cuda_device=self.settings.cuda_device)
-        # hist_guide.prepare()
-        # self.opt_guides.append(hist_guide)
+        style_histogram_guide = guides.StyleHistogramGuide(self.styles,
+                                                     self.vgg,
+                                                     self.settings.style_mips,
+                                                     self.settings.mip_weights,
+                                                     self.settings.style_layers,
+                                                     self.settings.style_layer_weights,
+                                                     self.settings.style_pyramid_span,
+                                                     self.settings.style_zoom,
+                                                     outdir=self.settings.outdir,
+                                                     write_pyramids=self.settings.write_pyramids,
+                                                     write_gradients=self.settings.write_gradients,
+                                                     cuda_device=self.settings.cuda_device)
 
-        # tv_guide = guides.TVGuide(self.settings.cuda)
-        # self.opt_guides.append(tv_guide)
+        style_histogram_guide.prepare()
+        self.opt_guides.append(style_histogram_guide)
+
+        tv_guide = guides.TVGuide(self.settings.cuda)
+        self.opt_guides.append(tv_guide)
 
 
     def forward(self):

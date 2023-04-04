@@ -105,7 +105,7 @@ class MipHistogramMSELoss(nn.Module):
             histogramCorrectedTarget = self.computeHistogramMatchedActivation(opt_activation[0],
                                                                               target_histogram)
 
-            a_ = torch.sub(opt_activation, histogramCorrectedTarget)
+            a_ = torch.sub(opt_activation[0], histogramCorrectedTarget)
             b_ = torch.pow(a_, 2)
             c_ = torch.mean(b_)
             c_ *= mip_weight
