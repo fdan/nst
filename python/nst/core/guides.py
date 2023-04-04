@@ -88,12 +88,12 @@ class ContentGuide(OptGuide):
 
 
 class TVGuide(OptGuide):
-    def __init__(self, cuda_device):
+    def __init__(self, weight, cuda_device):
         super(TVGuide, self).__init__()
         self.name = "tv guide"
         self.width = 0
         self.height = 0
-        self.tv_weight = 100
+        self.weight = weight
         self.cuda_device = cuda_device
 
     def loss(self, opt_tensor):
@@ -102,9 +102,7 @@ class TVGuide(OptGuide):
         if self.cuda_device:
             loss_fn = loss_fn.cuda()
 
-        tv_weight = 5.0
-
-        return loss_fn(opt_tensor) * tv_weight
+        return loss_fn(opt_tensor) * self.weight
 
     def forward(self, optimiser, opt_tensor, loss, iteration):
         optimiser.zero_grad()
@@ -161,6 +159,7 @@ class StyleGramGuide(OptGuide):
                  layer_weights,
                  style_pyramid_span,
                  style_zoom,
+                 weight,
                  cuda_device=None,
                  write_gradients=False,
                  write_pyramids = False,
@@ -179,6 +178,7 @@ class StyleGramGuide(OptGuide):
         self.layer_weight = layer_weights
         self.style_pyramid_span = style_pyramid_span
         self.zoom = style_zoom
+        self.weight = weight
         self.write_gradients = write_gradients
         self.write_pyramids = write_pyramids
         self.outdir = outdir
@@ -233,10 +233,7 @@ class StyleGramGuide(OptGuide):
         if self.cuda_device:
             loss_fn = loss_fn.cuda()
 
-        # gram_weight = 0.0002
-        gram_weight = 1.0
-
-        return loss_fn(opt, target, weight) * gram_weight
+        return loss_fn(opt, target, weight) * self.weight
 
     def forward(self, optimiser, opt_tensor, loss, iteration):
         if self.cuda_device:
@@ -302,6 +299,7 @@ class StyleHistogramGuide(OptGuide):
                  layer_weights,
                  style_pyramid_span,
                  style_zoom,
+                 weight,
                  cuda_device=None,
                  write_gradients=False,
                  write_pyramids = False,
@@ -320,6 +318,7 @@ class StyleHistogramGuide(OptGuide):
         self.layer_weight = layer_weights
         self.style_pyramid_span = style_pyramid_span
         self.zoom = style_zoom
+        self.weight = weight
         self.write_gradients = write_gradients
         self.write_pyramids = write_pyramids
         self.outdir = outdir
@@ -370,9 +369,7 @@ class StyleHistogramGuide(OptGuide):
         if self.cuda_device:
             loss_fn = loss_fn.cuda()
 
-        hist_weight = 10000.0
-
-        return loss_fn(opt, target, weight) * hist_weight
+        return loss_fn(opt, target, weight) * self.weight
 
     def forward(self, optimiser, opt_tensor, loss, iteration):
         if self.cuda_device:

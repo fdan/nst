@@ -73,7 +73,7 @@ class NstSettings(BaseSettings):
         self.write_gradients = False
         self.write_pyramids = False
 
-        ## to do: migrate these to TorchStyle and StyleImage classes
+        ## to do: migrate these to TorchStyle and StyleImage classes?
         self.style_zoom = 1.0
         self.style_pyramid_span = 0.5
         self.style_mips = 4
@@ -81,6 +81,10 @@ class NstSettings(BaseSettings):
         self.style_layers = ['p1', 'p2', 'r31', 'r42']
         self.style_layer_weights = [1.0, 1.0, 1.0, 1.0]
         ##
+
+        self.gram_weight = 1.0
+        self.histogram_weight = 10000.0
+        self.tv_weight = 5.0
 
 
 class WriterSettings(BaseSettings):

@@ -88,41 +88,43 @@ class Nst(torch.nn.Module):
         else:
             print('not using content guide')
 
-        # a style is always required
-        style_gram_guide = guides.StyleGramGuide(self.styles,
-                                            self.vgg,
-                                            self.settings.style_mips,
-                                            self.settings.mip_weights,
-                                            self.settings.style_layers,
-                                            self.settings.style_layer_weights,
-                                            self.settings.style_pyramid_span,
-                                            self.settings.style_zoom,
-                                            outdir=self.settings.outdir,
-                                            write_pyramids=self.settings.write_pyramids,
-                                            write_gradients=self.settings.write_gradients,
-                                            cuda_device=self.settings.cuda_device)
+        if self.settings.gram_weight:
+            style_gram_guide = guides.StyleGramGuide(self.styles,
+                                                self.vgg,
+                                                self.settings.style_mips,
+                                                self.settings.mip_weights,
+                                                self.settings.style_layers,
+                                                self.settings.style_layer_weights,
+                                                self.settings.style_pyramid_span,
+                                                self.settings.style_zoom,
+                                                outdir=self.settings.outdir,
+                                                write_pyramids=self.settings.write_pyramids,
+                                                write_gradients=self.settings.write_gradients,
+                                                cuda_device=self.settings.cuda_device)
 
-        style_gram_guide.prepare()
-        self.opt_guides.append(style_gram_guide)
+            style_gram_guide.prepare()
+            self.opt_guides.append(style_gram_guide)
 
-        style_histogram_guide = guides.StyleHistogramGuide(self.styles,
-                                                     self.vgg,
-                                                     self.settings.style_mips,
-                                                     self.settings.mip_weights,
-                                                     self.settings.style_layers,
-                                                     self.settings.style_layer_weights,
-                                                     self.settings.style_pyramid_span,
-                                                     self.settings.style_zoom,
-                                                     outdir=self.settings.outdir,
-                                                     write_pyramids=self.settings.write_pyramids,
-                                                     write_gradients=self.settings.write_gradients,
-                                                     cuda_device=self.settings.cuda_device)
+        if self.settings.histogram_weight:
+            style_histogram_guide = guides.StyleHistogramGuide(self.styles,
+                                                         self.vgg,
+                                                         self.settings.style_mips,
+                                                         self.settings.mip_weights,
+                                                         self.settings.style_layers,
+                                                         self.settings.style_layer_weights,
+                                                         self.settings.style_pyramid_span,
+                                                         self.settings.style_zoom,
+                                                         outdir=self.settings.outdir,
+                                                         write_pyramids=self.settings.write_pyramids,
+                                                         write_gradients=self.settings.write_gradients,
+                                                         cuda_device=self.settings.cuda_device)
 
-        style_histogram_guide.prepare()
-        self.opt_guides.append(style_histogram_guide)
+            style_histogram_guide.prepare()
+            self.opt_guides.append(style_histogram_guide)
 
-        tv_guide = guides.TVGuide(self.settings.cuda)
-        self.opt_guides.append(tv_guide)
+        if self.settings.tv_weight:
+            tv_guide = guides.TVGuide(self.settings.tv_weight, self.settings.cuda)
+            self.opt_guides.append(tv_guide)
 
 
     def forward(self):

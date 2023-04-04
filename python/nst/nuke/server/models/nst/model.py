@@ -24,6 +24,9 @@ class Model(BaseModel):
                         "optimiser",
                         "style_pyramid_span",
                         "style_zoom",
+                        "gram_weight",
+                        "histogram_weight",
+                        "tv_weight",
                         "style_mips",
                         "style_mip_weights",
                         "style_layers",
@@ -83,6 +86,9 @@ class Model(BaseModel):
         self.optimiser = "adam"
         self.style_mips = 2
         self.style_zoom = 1.0
+        self.gram_weight = 1.0
+        self.histogram_weight = 10000.0
+        self.tv_weight = 5.0
         self.style_mip_weights = '1.0,1.0,1.0,1.0'
         self.style_layers = 'p1,p2,r31,r42'
         self.style_layer_weights = '1.0,1.0,1.0,1.0'
@@ -151,6 +157,9 @@ class Model(BaseModel):
         self.nst_settings.optimiser = self.optimiser
         self.nst_settings.style_pyramid_span = float(self.style_pyramid_span)
         self.nst_settings.style_zoom = float(self.style_zoom)
+        self.nst_settings.gram_weight = float(self.gram_weight)
+        self.nst_settings.histogram_weight = float(self.histogram_weight)
+        self.nst_settings.tv_weight = float(self.tv_weight)
         self.nst_settings.style_mips = int(self.style_mips)
         self.nst_settings.mip_weights = [float(x) for x in self.style_mip_weights.split(',')]
         self.nst_settings.style_layers = self.style_layers.split(',')
