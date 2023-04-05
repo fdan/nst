@@ -106,7 +106,7 @@ class TVGuide(OptGuide):
 
     def forward(self, optimiser, opt_tensor, loss, iteration):
         optimiser.zero_grad()
-        weighted_loss = self.loss(opt_tensor) * self.tv_weight
+        weighted_loss = self.loss(opt_tensor) * self.weight
         weighted_loss.backward(retain_graph=True)
         loss += weighted_loss
         return opt_tensor.grad.clone()
