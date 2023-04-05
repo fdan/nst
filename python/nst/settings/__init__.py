@@ -73,7 +73,7 @@ class NstSettings(BaseSettings):
         self.write_gradients = False
         self.write_pyramids = False
 
-        ## to do: migrate these to TorchStyle and StyleImage classes
+        ## to do: migrate these to TorchStyle and StyleImage classes?
         self.style_zoom = 1.0
         self.style_pyramid_span = 0.5
         self.style_mips = 4
@@ -82,12 +82,16 @@ class NstSettings(BaseSettings):
         self.style_layer_weights = [1.0, 1.0, 1.0, 1.0]
         ##
 
+        self.gram_weight = 1.0
+        self.histogram_weight = 10000.0
+        self.tv_weight = 5.0
+
 
 class WriterSettings(BaseSettings):
     def __init__(self):
         super(WriterSettings, self).__init__()
         self.styles = [StyleImage()]
-        self.content = Image()
+        self.content = None
         self.opt_image = Image()
         self.out = ''
         self.progressive_output = False
@@ -130,3 +134,20 @@ class WriterSettings(BaseSettings):
             style_.__dict__= style
             styles.append(style_)
         self.styles = styles
+
+
+class AnimSettings(WriterSettings):
+    def __init__(self):
+        super(AnimSettings, self).__init__()
+        self.first_frame = 1001
+        self.last_frame = 1010
+        self.starting_pass = 1
+        self.passes = 15
+        self.use_temporal_loss_after = 8
+        self.motion_fore = ''
+        self.motion_fore_weight = ''
+        self.motion_back = ''
+        self.motion_back_weight = ''
+
+
+

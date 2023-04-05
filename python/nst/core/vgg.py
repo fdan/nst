@@ -81,7 +81,7 @@ class VGG(nn.Module):
             mask_scaled = torch.nn.functional.interpolate(mask, size=(w, h))
 
             # normalise: ensure mean activation remains same
-            # mask_normalisation = (w * h) / mask.sum()
+            # mask_normalisation = (w * target) / mask.sum()
             # mask_normalised = torch.div(mask_scaled, mask_normalisation)
 
             masked_activations = layer_activations.clone()

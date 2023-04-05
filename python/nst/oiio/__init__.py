@@ -116,7 +116,6 @@ class StyleWriter(object):
         return styles
 
     def prepare_content(self):
-        print(2.3, self.settings.core.cuda)
         content_tensor = utils.image_to_tensor(self.settings.content.rgb_filepath, self.settings.core.cuda,
                                                colorspace=self.settings.content.colorspace)
         return content_tensor
@@ -233,3 +232,47 @@ class StyleWriter(object):
                         utils.write_activations(mip_activations, outdir, layer_limit=layer_limit, ext=ext)
                         mip_index += 1
                     vgg_layer_index += 1
+
+
+class AnimWriter(StyleWriter):
+
+    def __init__(self,
+                 styles: List[settings.StyleImage] = None,
+                 opt_image: settings.Image = None,
+                 content: settings.Image = None):
+
+        super(AnimWriter, self).__init__(styles, opt_image, content)
+        self.settings = settings.AnimSettings()
+
+    def run(self):
+        for pass_ in range(self.settings.starting_pass, self.settings.passes):
+            # if direction is 1, we are in a forward pass.  if 0, negative.
+            direction = pass_ % 2
+            start = self.settings.last_frame if direction == 0 else self.settings.first_frame
+            end = self.settings.first_frame if direction == 0 else self.settings.last_frame
+            increment_by = -1 if direction == 0 else 1
+
+             # if direction is backwards, use the forewards disocclusion mask
+
+            for this_frame in range(start, end, increment_by):
+
+                # warp_from_frame is the temporal prior in the context of pass direction
+                # i.e. the color image we are wanting to warp
+                if this_frame == self.settings.first_frame and pass_ == 1:
+                    warp_from_frame = -1
+                elif this_frame == self.settings.first_frame:
+                    warp_from_frame = this_frame + 1
+                elif this_frame == self.settings.last_frame:
+                    warp_from_frame = this_frame - 1
+                else:
+                    warp_from_frame = this_frame + 1 if direction == 0 else this_frame - 1
+
+                # backwards->forwards pass
+                if direction == 1:
+                    flow = self.settings.motion_fore.replace('####', '%04d' % this_frame - 1)
+                    flow_weight = self.settings.motion_fore_weight.replace('####', '%04d' % this_frame - 1)
+                elif direction == 0:
+                    flow = self.settings.motion_back.replace('####', '%04d' % this_frame + 1)
+                    flow_weight = self.settings.motion_back_weight.replace('####', '%04d' % this_frame + 1)
+
+                # if direction is backwards->forwards, use the motionBackWeight at prev_frame

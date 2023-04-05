@@ -779,9 +779,14 @@ bool MLClientLive::getShowDynamic() const
 
 static void listener(unsigned index, unsigned nThreads, void* d) {
 
-    MLClientComms::Vprint("\nlistener doing stuff...");
+
+
+    std::stringstream ss2;
+    ss2 << "listener batches: " << ((MLClientLive*)d)->batches;
+    MLClientComms::Vprint(ss2.str());
 
     while (!((MLClientLive *) d)->killthread) {
+        MLClientComms::Vprint("thread not killed");
 
         bool clearCache = true;
 
@@ -823,5 +828,7 @@ static void listener(unsigned index, unsigned nThreads, void* d) {
         }
         ((MLClientLive *) d)->killthread = true;
     }
+
+    MLClientComms::Vprint("\nlistener exiting");
 }
 

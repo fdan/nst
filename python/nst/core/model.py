@@ -61,16 +61,24 @@ class Nst(torch.nn.Module):
 
         if self.settings.optimiser == 'lbfgs':
             print('optimiser is lbfgs')
-            self.optimiser = optim.LBFGS([self.opt_tensor], lr=self.settings.learning_rate)
+            self.optimiser = optim.LBFGS([self.opt_tensor],
+                                         lr=self.settings.learning_rate)
+
         elif self.settings.optimiser == 'adam':
             print('optimiser is adam')
             self.optimiser = optim.Adam([self.opt_tensor], lr=self.settings.learning_rate)
         else:
             raise Exception("unsupported optimiser:", self.settings.optimiser)
 
+        # self.optimiser = Lion(
+        #     [self.opt_tensor],
+        #     lr=0.95,
+        #     weight_decay=0.98
+            # use_triton=True  # set this to True to use cuda kernel w/ Triton lang (Tillet et al)
+        # )
+
         # content can be null
         if self.content.numel() != 0:
-            print('creating content guide')
             content_guide = guides.ContentGuide(self.content, self.vgg, self.settings.content_layer,
                                                 self.settings.content_layer_weight, self.settings.cuda_device)
 
@@ -80,26 +88,54 @@ class Nst(torch.nn.Module):
         else:
             print('not using content guide')
 
-        # a style is always required
-        style_guide = guides.StyleGuide(self.styles,
-                                        self.vgg,
-                                        self.settings.style_mips,
-                                        self.settings.mip_weights,
-                                        self.settings.style_layers,
-                                        self.settings.style_layer_weights,
-                                        self.settings.style_pyramid_span,
-                                        self.settings.style_zoom,
-                                        outdir=self.settings.outdir,
-                                        write_pyramids=self.settings.write_pyramids,
-                                        write_gradients=self.settings.write_gradients,
-                                        cuda_device=self.settings.cuda_device)
+        if self.settings.gram_weight:
+            style_gram_guide = guides.StyleGramGuide(
+                self.styles,
+                self.vgg,
+                self.settings.style_mips,
+                self.settings.mip_weights,
+                self.settings.style_layers,
+                self.settings.style_layer_weights,
+                self.settings.style_pyramid_span,
+                self.settings.style_zoom,
+                self.settings.gram_weight,
+                outdir=self.settings.outdir,
+                write_pyramids=self.settings.write_pyramids,
+                write_gradients=self.settings.write_gradients,
+                cuda_device=self.settings.cuda_device
+            )
 
-        style_guide.prepare()
-        self.opt_guides.append(style_guide)
+            style_gram_guide.prepare()
+            self.opt_guides.append(style_gram_guide)
 
-        # hist_guide = guides.HistogramGuide(self.styles[0].tensor, 1.0, cuda_device=self.settings.cuda_device)
-        # hist_guide.prepare()
-        # self.opt_guides.append(hist_guide)
+        if self.settings.histogram_weight:
+            style_histogram_guide = guides.StyleHistogramGuide(
+                self.styles,
+                self.vgg,
+                self.settings.style_mips,
+                self.settings.mip_weights,
+                self.settings.style_layers,
+                self.settings.style_layer_weights,
+                self.settings.style_pyramid_span,
+                self.settings.style_zoom,
+                self.settings.histogram_weight,
+                outdir=self.settings.outdir,
+                write_pyramids=self.settings.write_pyramids,
+                write_gradients=self.settings.write_gradients,
+                cuda_device=self.settings.cuda_device
+            )
+
+            style_histogram_guide.prepare()
+            self.opt_guides.append(style_histogram_guide)
+
+        if self.settings.tv_weight:
+            tv_guide = guides.TVGuide(
+                self.settings.tv_weight,
+                self.settings.cuda
+            )
+
+            self.opt_guides.append(tv_guide)
+
 
     def forward(self):
         n_iter = [self.start_iter]

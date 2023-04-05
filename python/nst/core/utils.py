@@ -76,7 +76,7 @@ def zoom_image(img, zoom, output_path=''):
 def tile(img, zoom, cuda=False):
     # zoom out, i.e. zoom is between zero and one
     b, c, old_width, old_height = img.size()
-    img = torch.nn.functional.interpolate(img, scale_factor=zoom)
+    img = torch.nn.functional.interpolate(img, scale_factor=zoom, mode='bicubic', antialias='bicubic')
     b, c, new_width, new_height = img.size()
 
     # determine how many tiles are needed
