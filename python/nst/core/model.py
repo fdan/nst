@@ -59,6 +59,7 @@ class Nst(torch.nn.Module):
             self.vgg.load_state_dict(torch.load(self.settings.model_path))
             self.settings.cuda = False
 
+        # optimiser
         if self.settings.optimiser == 'lbfgs':
             print('optimiser is lbfgs')
             self.optimiser = optim.LBFGS([self.opt_tensor],
@@ -66,27 +67,57 @@ class Nst(torch.nn.Module):
 
         elif self.settings.optimiser == 'adam':
             print('optimiser is adam')
-            self.optimiser = optim.Adam([self.opt_tensor], lr=self.settings.learning_rate)
+            self.optimiser = optim.Adam([self.opt_tensor], lr=self.settings.learning_rate, amsgrad=True)
+
+        elif self.settings.optimiser == 'adamw':
+            print('optimiser is adam')
+            self.optimiser = optim.AdamW([self.opt_tensor], lr=self.settings.learning_rate)
+
+        elif self.settings.optimiser == 'adagrad':
+            print('optimiser is adagrad')
+            self.optimiser = optim.Adagrad([self.opt_tensor], lr=self.settings.learning_rate)
+
+        elif self.settings.optimiser == 'rmsprop':
+            print('optimiser is rmsprop')
+            self.optimiser = optim.RMSprop([self.opt_tensor], lr=self.settings.learning_rate)
+
+        elif self.settings.optimiser == 'asgd':
+            print('optimiser is asgd')
+            self.optimiser = optim.ASGD([self.opt_tensor], lr=self.settings.learning_rate)
+
+
+        # elif self.settings.optimiser == 'lion':
+        #     self.optimiser = Lion([self.opt_tensor], lr=0.1, weight_decay=0.98, use_triton=True)
+
         else:
             raise Exception("unsupported optimiser:", self.settings.optimiser)
 
-        # self.optimiser = Lion(
-        #     [self.opt_tensor],
-        #     lr=0.95,
-        #     weight_decay=0.98
-            # use_triton=True  # set this to True to use cuda kernel w/ Triton lang (Tillet et al)
-        # )
-
         # content can be null
         if self.content.numel() != 0:
-            content_guide = guides.ContentGuide(self.content, self.vgg, self.settings.content_layer,
-                                                self.settings.content_layer_weight, self.settings.cuda_device)
+            content_guide = guides.ContentGuide(self.content,
+                                                self.vgg,
+                                                self.settings.content_layer,
+                                                self.settings.content_layer_weight,
+                                                self.settings.cuda_device)
 
             content_guide.prepare()
 
             self.opt_guides.append(content_guide)
         else:
             print('not using content guide')
+
+        if self.settings.derivative_weight:
+            derivative_guide = guides.DerivativeGuide(
+                self.vgg,
+                self.content,
+                self.settings.derivative_weight,
+                self.settings.derivative_loss_layer,
+                self.settings.cuda_device
+            )
+
+            derivative_guide.prepare()
+
+            self.opt_guides.append(derivative_guide)
 
         if self.settings.gram_weight:
             style_gram_guide = guides.StyleGramGuide(
@@ -122,7 +153,8 @@ class Nst(torch.nn.Module):
                 outdir=self.settings.outdir,
                 write_pyramids=self.settings.write_pyramids,
                 write_gradients=self.settings.write_gradients,
-                cuda_device=self.settings.cuda_device
+                cuda_device=self.settings.cuda_device,
+                mask_layers=self.settings.mask_layers
             )
 
             style_histogram_guide.prepare()
@@ -164,6 +196,12 @@ class Nst(torch.nn.Module):
             for grad in gradients:
                 sum_gradients += grad
 
+
+            if self.settings.write_gradients:
+                utils.write_tensor(sum_gradients, '%s/grad/%04d.pt' % (self.settings.outdir, n_iter[0]))
+
+#            import kornia
+#            self.opt_tensor.grad = kornia.filters.gaussian_blur2d(sum_gradients, (3, 3), (0.1, 0.1))
             self.opt_tensor.grad = sum_gradients
 
             nice_loss = '{:,.0f}'.format(loss.item())
@@ -177,6 +215,15 @@ class Nst(torch.nn.Module):
                 if self.settings.cuda:
                     msg += 'memory used: %s of %s' % (max_mem_cached, max_memory)
                 print(msg)
+
+            # # blur gradients
+#            import kornia
+#            self.opt_tensor = kornia.filters.median_blur(self.opt_tensor, (1, 1))
+
+            if self.settings.progressive_output:
+                if n_iter[0] % self.settings.progressive_interval == 0:
+                    fp = self.settings.outdir + '/prog/%04d.pt' % n_iter[0]
+                    utils.write_tensor(self.opt_tensor, fp)
 
             return loss
 

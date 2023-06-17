@@ -173,3 +173,8 @@ def _gaussian_pyramid(img, kernel, max_levels, pyramid_scale_factor):
         pyr.append(current)
 
     return pyr
+
+def write_tensor(grad, fp):
+    outdir = os.path.abspath(os.path.join(fp, os.path.pardir))
+    os.makedirs(outdir, exist_ok=True)
+    torch.save(grad, fp)

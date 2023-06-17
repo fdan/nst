@@ -41,6 +41,7 @@ class StyleWriter(object):
         self.nst = model.Nst()
         self.nst.settings = self.settings.core
 
+
     def get_output_dir(self):
         if not self.output_dir:
             self.output_dir = os.path.abspath(os.path.join(self.settings.out, (os.path.pardir)))

@@ -13,22 +13,13 @@ class GramMatrix(nn.Module):
         return G
 
 
+# https://notebook.community/zklgame/CatEyeNets/test/StyleTransfer-PyTorch
 class TVLoss(nn.Module):
-    def forward(self, input, target=None, mip_weights=None):
-        height = input.shape[1]
-        width = input.shape[2]
-
-        dx = input[:, :height - 1, :width - 1, :] - input[:, 1:, :width - 1, :]
-        dy = input[:, :height - 1, :width - 1, :] - input[:, :height - 1, 1:, :]
-        loss_ = (dx ** 2 + dy ** 2).sum() ** 0.5
-        # return loss normalized by image and batch size
-        return loss_ / (width * height * input.shape[0])
-
-
-# class HistogramLoss(nn.Module):
-#     def forward(self, input, target, mip_weights=None):
-#         # target is a multidimensional tensor, with a channel for each feature histogram
-#         pass
+    def forward(self, img, target=None, mip_weights=None):
+        N, C, H, W = img.size()
+        loss = torch.sum(torch.pow(img[:, :, :H - 1, :] - img[:, :, 1:, :], 2))
+        loss += torch.sum(torch.pow(img[:, :, :, :W - 1] - img[:, :, :, 1:], 2))
+        return loss
 
 
 class MipMSELoss(nn.Module):
@@ -62,11 +53,17 @@ class MipGramMSELoss(nn.Module):
             mip_weight = mip_weights[index]
             opt_activations = opt_layer_activation_pyramid[index]
             opt_gram = GramMatrix()(opt_activations)
+
             # calculate MSE
             a_ = torch.sub(opt_gram, target_gram)
             b_ = torch.pow(a_, 2)
             c_ = torch.mean(b_)
             c_ *= mip_weight
+
+            # calculate MAE
+            # a_ = torch.sub(opt_gram, target_gram)
+            # b_ = torch.mean(a_)
+            # b_ *= mip_weight
 
             loss += c_
 
