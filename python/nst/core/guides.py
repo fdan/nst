@@ -112,40 +112,56 @@ class TVGuide(OptGuide):
         return opt_tensor.grad.clone()
 
 
-class DerivativeGuide(OptGuide):
-    def __init__(self, tensor, weight, cuda_device=None):
-        super(DerivativeGuide, self).__init__()
+class LaplacianGuide(OptGuide):
+    def __init__(self,
+                 vgg,
+                 tensor,
+                 weight,
+                 layer,
+                 cuda_device=None):
+        super(LaplacianGuide, self).__init__()
+        self.vgg = vgg
         self.tensor = tensor
         self.weight = weight
+        self.layer = layer
         self.cuda_device = cuda_device
         self.target = None
 
     def prepare(self):
-        self.target = self._get_derivative(self.tensor)
+        target_deriv = self._get_laplacian(self.tensor)
+        self.target = self.vgg([target_deriv], [self.layer])[0]
 
-    def _get_derivative(self, t):
-        # deriv = kornia.filters.gaussian_blur2d(tensor, (15, 15), (15, 15))
-        # deriv = kornia.filters.spatial_gradient(deriv, mode='diff')
-        # deriv = deriv.transpose(0, 2).transpose(1, 2)[0] + deriv.transpose(0, 2).transpose(1, 2)[1]
-        # return deriv
+    def _get_laplacian(self, t):
         t = kornia.filters.gaussian_blur2d(t, (9, 9), (8, 8))
         t = kornia.filters.laplacian(t, 21)
         t = kornia.filters.laplacian(t, 21)
         return t
 
-    def loss(self, opt, target, weight):
-        loss_fn = loss.MSELoss()
+    def loss(self, opt, target):
+        loss_fn = loss.MipMSELoss()
 
         if self.cuda_device:
             loss_fn = loss_fn.cuda()
 
-        return loss_fn(opt, target, weight)
+        return loss_fn(opt, target)
 
     def forward(self, optimiser, opt_tensor, loss, iteration):
+
+        opt_deriv = self._get_laplacian(opt_tensor)
+        opt_activation = self.vgg([opt_deriv], [self.layer])[0]
         optimiser.zero_grad()
-        opt_deriv = self._get_derivative(opt_tensor)
-        loss += self.loss(opt_deriv, self.target, self.weight)
+        weighted_loss = self.loss(opt_activation, self.target) * self.weight
+        weighted_loss.backward(retain_graph=True)
+        loss += weighted_loss
         return opt_tensor.grad.clone()
+
+        # alternate code for if we allowed multiple layers for deriv guide
+        # deriv_gradients = []
+        # for index, layer_activation in enumerate(opt_activations):
+        #     optimiser.zero_grad()
+        #     loss += self.loss(layer_activation, self.target[index], self.weight)
+        #     deriv_gradients.append(opt_tensor.grad.clone())
+        # return deriv_gradients
 
 
 class StyleGramGuide(OptGuide):
@@ -164,6 +180,7 @@ class StyleGramGuide(OptGuide):
                  write_gradients=False,
                  write_pyramids = False,
                  outdir='',
+                 mask_layers = [],
                  gradient_ext='jpg'):
         super(StyleGramGuide, self).__init__()
         self.name = "style gram guide"
@@ -175,6 +192,7 @@ class StyleGramGuide(OptGuide):
         self.style_mips = style_mips
         self.mip_weights = mip_weights
         self.layers = layers
+        self.mask_layers = mask_layers
         self.layer_weight = layer_weights
         self.style_pyramid_span = style_pyramid_span
         self.zoom = style_zoom
@@ -264,24 +282,18 @@ class StyleGramGuide(OptGuide):
 
             loss += weighted_layer_loss
 
-            # to do - write to .pt and convert after
-            # # write gradients
-            # if self.write_gradients:
-            #     utils.write_gradient(opt_tensor, '%s/style/grad/%04d.%s' % (self.outdir, iteration, self.gradient_ext))
-
             # clone the gradients to a new tensor
             layer_gradients = opt_tensor.grad.clone()
 
+            # get the layer name
+            layer_name = self.layers[index]
+
             # if a target map is provided, apply it to the gradients
-            if torch.is_tensor(self.target_maps[index]):
+            if torch.is_tensor(self.target_maps[index]) and layer_name in self.mask_layers:
                 b, c, w, h = opt_tensor.grad.size()
 
                 for i in range(0, c):
                     layer_gradients[0][i] *= self.target_maps[index][0][0]
-
-                # # write the masked gradient
-                # if self.write_gradients:
-                #     utils.write_gradient(layer_gradients, '%s/style/masked_grad/%04d.%s' % (self.outdir, iteration, self.gradient_ext))
 
             style_gradients.append(layer_gradients)
 
@@ -304,6 +316,7 @@ class StyleHistogramGuide(OptGuide):
                  write_gradients=False,
                  write_pyramids = False,
                  outdir='',
+                 mask_layers = [],
                  gradient_ext='jpg'):
         super(StyleHistogramGuide, self).__init__()
         self.name = "style histogram guide"
@@ -315,6 +328,7 @@ class StyleHistogramGuide(OptGuide):
         self.style_mips = style_mips
         self.mip_weights = mip_weights
         self.layers = layers
+        self.mask_layers = mask_layers
         self.layer_weight = layer_weights
         self.style_pyramid_span = style_pyramid_span
         self.zoom = style_zoom
@@ -400,24 +414,17 @@ class StyleHistogramGuide(OptGuide):
 
             loss += weighted_layer_loss
 
-            # to do - write to .pt and convert after
-            # # write gradients
-            # if self.write_gradients:
-            #     utils.write_gradient(opt_tensor, '%s/style/grad/%04d.%s' % (self.outdir, iteration, self.gradient_ext))
-
             # clone the gradients to a new tensor
             layer_gradients = opt_tensor.grad.clone()
 
-            # if a target map is provided, apply it to the gradients
-            if torch.is_tensor(self.target_maps[index]):
+            # get the layer name
+            layer_name = self.layers[index]
+
+            if torch.is_tensor(self.target_maps[index]) and layer_name in self.mask_layers:
                 b, c, w, h = opt_tensor.grad.size()
 
                 for i in range(0, c):
                     layer_gradients[0][i] *= self.target_maps[index][0][0]
-
-                # # write the masked gradient
-                # if self.write_gradients:
-                #     utils.write_gradient(layer_gradients, '%s/style/masked_grad/%04d.%s' % (self.outdir, iteration, self.gradient_ext))
 
             style_gradients.append(layer_gradients)
 

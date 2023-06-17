@@ -65,13 +65,15 @@ class NstSettings(BaseSettings):
         self.content_layer = 'r41'
         self.content_layer_weight = 1.0
         self.content_mips = 1
-        self.optimiser = 'adam'
-        self.learning_rate = 10.0
+        self.optimiser = 'lbfgs'
+        self.learning_rate = 1.0
         self.iterations = 500
         self.log_iterations = 20
         self.outdir = ''
         self.write_gradients = False
         self.write_pyramids = False
+        self.progressive_output = False
+        self.progressive_intertal = 1
 
         ## to do: migrate these to TorchStyle and StyleImage classes?
         self.style_zoom = 1.0
@@ -80,11 +82,14 @@ class NstSettings(BaseSettings):
         self.mip_weights = [1.0, 1.0, 1.0, 1.0]
         self.style_layers = ['p1', 'p2', 'r31', 'r42']
         self.style_layer_weights = [1.0, 1.0, 1.0, 1.0]
+        self.mask_layers = ['p1', 'p2', 'r31', 'r42']
         ##
 
         self.gram_weight = 1.0
         self.histogram_weight = 10000.0
         self.tv_weight = 5.0
+        self.laplacian_weight = 0.0
+        self.laplacian_loss_layer = 'r41'
 
 
 class WriterSettings(BaseSettings):
@@ -94,17 +99,13 @@ class WriterSettings(BaseSettings):
         self.content = None
         self.opt_image = Image()
         self.out = ''
-        self.progressive_output = False
-        self.progressive_ext = 'jpg'
-        self.write_gradients = False
-        self.gradient_ext = 'jpg'
         self.write_style_pyramid = False
         self.write_style_activations = False
         self.write_content_activations = False
         self.write_gram = False
         self.output_format = 'exr'
         self.frame = ''
-        self.out_colorspace = 'srgb_texture'
+        self.out_colorspace = 'acescg'
         self.core = NstSettings()
 
     def load(self, fp):

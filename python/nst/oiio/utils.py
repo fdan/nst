@@ -110,18 +110,20 @@ def log_cuda_memory():
     print('memory used: %s of %s' % (max_mem_cached, max_memory))
 
 
-def pts_to_exrs(outdir):
+def pts_to_exrs(outdir, raw=False, cleanup=False):
     pts = [x for x in os.listdir(outdir) if x.endswith('.pt')]
     for p in pts:
         fp = outdir + '/' + p
-        pt_to_exr(fp)
+        pt_to_exr(fp, raw=raw, cleanup=cleanup)
 
 
-def pt_to_exr(inpath):
+def pt_to_exr(inpath, raw=False, cleanup=False):
     tensor = torch.load(inpath)
-    buf = tensor_to_buf(tensor)
+    buf = tensor_to_buf(tensor, raw=raw)
     outpath = inpath.replace('.pt', '.exr')
     write_exr(buf, outpath)
+    if cleanup:
+        os.remove(inpath)
 
 
 def transform_image_tensor(tensor: torch.Tensor, do_cuda: bool, raw=False) -> torch.Tensor:
