@@ -106,18 +106,18 @@ class Nst(torch.nn.Module):
         else:
             print('not using content guide')
 
-        if self.settings.derivative_weight:
-            derivative_guide = guides.DerivativeGuide(
+        if self.settings.laplacian_weight:
+            laplacian_guide = guides.LaplacianGuide(
                 self.vgg,
                 self.content,
-                self.settings.derivative_weight,
-                self.settings.derivative_loss_layer,
+                self.settings.laplacian_weight,
+                self.settings.laplacian_loss_layer,
                 self.settings.cuda_device
             )
 
-            derivative_guide.prepare()
+            laplacian_guide.prepare()
 
-            self.opt_guides.append(derivative_guide)
+            self.opt_guides.append(laplacian_guide)
 
         if self.settings.gram_weight:
             style_gram_guide = guides.StyleGramGuide(
@@ -168,7 +168,6 @@ class Nst(torch.nn.Module):
 
             self.opt_guides.append(tv_guide)
 
-
     def forward(self):
         n_iter = [self.start_iter]
         current_loss = [9999999]
@@ -196,12 +195,12 @@ class Nst(torch.nn.Module):
             for grad in gradients:
                 sum_gradients += grad
 
-
             if self.settings.write_gradients:
                 utils.write_tensor(sum_gradients, '%s/grad/%04d.pt' % (self.settings.outdir, n_iter[0]))
 
-#            import kornia
-#            self.opt_tensor.grad = kornia.filters.gaussian_blur2d(sum_gradients, (3, 3), (0.1, 0.1))
+            # blur grads - doesn't really work well
+            # import kornia
+            # self.opt_tensor.grad = kornia.filters.gaussian_blur2d(sum_gradients, (3, 3), (0.1, 0.1))
             self.opt_tensor.grad = sum_gradients
 
             nice_loss = '{:,.0f}'.format(loss.item())
@@ -215,10 +214,6 @@ class Nst(torch.nn.Module):
                 if self.settings.cuda:
                     msg += 'memory used: %s of %s' % (max_mem_cached, max_memory)
                 print(msg)
-
-            # # blur gradients
-#            import kornia
-#            self.opt_tensor = kornia.filters.median_blur(self.opt_tensor, (1, 1))
 
             if self.settings.progressive_output:
                 if n_iter[0] % self.settings.progressive_interval == 0:

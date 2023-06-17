@@ -88,8 +88,8 @@ class NstSettings(BaseSettings):
         self.gram_weight = 1.0
         self.histogram_weight = 10000.0
         self.tv_weight = 5.0
-        self.derivative_weight = 0.0
-        self.derivative_loss_layer = 'r41'
+        self.laplacian_weight = 0.0
+        self.laplacian_loss_layer = 'r41'
 
 
 class WriterSettings(BaseSettings):
@@ -99,10 +99,6 @@ class WriterSettings(BaseSettings):
         self.content = None
         self.opt_image = Image()
         self.out = ''
-#        self.progressive_output = False
-#        self.progressive_ext = 'jpg'
-#        self.write_gradients = False
-#        self.gradient_ext = 'jpg'
         self.write_style_pyramid = False
         self.write_style_activations = False
         self.write_content_activations = False

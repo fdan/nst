@@ -112,14 +112,14 @@ class TVGuide(OptGuide):
         return opt_tensor.grad.clone()
 
 
-class DerivativeGuide(OptGuide):
+class LaplacianGuide(OptGuide):
     def __init__(self,
                  vgg,
                  tensor,
                  weight,
                  layer,
                  cuda_device=None):
-        super(DerivativeGuide, self).__init__()
+        super(LaplacianGuide, self).__init__()
         self.vgg = vgg
         self.tensor = tensor
         self.weight = weight
@@ -128,10 +128,10 @@ class DerivativeGuide(OptGuide):
         self.target = None
 
     def prepare(self):
-        target_deriv = self._get_derivative(self.tensor)
+        target_deriv = self._get_laplacian(self.tensor)
         self.target = self.vgg([target_deriv], [self.layer])[0]
 
-    def _get_derivative(self, t):
+    def _get_laplacian(self, t):
         t = kornia.filters.gaussian_blur2d(t, (9, 9), (8, 8))
         t = kornia.filters.laplacian(t, 21)
         t = kornia.filters.laplacian(t, 21)
@@ -147,7 +147,7 @@ class DerivativeGuide(OptGuide):
 
     def forward(self, optimiser, opt_tensor, loss, iteration):
 
-        opt_deriv = self._get_derivative(opt_tensor)
+        opt_deriv = self._get_laplacian(opt_tensor)
         opt_activation = self.vgg([opt_deriv], [self.layer])[0]
         optimiser.zero_grad()
         weighted_loss = self.loss(opt_activation, self.target) * self.weight
@@ -155,6 +155,7 @@ class DerivativeGuide(OptGuide):
         loss += weighted_loss
         return opt_tensor.grad.clone()
 
+        # alternate code for if we allowed multiple layers for deriv guide
         # deriv_gradients = []
         # for index, layer_activation in enumerate(opt_activations):
         #     optimiser.zero_grad()
@@ -179,6 +180,7 @@ class StyleGramGuide(OptGuide):
                  write_gradients=False,
                  write_pyramids = False,
                  outdir='',
+                 mask_layers = [],
                  gradient_ext='jpg'):
         super(StyleGramGuide, self).__init__()
         self.name = "style gram guide"
@@ -190,6 +192,7 @@ class StyleGramGuide(OptGuide):
         self.style_mips = style_mips
         self.mip_weights = mip_weights
         self.layers = layers
+        self.mask_layers = mask_layers
         self.layer_weight = layer_weights
         self.style_pyramid_span = style_pyramid_span
         self.zoom = style_zoom
@@ -279,24 +282,18 @@ class StyleGramGuide(OptGuide):
 
             loss += weighted_layer_loss
 
-            # to do - write to .pt and convert after
-            # # write gradients
-            # if self.write_gradients:
-            #     utils.write_gradient(opt_tensor, '%s/style/grad/%04d.%s' % (self.outdir, iteration, self.gradient_ext))
-
             # clone the gradients to a new tensor
             layer_gradients = opt_tensor.grad.clone()
 
+            # get the layer name
+            layer_name = self.layers[index]
+
             # if a target map is provided, apply it to the gradients
-            if torch.is_tensor(self.target_maps[index]):
+            if torch.is_tensor(self.target_maps[index]) and layer_name in self.mask_layers:
                 b, c, w, h = opt_tensor.grad.size()
 
                 for i in range(0, c):
                     layer_gradients[0][i] *= self.target_maps[index][0][0]
-
-                # # write the masked gradient
-                # if self.write_gradients:
-                #     utils.write_gradient(layer_gradients, '%s/style/masked_grad/%04d.%s' % (self.outdir, iteration, self.gradient_ext))
 
             style_gradients.append(layer_gradients)
 
@@ -394,29 +391,6 @@ class StyleHistogramGuide(OptGuide):
         else:
             cuda = False
 
-        # do some random rotation/crop here
-        # b_, c_, w_, h_ = opt_tensor.size()
-        # ot = opt_tensor.clone()
-        # transform = kornia.augmentation.RandomResizedCrop(size=(h_, w_), scale=(.97, 1.), ratio=(.97, 1.03))
-        # ot = transform(ot)
-        # opt_pyramid = utils.make_gaussian_pyramid(ot, self.style_pyramid_span, self.style_mips, cuda=cuda)
-
-        # ot = opt_tensor.clone()
-        # v = 1.0
-        # transform = kornia.augmentation.ColorJitter(brightness=v, contrast=v, saturation=v, hue=v, p=0.1)
-        # transform = kornia.augmentation.RandomHorizontalFlip()
-        # transform = kornia.augmentation.RandomGaussianNoise(mean=0.0, std=1.0, p=0.5)
-        # transform = kornia.augmentation.RandomElasticTransform()
-        # transform = kornia.augmentation.RandomRotation(45, p=0.1)
-        # transform = nn.Sequential(kornia.augmentation.RandomResizedCrop(size=(h_, w_), scale=(.97, 1.), ratio=(.97, 1.03)),
-        #                           kornia.augmentation.RandomRotation(degrees=1.))
-
-        # transform = nn.Sequential(kornia.augmentation.RandomResizedCrop(size=(h_, w_), scale=(.97, 1.), ratio=(.97, 1.03)))
-        # transform = nn.Sequential(kornia.augmentation.RandomRotation(degrees=1.))
-
-        # ot = transform(ot)
-        # opt_pyramid = utils.make_gaussian_pyramid(ot, self.style_pyramid_span, self.style_mips, cuda=cuda)
-
         opt_pyramid = utils.make_gaussian_pyramid(opt_tensor, self.style_pyramid_span, self.style_mips, cuda=cuda)
         opt_activations = []
         for opt_layer_activation_pyramid in self.vgg(opt_pyramid, self.layers):
@@ -440,46 +414,19 @@ class StyleHistogramGuide(OptGuide):
 
             loss += weighted_layer_loss
 
-            # to do - write to .pt and convert after
-            # write gradients
-#            if self.write_gradients:
-#                utils.write_tensor(opt_tensor.grad, '%s/grad/%04d.pt' % (self.outdir, iteration))
-
-#            print(3.3, opt_tensor.grad.size())
-#            print(3.4, opt_tensor.grad[0][0][429-304][1024-599])
-
             # clone the gradients to a new tensor
             layer_gradients = opt_tensor.grad.clone()
-
-            # blur gradients
-#            lg = opt_tensor.grad.clone()
-#            lg = kornia.filters.median_blur(lg, (3, 3))
-            # # lg = kornia.filters.bilateral_blur(lg, (5, 5), 0.1, (1.5, 1.5))
-            # lg = kornia.filters.unsharp_mask(lg, (3, 3), (1.5, 1.5))
-#            b, c, h, w = opt_tensor.grad.size()
-#            for i in range(0, c):
-#                layer_gradients[0][i] = lg[0][i]
-
-            # if a target map is provided and the layer is in mask_layers,
-            # apply it to the gradients
 
             # get the layer name
             layer_name = self.layers[index]
 
-#            if torch.is_tensor(self.target_maps[index]) and index in [1, 2]:
-#            if torch.is_tensor(self.target_maps[index]) and index in [2]:
             if torch.is_tensor(self.target_maps[index]) and layer_name in self.mask_layers:
                 b, c, w, h = opt_tensor.grad.size()
 
                 for i in range(0, c):
                     layer_gradients[0][i] *= self.target_maps[index][0][0]
 
-                # # write the masked gradient
-                # if self.write_gradients:
-                #     utils.write_gradient(layer_gradients, '%s/style/masked_grad/%04d.%s' % (self.outdir, iteration, self.gradient_ext))
-
             style_gradients.append(layer_gradients)
-            # style_gradients.append(lg)
 
         return style_gradients
 
