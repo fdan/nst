@@ -159,7 +159,7 @@ class LaplacianGuide(OptGuide):
         grad_copy = opt_tensor.grad.clone()
 
         # if we have a laplacian mask, apply it
-        if torch.is_tensor(self.mask):
+        if self.mask.numel() != 0:
             b, c, w, h = opt_tensor.grad.size()
             for i in range(0, c):
                 grad_copy[0][i] *= self.mask[0][0]

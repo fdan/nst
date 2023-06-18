@@ -41,6 +41,9 @@ class StyleWriter(object):
         self.nst = model.Nst()
         self.nst.settings = self.settings.core
 
+        if self.settings.core.laplacian_mask:
+            laplacian_mask = utils.image_to_tensor(self.settings.core.laplacian_mask, self.settings.core.cuda, raw=True)
+        self.nst.laplacian_mask = laplacian_mask
 
     def get_output_dir(self):
         if not self.output_dir:
@@ -80,6 +83,8 @@ class StyleWriter(object):
         self.nst.styles = self.prepare_styles()
         self.nst.prepare()
         assert self.settings.core == self.nst.settings
+
+
 
         # set num cpus
         torch.set_num_threads = int(self.settings.core.cpu_threads)

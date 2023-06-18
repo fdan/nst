@@ -40,6 +40,7 @@ class Nst(torch.nn.Module):
         self.styles = []
         self.opt_tensor = torch.zeros(0)
         self.opt_guides = []
+        self.laplacian_mask = torch.zeros(0)
         self.optimiser = None
         self.settings = settings.NstSettings()
         self.start_iter = 1
@@ -113,7 +114,7 @@ class Nst(torch.nn.Module):
                 self.content,
                 self.settings.laplacian_weight,
                 self.settings.laplacian_loss_layer,
-                self.settings.laplacian_mask,
+                self.laplacian_mask,
                 self.settings.cuda_device
             )
 
