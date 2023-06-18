@@ -1,5 +1,6 @@
 import torch
 from torch import optim
+from lion_pytorch import Lion
 
 from . import guides
 from . import vgg
@@ -85,9 +86,8 @@ class Nst(torch.nn.Module):
             print('optimiser is asgd')
             self.optimiser = optim.ASGD([self.opt_tensor], lr=self.settings.learning_rate)
 
-
-        # elif self.settings.optimiser == 'lion':
-        #     self.optimiser = Lion([self.opt_tensor], lr=0.1, weight_decay=0.98, use_triton=True)
+        elif self.settings.optimiser == 'lion':
+            self.optimiser = Lion([self.opt_tensor], lr=self.settings.learning_rate, weight_decay=0.98, use_triton=True)
 
         else:
             raise Exception("unsupported optimiser:", self.settings.optimiser)
