@@ -87,6 +87,7 @@ class Nst(torch.nn.Module):
             self.optimiser = optim.ASGD([self.opt_tensor], lr=self.settings.learning_rate)
 
         elif self.settings.optimiser == 'lion':
+            print('optimiser is lion')
             self.optimiser = Lion([self.opt_tensor], lr=self.settings.learning_rate, weight_decay=0.98, use_triton=True)
 
         else:
