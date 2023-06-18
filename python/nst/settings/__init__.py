@@ -90,6 +90,7 @@ class NstSettings(BaseSettings):
         self.tv_weight = 5.0
         self.laplacian_weight = 0.0
         self.laplacian_loss_layer = 'r41'
+        self.laplacian_mask = None
 
 
 class WriterSettings(BaseSettings):

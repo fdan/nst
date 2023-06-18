@@ -118,12 +118,14 @@ class LaplacianGuide(OptGuide):
                  tensor,
                  weight,
                  layer,
+                 mask,
                  cuda_device=None):
         super(LaplacianGuide, self).__init__()
         self.vgg = vgg
         self.tensor = tensor
         self.weight = weight
         self.layer = layer
+        self.mask = mask
         self.cuda_device = cuda_device
         self.target = None
 
@@ -153,7 +155,17 @@ class LaplacianGuide(OptGuide):
         weighted_loss = self.loss(opt_activation, self.target) * self.weight
         weighted_loss.backward(retain_graph=True)
         loss += weighted_loss
-        return opt_tensor.grad.clone()
+
+        grad_copy = opt_tensor.grad.clone()
+
+        # if we have a laplacian mask, apply it
+        if torch.is_tensor(self.mask):
+            b, c, w, h = opt_tensor.grad.size()
+            for i in range(0, c):
+                grad_copy[0][i] *= self.mask[0][0]
+        return grad_copy
+
+        # return opt_tensor.grad.clone()
 
         # alternate code for if we allowed multiple layers for deriv guide
         # deriv_gradients = []

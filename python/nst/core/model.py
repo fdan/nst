@@ -112,6 +112,7 @@ class Nst(torch.nn.Module):
                 self.content,
                 self.settings.laplacian_weight,
                 self.settings.laplacian_loss_layer,
+                self.settings.laplacian_mask,
                 self.settings.cuda_device
             )
 
