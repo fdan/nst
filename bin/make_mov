@@ -1,0 +1,60 @@
+#! /usr/bin/env python
+
+import os
+from subprocess import Popen, PIPE
+
+def exr_to_sg_mov(input_seq, frames):
+    # input_seq = input_seq.replace('####', '#')
+    seq_filename = input_seq.split('/')[-1].split('.')[0]
+
+    seq_dir = input_seq.split('/')
+    seq_dir.pop()
+    seq_dir += ['../png']
+    png_dir = '/'.join(seq_dir)
+
+    os.makedirs(png_dir, 0o0775, exist_ok=True)
+
+    output_seq = '%s/%s.#.png' % (png_dir, seq_filename)
+    png_cmd = ['oiiotool', input_seq, '-v', '--runstats', '--info']
+    png_cmd += ['--frames', ','.join([str(x) for x in frames])]
+    png_cmd += ['--framepadding', '4', '--iscolorspace', 'acescg', '--tocolorspace', 'out_rec709']
+    png_cmd += ['-o', output_seq]
+
+    png_proc = Popen(png_cmd, stdout=PIPE, stderr=PIPE)
+    png_stdout, png_stderr = png_proc.communicate()
+    print(png_stdout, png_stderr)
+
+    # convert the srgb png sequence into a quicktime using ffmpeg
+    png_seq = input_seq.replace('#', '%04d')
+
+    start_frame = str(frames[0])
+
+    seq_dir = png_seq.split('/')
+    print("qt seq_dir: " + str(seq_dir))
+    seq_dir.pop()
+    seq_dir += ['../mov']
+    qt_dir = '/'.join(seq_dir)
+
+    os.makedirs(qt_dir, 0o0775, exist_ok=True)
+
+    seq_filename = png_seq.split('/')[-1].split('.')[0]
+    qt_file = '%s/%s.mov' % (qt_dir, seq_filename)
+
+    qt_cmd = ['ffmpeg4', '-start_number', start_frame, '-r', '24', '-s', '1280x720', '-i']
+    qt_cmd += [png_seq, '-b:v', '20M', '-maxrate', '20M', '-bufsize', '20M']
+    qt_cmd += ['-vcodec', 'h264', '-stats', '-pix_fmt', 'yuv420p', '-vf', 'premultiply=inplace=1', qt_file]
+
+    qt_proc = Popen(qt_cmd, stdout=PIPE, stderr=PIPE)
+    qt_stdout, qt_stderr = qt_proc.communicate()
+    print(qt_stdout, qt_stderr)
+
+
+def main():
+
+
+
+
+
+
+if __name__ == "__main__":
+    main()
