@@ -7,8 +7,10 @@ version = '3.0.1'
 authors = ['daniel.flood']
 
 requires = [
-#            'ocio_configs',
-            'tractor'
+            'tractor',
+            'oiio',
+            'ocio_configs',
+            'shotgun_utils'
            ]
 
 build_requires = ['cmake-3.10+']

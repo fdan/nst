@@ -1,13 +1,66 @@
-#! /usr/bin/env python
-
-import os
+#! /usr/bin/env python3
 import sys
+import traceback
+import shutil
+import os
 from subprocess import Popen, PIPE
+from optparse import OptionParser
+
+import tank_vendor.shotgun_api3
 
 
-def exr_to_sg_mov(input_seq, frames):
-    # input_seq = input_seq.replace('####', '#')
+def get_sg():
+    api_key = os.getenv('SG_API_KEY')
+    api_script = 'toolkit_user'
+    url = 'https://utsala.shotgunstudio.com'
+    sg = tank_vendor.shotgun_api3.Shotgun(url, api_key=api_key, script_name=api_script)
+    return sg
+
+def sg_upload(shot_name, mov, img_seq, description):
+    task_name = 'style'
+    proj_id = 499
+    sg = get_sg()
+
+    # Create version
+    filters = [['code', 'is', shot_name], ['project', 'is', {'type': 'Project', 'id': proj_id}]]
+    shot = sg.find_one('Shot', filters)
+
+    filters = [['entity', 'is', {'type': 'Shot', 'id': shot['id']}], ['content', 'is', task_name]]
+    task = sg.find_one('Task', filters)
+
+    data = {'project': {'type': 'Project', 'id': proj_id},
+        'code': os.path.basename(mov),
+        'description': description,
+        'sg_path_to_movie': mov,
+        'sg_path_to_frames': img_seq,
+        'sg_status_list': 'rev',
+        'entity': {'type': 'Shot', 'id': shot['id']},
+        'sg_task': {'type': 'Task', 'id': task['id']}
+    }
+
+    result = sg.create('Version', data)
+    version_id = result["id"]
+
+    # Upload movie
+    try:
+        moviePath = mov
+        result = None
+        if os.path.exists(moviePath):
+            print("Uploading movie to Shotgun: %s" % moviePath)
+            result = sg.upload("Version", version_id, moviePath, field_name="sg_uploaded_movie")
+        return result
+    except:
+        print("Something went wrong:")
+        traceback.print_exc()
+
+
+def exr_to_mov(input_seq):
     seq_filename = input_seq.split('/')[-1].split('.')[0]
+
+    pardir = os.path.abspath(os.path.join(input_seq, os.path.pardir))
+    frames = [x.split('.')[-2] for x in os.listdir(pardir)]
+    frames.sort()
+    frames_ = ','.join(frames)
 
     seq_dir = input_seq.split('/')
     seq_dir.pop()
@@ -15,45 +68,84 @@ def exr_to_sg_mov(input_seq, frames):
     png_dir = '/'.join(seq_dir)
 
     os.makedirs(png_dir, 0o0775, exist_ok=True)
-
+    
+    # oiiotool
     output_seq = '%s/%s.#.png' % (png_dir, seq_filename)
     png_cmd = ['oiiotool', input_seq, '-v', '--runstats', '--info']
-    png_cmd += ['--frames', ','.join([str(x) for x in frames])]
+    png_cmd += ['--frames', frames_]
     png_cmd += ['--framepadding', '4', '--iscolorspace', 'acescg', '--tocolorspace', 'out_rec709']
     png_cmd += ['-o', output_seq]
 
     png_proc = Popen(png_cmd, stdout=PIPE, stderr=PIPE)
-    png_stdout, png_stderr = png_proc.communicate()
-    print(png_stdout, png_stderr)
+    for c in iter(lambda: png_proc.stdout.read(1), b""):
+        sys.stdout.buffer.write(c)
 
-    # convert the srgb png sequence into a quicktime using ffmpeg
-    png_seq = input_seq.replace('#', '%04d')
+    frames = [int(x) for x in frames]
+    frames.sort()
 
-    start_frame = str(frames[0])
+    # fill missing frames in seq
+    first = frames[0]
+    last = frames[-1]
 
+    png_seq = input_seq.replace('exr', 'png')
+
+    for f in range(first, last):
+        if f in frames:
+            continue
+        # png_seq = input_seq.replace('exr', 'png')
+        i = 1
+        prev_key_not_found = True
+        while prev_key_not_found:
+            if f-i in frames:
+                from_frame = png_seq.replace('#', '%04d' % (f-i))
+                to_frame = png_seq.replace('#', '%04d' % f)
+                shutil.copy(from_frame, to_frame)
+                prev_key_not_found = False
+            i += 1
+                    
+    # ffmpeg
+    png_seq = png_seq.replace('#', '%04d')
+
+    start_frame = str(frames_.split(',')[0])
     seq_dir = png_seq.split('/')
-    print("qt seq_dir: " + str(seq_dir))
     seq_dir.pop()
     seq_dir += ['../mov']
     qt_dir = '/'.join(seq_dir)
-
     os.makedirs(qt_dir, 0o0775, exist_ok=True)
-
     seq_filename = png_seq.split('/')[-1].split('.')[0]
     qt_file = '%s/%s.mov' % (qt_dir, seq_filename)
 
-    qt_cmd = ['ffmpeg4', '-start_number', start_frame, '-r', '24', '-s', '1280x720', '-i']
-    qt_cmd += [png_seq, '-b:v', '20M', '-maxrate', '20M', '-bufsize', '20M']
+    # qt_cmd = ['ffmpeg4', '-start_number', start_frame, '-r', '24', '-s', '1280x720', '-i']
+    qt_cmd = ['ffmpeg4', '-start_number', start_frame, '-r', '24', '-i']
+    qt_cmd += [png_seq, '-b:v', '20M', '-maxrate', '20M', '-bufsize', '20M', '-y']
     qt_cmd += ['-vcodec', 'h264', '-stats', '-pix_fmt', 'yuv420p', '-vf', 'premultiply=inplace=1', qt_file]
 
     qt_proc = Popen(qt_cmd, stdout=PIPE, stderr=PIPE)
-    qt_stdout, qt_stderr = qt_proc.communicate()
-    print(qt_stdout, qt_stderr)
+    for c in iter(lambda: qt_proc.stdout.read(1), b""):
+        sys.stdout.buffer.write(c)
+    for c in iter(lambda: qt_proc.stderr.read(1), b""):
+        sys.stdout.buffer.write(c)
+
+    return os.path.abspath(qt_file)
 
 
 def main():
-    exr_to_sg_mov(sys.argv[1], sys.argv[2])
+    '''
+    '''
+    p = OptionParser()
+    p.add_option("-s", "--shot", dest='shot', action='store')
+    p.add_option("-i", "--img_seq", dest='img_seq', action='store')
+    p.add_option("-d", "--description", dest='description', action='store')
+    opts, args = p.parse_args()
+
+    mov = exr_to_mov(opts.img_seq)
+    img_seq = opts.img_seq.replace('#', '####')
+    img_seq = img_seq.replace('exr', 'png')
+    sg_upload(opts.shot, mov, img_seq, opts.description)
 
 
 if __name__ == "__main__":
     main()
+
+
+
