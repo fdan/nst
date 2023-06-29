@@ -13,7 +13,7 @@
 # limitations under the License.
 ##############################################################################
 
-from multiprocessing import Process
+from multiprocessing import Process, Queue
 import math
 import argparse
 import os
@@ -208,7 +208,17 @@ class ImageProcessTCPHandler(socketserver.BaseRequestHandler):
             self.vprint('Starting inference')
 
             # main call:
-            res = self.server.models[m.name].inference()
+            model = self.server.models[m.name]
+
+            # todo: do the inference in a multiproc Process
+            # result = model.inference()
+
+            queue = Queue()
+            process = Process(target=model.inference)
+            process.start()
+            process.join() # this blocks
+            result = queue.get()
+
 
             print('job progress: %d' % job_progress + '%')
             if job_progress == 100:
@@ -218,7 +228,7 @@ class ImageProcessTCPHandler(socketserver.BaseRequestHandler):
             resp_msg = RespondWrapper()
             resp_msg.info = True
             resp_inf = RespondInference()
-            img = np.flipud(res)
+            img = np.flipud(result)
             image = resp_inf.images.add()
             image.width = np.shape(img)[1]
             image.height = np.shape(img)[0]
@@ -229,6 +239,7 @@ class ImageProcessTCPHandler(socketserver.BaseRequestHandler):
             resp_msg.r2.CopyFrom(resp_inf)
             self.vprint('sending inteference response')
 
+            # todo: want to call this when next batch is running in subproc
             send_msg(self, resp_msg)
             # p = Process(target=send_msg, args=(self, resp_msg))
             # p.start()

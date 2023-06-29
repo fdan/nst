@@ -27,6 +27,7 @@ class Model(BaseModel):
                         "gram_weight",
                         "histogram_weight",
                         "tv_weight",
+                        "laplacian_weight",
                         "style_mips",
                         "style_mip_weights",
                         "style_layers",
@@ -57,10 +58,6 @@ class Model(BaseModel):
                         "out_fp",
                         "style1_fp",
                         "style1_target_fp",
-                        "style2_fp",
-                        "style2_target_fp",
-                        "style3_fp",
-                        "style3_target_fp"
                         )
 
         self.buttons = ["farm"]
@@ -69,15 +66,6 @@ class Model(BaseModel):
                        'style1': 4,
                        'style1_target': 1,
                        'content': 3}
-
-        # self.inputs = {'content': 3,
-        #                'opt_img': 3,
-        #                'style1': 4,
-        #                'style1_target': 1,
-        #                'style2': 4,
-        #                'style2_target': 1,
-        #                'style3': 4,
-        #                'style3_target': 1}
 
         self.outputs = {'output': 3}
 
@@ -118,13 +106,7 @@ class Model(BaseModel):
         self.opt_fp = ""
         self.style1_fp = ""
         self.style1_target_fp = ""
-        self.style2_fp = ""
-        self.style2_target_fp = ""
-        self.style3_fp = ""
-        self.style3_target_fp = ""
-        self.style_targets_fp = ""
         self.out_fp = ""
-        self.farm_scale = 1.0
         self.farm_iterations = 500
 
         # button states
@@ -160,6 +142,7 @@ class Model(BaseModel):
         self.nst_settings.gram_weight = float(self.gram_weight)
         self.nst_settings.histogram_weight = float(self.histogram_weight)
         self.nst_settings.tv_weight = float(self.tv_weight)
+        self.nst_settings.laplacian_weight = float(self.laplacian_weight)
         self.nst_settings.style_mips = int(self.style_mips)
         self.nst_settings.mip_weights = [float(x) for x in self.style_mip_weights.split(',')]
         self.nst_settings.style_layers = self.style_layers.split(',')
