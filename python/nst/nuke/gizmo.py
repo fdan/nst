@@ -19,52 +19,55 @@ def setup_nst_nodes():
 
 
 def setup(node):
-    c = [x for x in node.nodes() if x.Class() == "MLClient"]
+    c = [x for x in node.nodes() if x.Class() == "MLClientLive"]
     assert len(c) == 1
     mlc = c[0]
     mlc.showControlPanel()
     mlc.knob('connect').execute()
-    create_expressions(mlc)
+    create_expressions(mlc, node) #defer?
     node.showControlPanel()
     # nukescripts.utils.executeDeferred(create_expressions, args=(mlc))
 
 
-def create_expressions(mlc):
+def create_expressions(mlc, parent):
     mlc.knob('models').setValue('Neural Style Transfer')
 
-    # common
-    mlc.knob('style_layers').setValue('[python {nuke.thisNode().parent()[\'style_layers\'].getValue()}]')
-    mlc.knob('style_mips').setExpression('[python {nuke.thisNode().parent()[\'style_mips\'].getValue()}]')
-    mlc.knob('style_layer_weights').setValue('[python {nuke.thisNode().parent()[\'style_layer_weights\'].getValue()}]')
-    mlc.knob('style_mip_weights').setValue('[python {nuke.thisNode().parent()[\'style_mip_weights\'].getValue()}]')
-    mlc.knob('content_mips').setExpression('[python {nuke.thisNode().parent()[\'content_mips\'].getValue()}]')
-    mlc.knob('content_layer').setValue('[python {nuke.thisNode().parent()[\'content_layer\'].getValue()}]')
-    mlc.knob('content_layer_weight').setValue('[python {nuke.thisNode().parent()[\'content_layer_weight\'].getValue()}]')
-    mlc.knob('learning_rate').setExpression('[python {nuke.thisNode().parent()[\'learning_rate\'].getValue()}]')
-    mlc.knob('log_iterations').setExpression('[python {int(nuke.thisNode().parent()[\'log_epochs\'].getValue())}]')
-    mlc.knob('enable_update').setExpression('[python {int(nuke.thisNode().parent()[\'allow_update\'].getValue())}]')
-    mlc.knob('pyramid_scale_factor').setExpression('[python {nuke.thisNode().parent()[\'mip_scale_factor\'].getValue()}]')
+    float_knobs = [
+        "enable_update",
+        "iterations",
+        "log_iterations",
+        "batch_size",
+        "learning_rate",
+        "style_mips",
+        "style_pyramid_span",
+        "style_zoom",
+        "content_layer_weight",
+        "gram_weight",
+        "histogram_weight",
+        "tv_weight",
+        "laplacian_weight",
+    ]
 
-    # local
-    mlc.knob('iterations').setExpression('[python {nuke.thisNode().parent()[\'epochs_l\'].getValue()}]')
-    mlc.knob('scale').setExpression('[python {nuke.thisNode().parent()[\'scale_l\'].getValue()}]')
-    mlc.knob('engine').setValue('[python {nuke.thisNode().parent()[\'engine_l\'].value().lower()}]')
-    mlc.knob('optimiser').setValue('[python {nuke.thisNode().parent()[\'optimiser_l\'].value().lower()}]')
+    str_knobs = [
+        "optimiser",
+        "engine",
+        "style_mip_weights",
+        "style_layers",
+        "mask_layers",
+        "style_layer_weights",
+        "content_layer",
+    ]
 
-    # farm
-    mlc.knob('farm_engine').setValue('[python {nuke.thisNode().parent()[\'engine_f\'].value().lower()}]')
-    mlc.knob('farm_optimiser').setValue('[python {nuke.thisNode().parent()[\'optimiser_f\'].value().lower().replace(\'-\', \'\')}]')
-    mlc.knob('farm_learning_rate').setValue('[python {nuke.thisNode().parent()[\'learning_rate_f\'].value()}]')
-    mlc.knob('farm_scale').setExpression('[python {nuke.thisNode().parent()[\'scale_f\'].getValue()}]')
-    mlc.knob('farm_iterations').setExpression('[python {nuke.thisNode().parent()[\'epochs_f\'].getValue()}]')
+    for float_knob in float_knobs:
+        try:
+            mlc.knob(float_knob).setExpression('[python {nuke.thisNode().parent()[\'%s\'].getValue()}]' % float_knob)
+            # mlc.knob(float_knob).setExpression('%s.%s' % (parent.name(), float_knob))
+        except:
+            print(1.1, float_knob)
 
-    mlc.knob('content_fp').setValue('[python {nuke.thisNode().input(0).knob(\'file\').getEvaluatedValue()}]')
-    mlc.knob('opt_fp').setValue('[python {nuke.thisNode().input(1).knob(\'file\').getEvaluatedValue()}]')
-    mlc.knob('out_fp').setValue('[python {nuke.thisNode().parent().dependent()[0].knob(\'file\').getEvaluatedValue()}]')
-    mlc.knob('style1_fp').setValue('[python {nuke.thisNode().input(2).knob(\'file\').getEvaluatedValue()}]')
-    mlc.knob('style1_target_fp').setValue('[python {nuke.thisNode().input(3).knob(\'file\').getEvaluatedValue()}]')
-    mlc.knob('style2_fp').setValue('[python {nuke.thisNode().input(4).knob(\'file\').getEvaluatedValue()}]')
-    mlc.knob('style2_target_fp').setValue('[python {nuke.thisNode().input(5).knob(\'file\').getEvaluatedValue()}]')
-    mlc.knob('style3_fp').setValue('[python {nuke.thisNode().input(6).knob(\'file\').getEvaluatedValue()}]')
-    mlc.knob('style3_target_fp').setValue('[python {nuke.thisNode().input(7).knob(\'file\').getEvaluatedValue()}]')
+    for str_knob in str_knobs:
+        print(1.2, str_knob)
+        mlc.knob(str_knob).setValue('nuke.thisNode().parent()[\'%s\'].getValue()' % str_knob)
+        # value = str(parent[str_knob].getValue())
+        # mlc.knob(str_knob).setValue(value)
 

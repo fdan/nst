@@ -6,6 +6,7 @@ message RequestWrapper {
 	optional bool info = 1;
 	optional RequestInfo r1 = 2;
 	optional RequestInference r2 = 3;
+	optional RequestCancel r3 = 4;
 }
 
 message RespondWrapper {
@@ -17,6 +18,10 @@ message RespondWrapper {
 
 message RequestInfo {
 	optional bool info = 1;
+}
+
+message RequestCancel{
+	required bool cancel = 1;
 }
 
 message RespondInfo {

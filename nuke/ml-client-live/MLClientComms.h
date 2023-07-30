@@ -80,6 +80,8 @@ public:
   //! Send a messaged image to to the server. Return true on success, false otherwise.
   bool sendInferenceRequest(mlserver::RequestInference& requestInference);
 
+  bool sendCancelRequest();
+
   //! Marshall the returned image into a float buffer of the original image size. Note, this
   //! expects the size of result to have been set to the same size as the image that was
   //! previously sent to the server. Return true on success, false otherwise.

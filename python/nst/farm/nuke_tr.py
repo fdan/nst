@@ -4,134 +4,167 @@ import tractor.api.author
 import nuke
 from . import tr
 
+import datetime
 import uuid
+import shutil
 import os
 
 
-def nuke_submit(node):
-    nst_inputs = {'content': 0, 'opt': 1, 'style1': 2, 'style1_target': 3, 'style2': 4,
-                  'style2_target': 5, 'style3': 6, 'style3_target': 7}
+def init_write_nodes(node):
+    out_fp = node.knob('out_fp').value()
+    out_dir = os.path.abspath(os.path.join(out_fp, os.path.pardir))
+    now = datetime.datetime.today()
+    temp_dir = '%s-%s-%s--%s-%s-%s' % (now.year, now.month, now.day, now.hour, now.minute, now.second)
+    temp_dir = os.path.join(out_dir, temp_dir)
+    os.makedirs(temp_dir, exist_ok=True)
 
-    # c = [x for x in node.nodes() if x.Class() == "MLClient"]
-    # assert len(c) == 1
-    # mlc = c[0]
-    mlc = node
+    content_fp = os.path.join(temp_dir, 'content/content.####.exr')
+    opt_fp = os.path.join(temp_dir, 'opt/opt.####.exr')
+    style_fp = os.path.join(temp_dir, 'style/style.####.exr')
+    style_target_fp = os.path.join(temp_dir, 'style_target/style_target.####.exr')
+    node.node('content_write').knob('file').setValue(content_fp)
+    node.node('opt_write').knob('file').setValue(opt_fp)
+    node.node('style_write').knob('file').setValue(style_fp)
+    node.node('style_target_write').knob('file').setValue(style_target_fp)
+
+    nuke.scriptSave()
+    orig_script_path = nuke.scriptName()
+    archive_script_path = os.path.join(temp_dir, os.path.basename(orig_script_path))
+    shutil.copy(orig_script_path, archive_script_path)
+
+    pd = {
+        'temp_dir': temp_dir,
+        'script_path': archive_script_path,
+        'out_fp': out_fp,
+        'content_fp': content_fp,
+        'opt_fp': opt_fp,
+        'style_fp': style_fp,
+        'style_target_fp': style_target_fp
+    }
+    return pd
+
+
+def nuke_submit(node, dry_run=False):
+    """
+    node: the gizmo node
+    """
+    # to do
+    # do png and mov generation after nst job
+    # if temporal coherence is checked, frames must be done in serial or as a single giant job (?)
+
+    cache_paths = init_write_nodes(node)
+
+
 
     ws = settings.WriterSettings()
 
-    style1 = settings.StyleImage()
-    style1.rgba_filepath = mlc.knob('style1_fp').value()
-    style1.target_map_filepath = mlc.knob('style1_target_fp').value()
-    ws.styles = [style1]
+    script_path = cache_paths['script_path']
+    temp_dir = cache_paths['temp_dir']
 
-    if node.input(nst_inputs['style2']):
-        style2 = settings.StyleImage()
-        style2.rgba_filepath = mlc.knob('style2_fp').value()
-        if node.input(nst_inputs['style2_target']):
-            style2.target_map_filepath = mlc.knob('style2_target_fp').value()
-        ws.styles.append(style2)
+    temporal_coherence = node.knob('temporal_coherence').value()
 
-    if node.input(nst_inputs['style3']):
-        style3 = settings.StyleImage()
-        style3.rgba_filepath = mlc.knob('style3_fp').value()
-        if node.input(nst_inputs['style3_target']):
-            style3.target_map_filepath = mlc.knob('style3_target_fp').value()
-        ws.styles.append(style3)
-
-    content = settings.Image()
-    content.rgb_filepath = mlc.knob('content_fp').value()
-    ws.content = content
-
-    opt = settings.Image()
-    opt.rgb_filepath = mlc.knob('opt_fp').value()
-    ws.opt_image = opt
-
-    ws.out = mlc.knob('out_fp').value()
-
-    ws.core.engine = mlc.knob('farm_engine').value()
-    ws.core.cpu_threads = mlc.knob('farm_cpu_threads').value()
-    ws.core.optimiser = mlc.knob('farm_optimiser').value()
-    ws.core.pyramid_span = float(mlc.knob('farm_pyramid_span').value())
-    ws.core.zoom = float(mlc.knob('farm_style_zoom').value())
-    ws.core.style_mips = int(mlc.knob('style_mips').value())
-    ws.core.style_layers = mlc.knob('style_layers').value().replace(' ', '').split(',')
-    ws.core.style_layer_weights = [float(x) for x in mlc.knob('style_layer_weights').value().replace(' ', '').split(',')]
-    ws.core.content_layer = mlc.knob('content_layer').value()
-    ws.core.content_layer_weight = float(mlc.knob('content_layer_weight').value())
-    ws.core.content_mips = int(mlc.knob('content_mips').value())
-    ws.core.learning_rate = float(mlc.knob('farm_learning_rate').value())
-    ws.core.iterations = int(mlc.knob('farm_iterations').value())
+    ws.core.engine = node.knob('farm_engine').value()
+    ws.core.optimiser = node.knob('farm_optimiser').value()
+    ws.core.style_mips = int(node.knob('farm_style_mips').value())
+    ws.core.learning_rate = float(node.knob('farm_learning_rate').value())
+    ws.core.iterations = int(node.knob('farm_iterations').value())
     ws.core.log_iterations = 1
 
+    proxy_scale = float(node.knob('proxy_scale').value())
+    nuke_pyramid_span = float(node.knob('style_pyramid_span').value())
+    nuke_style_zoom = float(node.knob('style_zoom').value())
+    ws.core.pyramid_span = nuke_pyramid_span * proxy_scale # check this is correct
+    ws.core.zoom = nuke_style_zoom / proxy_scale # check this is correct
+
+    ws.core.style_mips = int(node.knob('style_mips').value())
+    ws.core.mip_weights = [float(x) for x in node.knob('style_mip_weights').value().split(',')]
+    ws.core.style_layers = node.knob('style_layers').value().split(',')
+    ws.core.mask_layers = node.knob('mask_layers').value().split(',')
+    ws.core.style_layer_weights = [float(x) for x in node.knob('style_layer_weights').value().split(',')]
+    ws.core.content_layer = node.knob('content_layer').value()
+    ws.core.content_layer_weight = float(node.knob('content_layer_weight').value())
+    ws.core.gram_weight = float(node.knob('gram_weight').value())
+    ws.core.histogram_weight = float(node.knob('histogram_weight').value())
+    ws.core.tv_weight = float(node.knob('tv_weight').value())
+    ws.core.laplacian_weight = float(node.knob('laplacian_weight').value())
+
     job = tractor.api.author.Job()
-    job.title = node.knob('job_name').value() or "nuke_nst_job_%s" % str(uuid.uuid4())[:8:]
+    job.title = node.knob('job_name').value()
     job.service = node.knob('service_key').value()
     job.tier = node.knob('tier').value()
-    # job.atleast = str(int(ws.core.cpu_threads))
+    # job.atleast = str(int(node.knob('atleast').value()))
     job.atmost = int(ws.core.cpu_threads)
     frames = str(node.knob('frames').value())
 
-    # this was an attempt to automate caching out of the inputs on the farm.
-    # for now the user can just do this manually in nuke.
-    #
-    # # 1. determine which inputs are single frame and which are image sequences
-    # # 2. tr task/s to write out inputs for frame range
-    # # 3. nst task (todo: handle style image with mask as alpha channel)
-    # # 4. cleanup, remove temp files
-    #
-    # # write out media cache for oiio
-    #
-    # # inputs changing with each frame:
-    # varying_inputs = []
-    # if node.input(nst_inputs['content']):
-    #     varying_inputs += [node.node('content').dependent()[0]]
-    # if node.input(nst_inputs['opt']):
-    #     varying_inputs += [node.node('opt').dependent()[0]]
-    # if node.input(nst_inputs['style1_target']):
-    #     varying_inputs += [node.node('style1_target').dependent()[0]]
-    # if node.input(nst_inputs['style2_target']):
-    #     varying_inputs += [node.node('style2_target').dependent()[0]]
-    # if node.input(nst_inputs['style3_target']):
-    #     varying_inputs += [node.node('style3_target').dependent()[0]]
-    #
-    # # inputs constant across frame range
-    # # todo: style targets are not static?
-    # static_inputs = []
-    # if node.input(nst_inputs['style1']):
-    #     static_inputs += [node.node('style1').dependent()[0]]
-    # if node.input(nst_inputs['style2']):
-    #     static_inputs += [node.node('style2').dependent()[0]]
-    # if node.input(nst_inputs['style3']):
-    #     static_inputs += [node.node('style3').dependent()[0]]
-    #
-    # varying_input_names = ','.join(['%s.%s' % (node.name(), x.name()) for x in varying_inputs])
-    # static_input_names = ','.join(['%s.%s' % (node.name(), x.name()) for x in static_inputs])
-    # nuke_script = nuke.scriptName()
-    # envkey_nuke = ['rez-pkgs=nuke-12']
-    # envkey_nuke += ['setenv PYTHONPATH=/mnt/ala/research/danielf/git/nst/python:$PYTHONPATH']
-    # envkey_nuke += ['setenv NUKE_PATH=/mnt/ala/research/danielf/git/nst/nuke/build/ml-client:$NUKE_PATH']
-    # envkey_nuke += ['setenv NST_VGG_MODEL=/mnt/ala/research/danielf/git/nst/models/vgg_conv.pth']
-    #
-    # cmd_1 = ['$NUKE_BIN', '-X', varying_input_names, '-F', frames, nuke_script]
-    # task_1 = job.newTask(title='nst_varying_input_cache')
-    # command_1 = tractor.api.author.Command(argv=cmd_1, envkey=envkey_nuke)
-    # task_1.addCommand(command_1)
-    #
-    # cmd_2 = ['$NUKE_BIN', '-X', static_input_names, '-F', "1", nuke_script]
-    # task_2 = job.newTask(title='nst_static_input_cache')
-    # command_2 = tractor.api.author.Command(argv=cmd_2, envkey=envkey_nuke)
-    # task_2.addCommand(command_2)
-    # task_2.addChild(task_1)
+    rez_resolve = ' '.join([x for x in os.getenv('REZ_RESOLVE').split(' ')
+                            if 'tk_nuke' not in x
+                            and 'tractor' not in x
+                            and 'nst' not in x
+                            and 'devtoolset' not in x])
 
-    # oiio job
+    rez_packages = 'rez-pkgs=' + rez_resolve
+
+    # nuke job to cache inputs
+    write_nodes = ','.join(['%s.%s' % (node.name(), x.name()) for x in node.nodes() if x.Class() == 'Write'])
+
+    nuke_cmd = ['nukex_run']
+    nuke_cmd += ['-t']
+    nuke_cmd += ['-F']
+    nuke_cmd += [frames]
+    nuke_cmd += ['-X']
+    nuke_cmd += ['%s' % write_nodes]
+    nuke_cmd += [script_path]
+    # how to limit threads?
+    nuke_tractor_cmd = tractor.api.author.Command(argv=nuke_cmd)
+    nuke_tractor_cmd.envkey = [rez_packages]
+    nuke_task = job.newTask(title='nuke_input_cache')
+    nuke_task.addCommand(nuke_tractor_cmd)
+
+    # add cleanup job
+    cleanup_cmd = ['rm', '-rf', temp_dir]
+    cleanup_tractor_cmd = tractor.api.author.Command(argv=cleanup_cmd)
+    cleanup_task = job.newTask(title='nuke_cache_cleanup')
+    cleanup_task.addCommand(cleanup_tractor_cmd)
+
+    # oiio job - no temporal coherence
     frame_list = tr.eval_frames(frames)
     for frame in frame_list:
         ws.frame = frame
+
+        out_fp = cache_paths['out_fp'].replace('####', '%04d' % frame)
+        ws.out = out_fp
+
+        content_fp = cache_paths['content_fp'].replace('####', '%04d' % frame)
+        content = settings.Image()
+        content.rgb_filepath = content_fp
+        ws.content = content
+
+        opt_fp = cache_paths['opt_fp'].replace('####', '%04d' % frame)
+        opt = settings.Image()
+        opt.rgb_filepath = opt_fp
+        ws.opt_image = opt
+
+        style_fp = cache_paths['style_fp'].replace('####', '%04d' % frame)
+        style_target_fp = cache_paths['style_target_fp'].replace('####', '%04d' % frame)
+        style = settings.StyleImage()
+        style.rgba_filepath = style_fp
+        style.target_map_filepath = style_target_fp
+        ws.styles = [style]
+
         output_dir = os.path.abspath(os.path.join(ws.out, os.pardir))
         nst_json = os.path.abspath(os.path.join(output_dir, 'nst.%04d.json' % frame))
         ws.save(nst_json)
         frame_cmd = tr.write_cmd_file(output_dir, frame=frame)
         frame_task = job.newTask(title="oiio_nst_job_%04d" % frame)
+
+        if not temporal_coherence:
+            frame_task.addChild(nuke_task)
+        else:
+            # chain to previous frame
+            pass
+
+        cleanup_task.addChild(frame_task)
+
         envkey_oiio = []
         envkey_oiio += ['setenv PYTHONPATH=/mnt/ala/research/danielf/git/nst/python:/home/13448206/git/tractor/python:/opt/oiio/lib/python3.7/site-packages:$PYTHONPATH']
         envkey_oiio += ['setenv TRACTOR_ENGINE=frank:5600']
@@ -140,9 +173,11 @@ def nuke_submit(node):
         command_3 = tractor.api.author.Command(argv=frame_cmd, envkey=envkey_oiio)
         frame_task.addCommand(command_3)
 
-        # chain to nuke input caching tasks:
-        # frame_task.addChild(task_2)
+
+
 
     print(job.asTcl())
 
-    print(job.spool())
+    if not dry_run:
+        j = job.spool()
+        print(1.1, dir(j))

@@ -53,6 +53,7 @@ public:
   static const char* const kDefaultHostName;
   static const int         kDefaultPortNumber;
   bool killthread;
+  bool terminate;
   Status status;
   int batch;
   int hashCtr;

@@ -12,7 +12,7 @@ def main():
     style_writer = StyleWriter()
     style_writer.load(opts.load_file)
     print(style_writer)
-    style_writer.write_exr()
+    style_writer.write()
 
 
 if __name__ == "__main__":

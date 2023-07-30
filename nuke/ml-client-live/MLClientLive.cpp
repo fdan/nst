@@ -67,6 +67,7 @@ MLClientLive::MLClientLive(Node* node)
 , _modelManager(this)
 {
     killthread = false;
+    terminate = false;
     Status status = ReadyToSend;
     batch = 0;
 }
@@ -205,6 +206,7 @@ void MLClientLive::renderStripe(ImagePlane& imagePlane)
           MLClientComms::Vprint(ss1.str());
 //          status = Sending;
 //          status = HasReceived;
+          terminate = false;
           Thread::spawn(::listener, 1, this);
           std::stringstream  ss2;
           ss2 << "renderStripe spawned listener, returning " << this_id;
@@ -242,6 +244,7 @@ void MLClientLive::renderStripe(ImagePlane& imagePlane)
 
     status = ReadyToSend;
     killthread = false;
+    terminate = false;
     batch = 0;
 
     return;
@@ -412,7 +415,6 @@ bool MLClientLive::haveValidModelInfo() const
   return _serverModels.size() > 0 && _serverModels.size() > _chosenModel;
 }
 
-// todo: add clearCache to request and method signature
 bool MLClientLive::getInferenceRequest(const std::string& hostStr,
                                        int port,
                                        std::string& errorMsg,
@@ -659,6 +661,10 @@ void MLClientLive::knobs(Knob_Callback f)
 
   Button(f, "connect", "Connect");
   Divider(f, "  ");
+
+  Button(f, "cancel", "Cancel");
+  Divider(f, "  ");
+
   static const char* static_choices[] = {
       0};
   Knob* knob = Enumeration_knob(f, &_chosenModel, static_choices, "models", "Models");
@@ -679,6 +685,30 @@ void MLClientLive::knobs(Knob_Callback f)
 
 int MLClientLive::knob_changed(Knob* knobChanged)
 {
+  if (knobChanged->is("cancel")){
+      MLClientComms::Vprint("cancel knob changed");
+
+      terminate = true;
+
+// send a cancel message - requires an async ml server
+//      this->cancel();
+//      this->abort();
+//      MLClientComms comms(_host, _port);
+//
+//      if (!comms.isConnected()) {
+//          error("Could not connect to server. Please check your host / port numbers.");
+//          return 0;
+//      }
+//
+//      // send a cancel message to the server
+//      if (!comms.sendCancelRequest()){
+//          error("Could not send cancel request");
+//          return 0;
+//      }
+
+      return 1;
+  }
+
   if (knobChanged->is("host")) {
     if (!MLClientComms::ValidateHostName(_host)) {
       error("Please insert a valid host ipv4 or ipv6 address.");
@@ -779,8 +809,6 @@ bool MLClientLive::getShowDynamic() const
 
 static void listener(unsigned index, unsigned nThreads, void* d) {
 
-
-
     std::stringstream ss2;
     ss2 << "listener batches: " << ((MLClientLive*)d)->batches;
     MLClientComms::Vprint(ss2.str());
@@ -794,6 +822,22 @@ static void listener(unsigned index, unsigned nThreads, void* d) {
             std::stringstream ss;
             ss << "batch: " << b;
             MLClientComms::Vprint(ss.str());
+
+            bool terminate = ((MLClientLive *)d)->terminate;
+
+            std::stringstream ss1;
+            ss1 << "terminate status: " << terminate;
+            MLClientComms::Vprint(ss1.str());
+
+            if (terminate){
+                MLClientComms::Vprint("terminating...");
+                ((MLClientLive *) d)->killthread = true;
+                ((MLClientLive *) d)->terminate = false;
+                break;
+            }
+            else{
+                MLClientComms::Vprint("not terminating...");
+            }
 
             MLClientComms comms(((MLClientLive *) d)->_host, ((MLClientLive *) d)->_port);
 

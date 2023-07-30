@@ -396,7 +396,7 @@ def write_noise_img(x, y, filepath):
     write_exr(buf, filepath)
 
 
-# @numba.guvectorize([(numba.float32[:, :, :], numba.float32[:, :, :], numba.int64, numba.float32[:, :, :])],"(m,n,o),(m,n,o),()->(m,n,o)")
+# @numba.guvectorize([(numba.float32[:, :, :], numba.float32[:, :, :], numba.int64, numba.float32[:, :, :])],"(m,node,o),(m,node,o),()->(m,node,o)")
 # def _warp_np(col_np, vec_np, radius, output):
 #     x, y, z = vec_np.shape
 #
@@ -420,7 +420,7 @@ def write_noise_img(x, y, filepath):
 #             else:
 #                 output[nx][ny] = col_np[old_x][old_y]
 
-@numba.guvectorize([(numba.float32[:, :, :], numba.float32[:, :, :], numba.float32[:, :, :], numba.float32[:, :, :])],"(m,n,o),(m,n,o),(m,n,o)->(m,n,o)")
+@numba.guvectorize([(numba.float32[:, :, :], numba.float32[:, :, :], numba.float32[:, :, :], numba.float32[:, :, :])],"(m,node,o),(m,node,o),(m,node,o)->(m,node,o)")
 def warp_image(image, flow, mask, result):
     x, y, z = image.shape
 
@@ -461,7 +461,7 @@ def warp_image(image, flow, mask, result):
                 result[ax][ay][2] = blue
 
 
-@numba.guvectorize([(numba.float32[:, :, :], numba.float32[:, :, :], numba.float32[:, :, :])],"(m,n,o),(m,n,o)->(m,n,o)")
+@numba.guvectorize([(numba.float32[:, :, :], numba.float32[:, :, :], numba.float32[:, :, :])],"(m,node,o),(m,node,o)->(m,node,o)")
 def compute_disocclusion(flow1, flow2, result):
     # result is given as a white image.  we find regions to make black from
     # disocclusion and motion boundaries.  this serves as an alpha for the flow.
@@ -524,7 +524,7 @@ def get_motion_boundary(flow):
     output = torch.ones(b, c, w, h)
     laplacian = kornia.filters.laplacian(flow, 5, normalized=True)
 
-    @numba.guvectorize([(numba.float32[:, :, :, :], numba.float32[:, :, :, :])], "(m,n,o,p),(m,n,o,p)")
+    @numba.guvectorize([(numba.float32[:, :, :, :], numba.float32[:, :, :, :])], "(m,node,o,p),(m,node,o,p)")
     def _make_motion_mask(t, output):
         b, c, w, h = t.shape
         for i in range(0, w):

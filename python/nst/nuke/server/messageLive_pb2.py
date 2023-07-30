@@ -19,7 +19,7 @@ DESCRIPTOR = _descriptor.FileDescriptor(
   name='messageLive.proto',
   package='mlserver',
   syntax='proto2',
-  serialized_pb=_b('\n\x11messageLive.proto\x12\x08mlserver\"i\n\x0eRequestWrapper\x12\x0c\n\x04info\x18\x01 \x01(\x08\x12!\n\x02r1\x18\x02 \x01(\x0b\x32\x15.mlserver.RequestInfo\x12&\n\x02r2\x18\x03 \x01(\x0b\x32\x1a.mlserver.RequestInference\"\x89\x01\n\x0eRespondWrapper\x12\x0c\n\x04info\x18\x01 \x01(\x08\x12!\n\x02r1\x18\x02 \x01(\x0b\x32\x15.mlserver.RespondInfo\x12&\n\x02r2\x18\x03 \x01(\x0b\x32\x1a.mlserver.RespondInference\x12\x1e\n\x05\x65rror\x18\x04 \x01(\x0b\x32\x0f.mlserver.Error\"\x1b\n\x0bRequestInfo\x12\x0c\n\x04info\x18\x01 \x01(\x08\"B\n\x0bRespondInfo\x12\x12\n\nnum_models\x18\x01 \x01(\x05\x12\x1f\n\x06models\x18\x02 \x03(\x0b\x32\x0f.mlserver.Model\"\x8f\x03\n\x05Model\x12\x0c\n\x04name\x18\x01 \x01(\t\x12\r\n\x05label\x18\x02 \x01(\t\x12(\n\x06inputs\x18\x03 \x03(\x0b\x32\x18.mlserver.ImagePrototype\x12)\n\x07outputs\x18\x04 \x03(\x0b\x32\x18.mlserver.ImagePrototype\x12*\n\x0c\x62ool_options\x18\x05 \x03(\x0b\x32\x14.mlserver.BoolAttrib\x12(\n\x0bint_options\x18\x06 \x03(\x0b\x32\x13.mlserver.IntAttrib\x12,\n\rfloat_options\x18\x07 \x03(\x0b\x32\x15.mlserver.FloatAttrib\x12.\n\x0estring_options\x18\x08 \x03(\x0b\x32\x16.mlserver.StringAttrib\x12,\n\x0e\x62utton_options\x18\t \x03(\x0b\x32\x14.mlserver.BoolAttrib\x12\x32\n\nmc_options\x18\n \x03(\x0b\x32\x1e.mlserver.MultipleChoiceOption\"D\n\x14MultipleChoiceOption\x12\x0c\n\x04name\x18\x01 \x01(\t\x12\r\n\x05value\x18\x02 \x01(\t\x12\x0f\n\x07\x63hoices\x18\x03 \x03(\t\"0\n\x0eImagePrototype\x12\x0c\n\x04name\x18\x01 \x01(\t\x12\x10\n\x08\x63hannels\x18\x02 \x01(\x05\"\x14\n\x05\x45rror\x12\x0b\n\x03msg\x18\x01 \x01(\t\"\x93\x01\n\x10RequestInference\x12\x1e\n\x05model\x18\x01 \x01(\x0b\x32\x0f.mlserver.Model\x12\x1f\n\x06images\x18\x02 \x03(\x0b\x32\x0f.mlserver.Image\x12\x12\n\nclearcache\x18\x03 \x01(\x05\x12\x13\n\x0b\x62\x61tch_total\x18\x04 \x01(\x05\x12\x15\n\rbatch_current\x18\x05 \x01(\x05\"\x8d\x01\n\x10RespondInference\x12\x12\n\nnum_images\x18\x01 \x01(\x05\x12\x1f\n\x06images\x18\x02 \x03(\x0b\x32\x0f.mlserver.Image\x12\x13\n\x0bnum_objects\x18\x03 \x01(\x05\x12/\n\x07objects\x18\x04 \x03(\x0b\x32\x1e.mlserver.FieldValuePairAttrib\"G\n\x05Image\x12\r\n\x05width\x18\x01 \x01(\x05\x12\x0e\n\x06height\x18\x02 \x01(\x05\x12\x10\n\x08\x63hannels\x18\x03 \x01(\x05\x12\r\n\x05image\x18\x04 \x01(\x0c\".\n\nBoolAttrib\x12\x0c\n\x04name\x18\x01 \x01(\t\x12\x12\n\x06values\x18\x02 \x03(\x08\x42\x02\x10\x01\"-\n\tIntAttrib\x12\x0c\n\x04name\x18\x01 \x01(\t\x12\x12\n\x06values\x18\x02 \x03(\x05\x42\x02\x10\x01\"/\n\x0b\x46loatAttrib\x12\x0c\n\x04name\x18\x01 \x01(\t\x12\x12\n\x06values\x18\x02 \x03(\x02\x42\x02\x10\x01\",\n\x0cStringAttrib\x12\x0c\n\x04name\x18\x01 \x01(\t\x12\x0e\n\x06values\x18\x02 \x03(\t\"N\n\x14\x46ieldValuePairAttrib\x12\x0c\n\x04name\x18\x01 \x01(\t\x12(\n\x06values\x18\x02 \x03(\x0b\x32\x18.mlserver.FieldValuePair\"\xd3\x01\n\x0e\x46ieldValuePair\x12+\n\x0eint_attributes\x18\x01 \x03(\x0b\x32\x13.mlserver.IntAttrib\x12/\n\x10\x66loat_attributes\x18\x02 \x03(\x0b\x32\x15.mlserver.FloatAttrib\x12\x31\n\x11string_attributes\x18\x03 \x03(\x0b\x32\x16.mlserver.StringAttrib\x12\x30\n\x08\x63hildren\x18\x04 \x03(\x0b\x32\x1e.mlserver.FieldValuePairAttrib')
+  serialized_pb=_b('\n\x11messageLive.proto\x12\x08mlserver\"\x8e\x01\n\x0eRequestWrapper\x12\x0c\n\x04info\x18\x01 \x01(\x08\x12!\n\x02r1\x18\x02 \x01(\x0b\x32\x15.mlserver.RequestInfo\x12&\n\x02r2\x18\x03 \x01(\x0b\x32\x1a.mlserver.RequestInference\x12#\n\x02r3\x18\x04 \x01(\x0b\x32\x17.mlserver.RequestCancel\"\x89\x01\n\x0eRespondWrapper\x12\x0c\n\x04info\x18\x01 \x01(\x08\x12!\n\x02r1\x18\x02 \x01(\x0b\x32\x15.mlserver.RespondInfo\x12&\n\x02r2\x18\x03 \x01(\x0b\x32\x1a.mlserver.RespondInference\x12\x1e\n\x05\x65rror\x18\x04 \x01(\x0b\x32\x0f.mlserver.Error\"\x1b\n\x0bRequestInfo\x12\x0c\n\x04info\x18\x01 \x01(\x08\"\x1f\n\rRequestCancel\x12\x0e\n\x06\x63\x61ncel\x18\x01 \x02(\x08\"B\n\x0bRespondInfo\x12\x12\n\nnum_models\x18\x01 \x01(\x05\x12\x1f\n\x06models\x18\x02 \x03(\x0b\x32\x0f.mlserver.Model\"\x8f\x03\n\x05Model\x12\x0c\n\x04name\x18\x01 \x01(\t\x12\r\n\x05label\x18\x02 \x01(\t\x12(\n\x06inputs\x18\x03 \x03(\x0b\x32\x18.mlserver.ImagePrototype\x12)\n\x07outputs\x18\x04 \x03(\x0b\x32\x18.mlserver.ImagePrototype\x12*\n\x0c\x62ool_options\x18\x05 \x03(\x0b\x32\x14.mlserver.BoolAttrib\x12(\n\x0bint_options\x18\x06 \x03(\x0b\x32\x13.mlserver.IntAttrib\x12,\n\rfloat_options\x18\x07 \x03(\x0b\x32\x15.mlserver.FloatAttrib\x12.\n\x0estring_options\x18\x08 \x03(\x0b\x32\x16.mlserver.StringAttrib\x12,\n\x0e\x62utton_options\x18\t \x03(\x0b\x32\x14.mlserver.BoolAttrib\x12\x32\n\nmc_options\x18\n \x03(\x0b\x32\x1e.mlserver.MultipleChoiceOption\"D\n\x14MultipleChoiceOption\x12\x0c\n\x04name\x18\x01 \x01(\t\x12\r\n\x05value\x18\x02 \x01(\t\x12\x0f\n\x07\x63hoices\x18\x03 \x03(\t\"0\n\x0eImagePrototype\x12\x0c\n\x04name\x18\x01 \x01(\t\x12\x10\n\x08\x63hannels\x18\x02 \x01(\x05\"\x14\n\x05\x45rror\x12\x0b\n\x03msg\x18\x01 \x01(\t\"\x93\x01\n\x10RequestInference\x12\x1e\n\x05model\x18\x01 \x01(\x0b\x32\x0f.mlserver.Model\x12\x1f\n\x06images\x18\x02 \x03(\x0b\x32\x0f.mlserver.Image\x12\x12\n\nclearcache\x18\x03 \x01(\x05\x12\x13\n\x0b\x62\x61tch_total\x18\x04 \x01(\x05\x12\x15\n\rbatch_current\x18\x05 \x01(\x05\"\x8d\x01\n\x10RespondInference\x12\x12\n\nnum_images\x18\x01 \x01(\x05\x12\x1f\n\x06images\x18\x02 \x03(\x0b\x32\x0f.mlserver.Image\x12\x13\n\x0bnum_objects\x18\x03 \x01(\x05\x12/\n\x07objects\x18\x04 \x03(\x0b\x32\x1e.mlserver.FieldValuePairAttrib\"G\n\x05Image\x12\r\n\x05width\x18\x01 \x01(\x05\x12\x0e\n\x06height\x18\x02 \x01(\x05\x12\x10\n\x08\x63hannels\x18\x03 \x01(\x05\x12\r\n\x05image\x18\x04 \x01(\x0c\".\n\nBoolAttrib\x12\x0c\n\x04name\x18\x01 \x01(\t\x12\x12\n\x06values\x18\x02 \x03(\x08\x42\x02\x10\x01\"-\n\tIntAttrib\x12\x0c\n\x04name\x18\x01 \x01(\t\x12\x12\n\x06values\x18\x02 \x03(\x05\x42\x02\x10\x01\"/\n\x0b\x46loatAttrib\x12\x0c\n\x04name\x18\x01 \x01(\t\x12\x12\n\x06values\x18\x02 \x03(\x02\x42\x02\x10\x01\",\n\x0cStringAttrib\x12\x0c\n\x04name\x18\x01 \x01(\t\x12\x0e\n\x06values\x18\x02 \x03(\t\"N\n\x14\x46ieldValuePairAttrib\x12\x0c\n\x04name\x18\x01 \x01(\t\x12(\n\x06values\x18\x02 \x03(\x0b\x32\x18.mlserver.FieldValuePair\"\xd3\x01\n\x0e\x46ieldValuePair\x12+\n\x0eint_attributes\x18\x01 \x03(\x0b\x32\x13.mlserver.IntAttrib\x12/\n\x10\x66loat_attributes\x18\x02 \x03(\x0b\x32\x15.mlserver.FloatAttrib\x12\x31\n\x11string_attributes\x18\x03 \x03(\x0b\x32\x16.mlserver.StringAttrib\x12\x30\n\x08\x63hildren\x18\x04 \x03(\x0b\x32\x1e.mlserver.FieldValuePairAttrib')
 )
 _sym_db.RegisterFileDescriptor(DESCRIPTOR)
 
@@ -54,6 +54,13 @@ _REQUESTWRAPPER = _descriptor.Descriptor(
       message_type=None, enum_type=None, containing_type=None,
       is_extension=False, extension_scope=None,
       options=None),
+    _descriptor.FieldDescriptor(
+      name='r3', full_name='mlserver.RequestWrapper.r3', index=3,
+      number=4, type=11, cpp_type=10, label=1,
+      has_default_value=False, default_value=None,
+      message_type=None, enum_type=None, containing_type=None,
+      is_extension=False, extension_scope=None,
+      options=None),
   ],
   extensions=[
   ],
@@ -66,8 +73,8 @@ _REQUESTWRAPPER = _descriptor.Descriptor(
   extension_ranges=[],
   oneofs=[
   ],
-  serialized_start=31,
-  serialized_end=136,
+  serialized_start=32,
+  serialized_end=174,
 )
 
 
@@ -118,8 +125,8 @@ _RESPONDWRAPPER = _descriptor.Descriptor(
   extension_ranges=[],
   oneofs=[
   ],
-  serialized_start=139,
-  serialized_end=276,
+  serialized_start=177,
+  serialized_end=314,
 )
 
 
@@ -149,8 +156,39 @@ _REQUESTINFO = _descriptor.Descriptor(
   extension_ranges=[],
   oneofs=[
   ],
-  serialized_start=278,
-  serialized_end=305,
+  serialized_start=316,
+  serialized_end=343,
+)
+
+
+_REQUESTCANCEL = _descriptor.Descriptor(
+  name='RequestCancel',
+  full_name='mlserver.RequestCancel',
+  filename=None,
+  file=DESCRIPTOR,
+  containing_type=None,
+  fields=[
+    _descriptor.FieldDescriptor(
+      name='cancel', full_name='mlserver.RequestCancel.cancel', index=0,
+      number=1, type=8, cpp_type=7, label=2,
+      has_default_value=False, default_value=False,
+      message_type=None, enum_type=None, containing_type=None,
+      is_extension=False, extension_scope=None,
+      options=None),
+  ],
+  extensions=[
+  ],
+  nested_types=[],
+  enum_types=[
+  ],
+  options=None,
+  is_extendable=False,
+  syntax='proto2',
+  extension_ranges=[],
+  oneofs=[
+  ],
+  serialized_start=345,
+  serialized_end=376,
 )
 
 
@@ -187,8 +225,8 @@ _RESPONDINFO = _descriptor.Descriptor(
   extension_ranges=[],
   oneofs=[
   ],
-  serialized_start=307,
-  serialized_end=373,
+  serialized_start=378,
+  serialized_end=444,
 )
 
 
@@ -281,8 +319,8 @@ _MODEL = _descriptor.Descriptor(
   extension_ranges=[],
   oneofs=[
   ],
-  serialized_start=376,
-  serialized_end=775,
+  serialized_start=447,
+  serialized_end=846,
 )
 
 
@@ -326,8 +364,8 @@ _MULTIPLECHOICEOPTION = _descriptor.Descriptor(
   extension_ranges=[],
   oneofs=[
   ],
-  serialized_start=777,
-  serialized_end=845,
+  serialized_start=848,
+  serialized_end=916,
 )
 
 
@@ -364,8 +402,8 @@ _IMAGEPROTOTYPE = _descriptor.Descriptor(
   extension_ranges=[],
   oneofs=[
   ],
-  serialized_start=847,
-  serialized_end=895,
+  serialized_start=918,
+  serialized_end=966,
 )
 
 
@@ -395,8 +433,8 @@ _ERROR = _descriptor.Descriptor(
   extension_ranges=[],
   oneofs=[
   ],
-  serialized_start=897,
-  serialized_end=917,
+  serialized_start=968,
+  serialized_end=988,
 )
 
 
@@ -454,8 +492,8 @@ _REQUESTINFERENCE = _descriptor.Descriptor(
   extension_ranges=[],
   oneofs=[
   ],
-  serialized_start=920,
-  serialized_end=1067,
+  serialized_start=991,
+  serialized_end=1138,
 )
 
 
@@ -506,8 +544,8 @@ _RESPONDINFERENCE = _descriptor.Descriptor(
   extension_ranges=[],
   oneofs=[
   ],
-  serialized_start=1070,
-  serialized_end=1211,
+  serialized_start=1141,
+  serialized_end=1282,
 )
 
 
@@ -558,8 +596,8 @@ _IMAGE = _descriptor.Descriptor(
   extension_ranges=[],
   oneofs=[
   ],
-  serialized_start=1213,
-  serialized_end=1284,
+  serialized_start=1284,
+  serialized_end=1355,
 )
 
 
@@ -596,8 +634,8 @@ _BOOLATTRIB = _descriptor.Descriptor(
   extension_ranges=[],
   oneofs=[
   ],
-  serialized_start=1286,
-  serialized_end=1332,
+  serialized_start=1357,
+  serialized_end=1403,
 )
 
 
@@ -634,8 +672,8 @@ _INTATTRIB = _descriptor.Descriptor(
   extension_ranges=[],
   oneofs=[
   ],
-  serialized_start=1334,
-  serialized_end=1379,
+  serialized_start=1405,
+  serialized_end=1450,
 )
 
 
@@ -672,8 +710,8 @@ _FLOATATTRIB = _descriptor.Descriptor(
   extension_ranges=[],
   oneofs=[
   ],
-  serialized_start=1381,
-  serialized_end=1428,
+  serialized_start=1452,
+  serialized_end=1499,
 )
 
 
@@ -710,8 +748,8 @@ _STRINGATTRIB = _descriptor.Descriptor(
   extension_ranges=[],
   oneofs=[
   ],
-  serialized_start=1430,
-  serialized_end=1474,
+  serialized_start=1501,
+  serialized_end=1545,
 )
 
 
@@ -748,8 +786,8 @@ _FIELDVALUEPAIRATTRIB = _descriptor.Descriptor(
   extension_ranges=[],
   oneofs=[
   ],
-  serialized_start=1476,
-  serialized_end=1554,
+  serialized_start=1547,
+  serialized_end=1625,
 )
 
 
@@ -800,12 +838,13 @@ _FIELDVALUEPAIR = _descriptor.Descriptor(
   extension_ranges=[],
   oneofs=[
   ],
-  serialized_start=1557,
-  serialized_end=1768,
+  serialized_start=1628,
+  serialized_end=1839,
 )
 
 _REQUESTWRAPPER.fields_by_name['r1'].message_type = _REQUESTINFO
 _REQUESTWRAPPER.fields_by_name['r2'].message_type = _REQUESTINFERENCE
+_REQUESTWRAPPER.fields_by_name['r3'].message_type = _REQUESTCANCEL
 _RESPONDWRAPPER.fields_by_name['r1'].message_type = _RESPONDINFO
 _RESPONDWRAPPER.fields_by_name['r2'].message_type = _RESPONDINFERENCE
 _RESPONDWRAPPER.fields_by_name['error'].message_type = _ERROR
@@ -830,6 +869,7 @@ _FIELDVALUEPAIR.fields_by_name['children'].message_type = _FIELDVALUEPAIRATTRIB
 DESCRIPTOR.message_types_by_name['RequestWrapper'] = _REQUESTWRAPPER
 DESCRIPTOR.message_types_by_name['RespondWrapper'] = _RESPONDWRAPPER
 DESCRIPTOR.message_types_by_name['RequestInfo'] = _REQUESTINFO
+DESCRIPTOR.message_types_by_name['RequestCancel'] = _REQUESTCANCEL
 DESCRIPTOR.message_types_by_name['RespondInfo'] = _RESPONDINFO
 DESCRIPTOR.message_types_by_name['Model'] = _MODEL
 DESCRIPTOR.message_types_by_name['MultipleChoiceOption'] = _MULTIPLECHOICEOPTION
@@ -865,6 +905,13 @@ RequestInfo = _reflection.GeneratedProtocolMessageType('RequestInfo', (_message.
   # @@protoc_insertion_point(class_scope:mlserver.RequestInfo)
   ))
 _sym_db.RegisterMessage(RequestInfo)
+
+RequestCancel = _reflection.GeneratedProtocolMessageType('RequestCancel', (_message.Message,), dict(
+  DESCRIPTOR = _REQUESTCANCEL,
+  __module__ = 'messageLive_pb2'
+  # @@protoc_insertion_point(class_scope:mlserver.RequestCancel)
+  ))
+_sym_db.RegisterMessage(RequestCancel)
 
 RespondInfo = _reflection.GeneratedProtocolMessageType('RespondInfo', (_message.Message,), dict(
   DESCRIPTOR = _RESPONDINFO,

@@ -480,6 +480,52 @@ bool MLClientComms::sendInfoRequest()
   return true;
 }
 
+bool MLClientComms::sendCancelRequest(){
+    int bytecount;
+    MLClientComms::Vprint("Sending cancel request");
+
+    mlserver::RequestWrapper requestWrapper;
+    mlserver::RequestCancel* requestCancel = new mlserver::RequestCancel;
+    requestCancel->set_cancel(true);
+    requestWrapper.set_allocated_r3(requestCancel);
+
+    // Generate the data which should be sent over the network
+    std::string requestStr;
+    requestWrapper.SerializeToString(&requestStr);
+    size_t length = requestStr.size();
+
+    // Creating header
+    char hdrSend[kNumberOfBytesHeaderSize];
+    std::ostringstream ss;
+    ss << std::setw(kNumberOfBytesHeaderSize) << std::setfill('0') << length;
+    ss.str().copy(hdrSend, kNumberOfBytesHeaderSize);
+    MLClientComms::Vprint("Created char array of length " + std::to_string(length));
+
+    // Copy to char array
+    std::vector<char> toSend(kNumberOfBytesHeaderSize + length);
+    for (int i = 0; i < kNumberOfBytesHeaderSize; ++i){
+        toSend[i] = hdrSend[i];
+    }
+
+    for (int i = 0; i < length; ++i){
+        char val = requestStr[i];
+        toSend[i + kNumberOfBytesHeaderSize] = val;
+    }
+    MLClientComms::Vprint("Copied to char array");
+
+    // Send header with number of bytes
+    if ((bytecount = send(_socket, (const char *)&toSend[0], kNumberOfBytesHeaderSize + length, 0)) == -1) {
+        std::stringstream ss;
+        ss << "Error sending cancel " << errno;
+        MLClientComms::Vprint(ss.str());
+        return false;
+    }
+
+    MLClientComms::Vprint("Message sent");
+
+    return true;
+}
+
 //! Retrieve the response from the server and store it in responseWrapper, to be parsed
 //! elsewhere.
 bool MLClientComms::readInfoResponse(mlserver::RespondWrapper& responseWrapper)
