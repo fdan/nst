@@ -1,56 +1,74 @@
-#! /opt/Foundry/Nuke12.2v1/libnuke-12.2.1.so -nx
-version 12.2 v1
+#! /opt/Foundry/Nuke13.1v2/libnuke-13.1.2.so -nx
+version 13.1 v2
 Gizmo {
- inputs 8
+ inputs 6
  addUserKnob {20 Lookdev}
- addUserKnob {22 setup T "import nuke\nimport nst.nuke.gizmo\nreload(nst.nuke.gizmo)\n\nnode = nuke.thisNode()\nnst.nuke.gizmo.setup(node)" +STARTLINE}
- addUserKnob {6 allow_update l "allow update" -STARTLINE}
- allow_update true
- addUserKnob {3 epochs_l l epochs}
- epochs_l 500
- addUserKnob {3 log_epochs l "log epochs"}
- log_epochs 20
- addUserKnob {4 optimiser_l l optimiser M {Adam L-BFGS "" ""}}
- optimiser_l L-BFGS
- addUserKnob {4 engine_l l engine M {CPU GPU ""}}
- engine_l GPU
- addUserKnob {7 scale_l l scale}
- scale_l 0.7
+ addUserKnob {22 setup T "import nuke\nimport nst.nuke.gizmo\nfrom importlib import reload\nreload(nst.nuke.gizmo)\n\nnode = nuke.thisNode()\nnst.nuke.gizmo.setup(node)" +STARTLINE}
+ addUserKnob {22 cancel -STARTLINE T "n = nuke.thisNode()\n#print(1.1,  n)\nmlcs = \[x for x in n.nodes() if x.Class() == \"MLClientLive\"]\nprint(1.2, mlcs)\nassert len(mlcs) == 1\nmlc = mlcs\[0]\n#print(1.3, mlc)\nk = mlc.knob('cancel')\nprint(1.4, k.name())\nk.execute()"}
+ addUserKnob {22 snapshot -STARTLINE T "import uuid\n\nn = nuke.thisNode()\nsnaps = \[x for x in n.nodes() if x.name() == \"snapshot\"]\nassert len(snaps) == 1\nsnap = snaps\[0]\nfpk = snap.knob('file')\nuid = str(uuid.uuid4()).split('-')\[-1]\nprint('snapshot uuid:', uid)\nofp = '/var/tmp/nst_tmp/%s.exr' % uid\nfpk.setValue(ofp)\nframe = nuke.frame()\nnuke.render(snap, frame, frame)\n\nmmd = nuke.toNode('nst_fg_gizmo.ModifySnapMetaData')\nmmd\['metadata'].fromScript(\"\")\n\na = str(n).split('\\n')\nmetaKeys = \[]\nfor i in a:\n    try:\n        key, value = i.split(' ')\n        metaKeys.append('\{set %s %s\}' % (key, value))\n    except:\n        pass\n\nmmd\['metadata'].fromScript(\"\\n\".join(metaKeys))\n\nn.end()\n\nr1 = nuke.createNode('Read')\nr1.knob('file').setValue(ofp)"}
+ addUserKnob {6 enable_update l "allow update" -STARTLINE}
+ enable_update true
+ addUserKnob {3 iterations}
+ iterations 200
+ addUserKnob {3 log_iterations}
+ log_iterations 50
+ addUserKnob {1 batch_size l "batch iterations"}
+ batch_size 200
+ addUserKnob {1 optimiser}
+ optimiser lbfgs
  addUserKnob {7 learning_rate R 0 10}
  learning_rate 1
+ addUserKnob {1 engine}
+ engine gpu
+ addUserKnob {26 ""}
+ addUserKnob {3 style_mips l "style mips"}
+ style_mips 2
+ addUserKnob {7 style_pyramid_span l "pyramid span"}
+ style_pyramid_span 0.8
+ addUserKnob {7 style_zoom l zoom R 0 3}
+ style_zoom 0.3
+ addUserKnob {1 style_mip_weights l "style mip weights"}
+ style_mip_weights 1.0,1.0,1.0,1.0
  addUserKnob {26 ""}
  addUserKnob {1 style_layers l "style layers"}
- style_layers "p1, p2, r31, r42"
+ style_layers p1,p2,p3
  addUserKnob {1 style_layer_weights l "style layer weights"}
- style_layer_weights "1.0, 1.0, 1.0, 1.0"
- addUserKnob {3 style_mips l "style mips"}
- style_mips 5
- addUserKnob {1 style_mip_weights l "style mip weights"}
- style_mip_weights "1.0, 1.0, 1.0, 1.0, 1.0"
- addUserKnob {16 mip_scale_factor l "mip scale factor"}
- mip_scale_factor 0.63
- addUserKnob {26 ""}
+ style_layer_weights 0.5,1.0,1.0,1.0
+ addUserKnob {1 mask_layers l "mask layers"}
+ mask_layers p3
+ addUserKnob {6 opt_is_content l "init opt with content" +STARTLINE}
+ opt_is_content true
  addUserKnob {1 content_layer l "content layer"}
- content_layer r41
- addUserKnob {3 content_mips l "content mips"}
- content_mips 1
+ content_layer p3
  addUserKnob {7 content_layer_weight l "content layer weight"}
  content_layer_weight 1
+ addUserKnob {26 ""}
+ addUserKnob {7 gram_weight R 0 10}
+ addUserKnob {7 histogram_weight R 0 10000}
+ histogram_weight 1000
+ addUserKnob {7 tv_weight R 0 5}
+ addUserKnob {7 laplacian_weight R 0 10}
+ laplacian_weight 5
  addUserKnob {20 endGroup_2 l endGroup n -1}
  addUserKnob {20 Farm}
- addUserKnob {2 output_file l "output file"}
- output_file /mnt/ala/research/danielf/2022/nuke_nst/tmp/v007/nst.exr
- addUserKnob {4 engine_f l engine M {CPU GPU ""}}
- addUserKnob {4 optimiser_f l optimiser M {Adam L-BFGS "" "" ""}}
- optimiser_f L-BFGS
+ addUserKnob {2 out_fp l "output file"}
+ out_fp /mnt/ala/research/danielf/2022/nuke_nst/tmp/v007/nst.exr
+ addUserKnob {4 resolution M {proxy full ""}}
+ addUserKnob {1 farm_engine l engine}
+ farm_engine gpu
+ addUserKnob {1 farm_optimiser l optimiser}
+ farm_optimiser lbfgs
  addUserKnob {1 frames}
- frames 1-100x10
- addUserKnob {7 scale_f l scale}
- scale_f 1
- addUserKnob {7 learning_rate_f l "learning rate" R 0 20}
- learning_rate_f 1
- addUserKnob {3 epochs_f l epochs}
- epochs_f 500
+ frames 1001-1067x10
+ addUserKnob {7 farm_style_mips l mips R 0 10}
+ farm_style_mips 2
+ addUserKnob {7 proxy_scale l "proxy scale"}
+ proxy_scale 0.5
+ addUserKnob {7 farm_learning_rate l "learning rate" R 0 20}
+ farm_learning_rate 1
+ addUserKnob {3 farm_iterations l iterations}
+ farm_iterations 1000
+ addUserKnob {6 temporal_coherehce l "temporal coherence" +STARTLINE}
  addUserKnob {26 ""}
  addUserKnob {1 service_key l "service key"}
  service_key starfish
@@ -70,159 +88,340 @@ Gizmo {
  addUserKnob {6 output_gram l "output gram" +STARTLINE}
  addUserKnob {6 output_content_activations l "output content acvications" +STARTLINE}
  addUserKnob {26 ""}
- addUserKnob {22 send_to_farm l "send to farm" T "from nst.farm import tr\nreload(tr)\n\ntr.nuke_submit(nuke.thisNode())" +STARTLINE}
+ addUserKnob {22 send_to_farm l "send to farm" T "from nst.farm import nuke_tr\nfrom importlib import reload\nreload(nuke_tr)\n\nnuke_tr.nuke_submit(nuke.thisNode())" +STARTLINE}
  addUserKnob {20 endGroup_1 l endGroup n -1}
  addUserKnob {20 endGroup n -1}
 }
  Input {
   inputs 0
-  name style3_target
-  xpos 730
-  ypos -78
-  number 7
+  name motion_fore
+  xpos 897
+  ypos -223
+ }
+set Nb056d600 [stack 0]
+push $Nb056d600
+ Reformat {
+  format "1034 438 0 0 1034 438 1 halfApart"
+  name Reformat3
+  xpos 987
+  ypos -171
+ }
+ Switch {
+  inputs 2
+  which {{nst_fg_gizmo.resolution}}
+  name Switch5
+  xpos 897
+  ypos -100
  }
  Write {
-  file "\[python \{'/'.join(nuke.thisParent().knob(\"output_file\").value().split('/')\[:-1:]) + \"/tmp/style3_target.exr\"\}]"
   raw true
+  file_type exr
+  first_part rgba
   create_directories true
-  checkHashOnRead false
-  name Write8
-  xpos 730
-  ypos 16
+  in_colorspace scene_linear
+  out_colorspace scene_linear
+  name motion_fore_write
+  xpos 897
+  ypos -46
  }
  Input {
   inputs 0
-  name style3
-  xpos 620
-  ypos -78
-  number 6
- }
- Write {
-  channels rgba
-  file "\[python \{'/'.join(nuke.thisParent().knob(\"output_file\").value().split('/')\[:-1:]) + \"/tmp/style3.exr\"\}]"
-  raw true
-  create_directories true
-  name Write6
-  xpos 620
-  ypos 16
- }
-set N2c2a6400 [stack 0]
- Input {
-  inputs 0
-  name style2_target
-  xpos 510
-  ypos -78
-  number 5
- }
- Write {
-  file "\[python \{'/'.join(nuke.thisParent().knob(\"output_file\").value().split('/')\[:-1:]) + \"/tmp/style2_target.exr\"\}]"
-  raw true
-  create_directories true
-  checkHashOnRead false
-  name Write7
-  xpos 510
-  ypos 16
- }
- Input {
-  inputs 0
-  name style2
-  xpos 400
-  ypos -78
-  number 4
- }
- Write {
-  channels rgba
-  file "\[python \{'/'.join(nuke.thisParent().knob(\"output_file\").value().split('/')\[:-1:]) + \"/tmp/style2.exr\"\}]"
-  raw true
-  create_directories true
-  name Write5
-  xpos 400
-  ypos 16
- }
- Input {
-  inputs 0
-  name style1_target
-  xpos 290
-  ypos -78
-  number 3
- }
- Write {
-  file "\[python \{'/'.join(nuke.thisParent().knob(\"output_file\").value().split('/')\[:-1:]) + \"/tmp/style1_target.exr\"\}]"
-  raw true
-  create_directories true
-  checkHashOnRead false
-  name Write4
-  xpos 290
-  ypos 16
- }
- Input {
-  inputs 0
-  name style1
-  xpos 169
-  ypos -77
-  number 2
- }
- Write {
-  channels rgba
-  file "\[python \{'/'.join(nuke.thisParent().knob(\"output_file\").value().split('/')\[:-1:]) + \"/tmp/style1.exr\"\}]"
-  colorspace scene_linear
-  raw true
-  create_directories true
-  name Write3
-  xpos 169
-  ypos 15
- }
- Input {
-  inputs 0
-  name opt
-  xpos 48
-  ypos -77
+  name motion_back
+  xpos 1102
+  ypos -228
   number 1
  }
+set Nb054f200 [stack 0]
+push $Nb054f200
+ Reformat {
+  format "1034 438 0 0 1034 438 1 halfApart"
+  name Reformat4
+  xpos 1165
+  ypos -176
+ }
+ Switch {
+  inputs 2
+  which {{nst_fg_gizmo.resolution}}
+  name Switch6
+  xpos 1102
+  ypos -94
+ }
  Write {
-  file "\[python \{'/'.join(nuke.thisParent().knob(\"output_file\").value().split('/')\[:-1:]) + \"/tmp/opt.####.exr\"\}]"
   raw true
+  file_type exr
+  first_part rgba
   create_directories true
-  name Write2
-  xpos 48
-  ypos 16
+  in_colorspace scene_linear
+  out_colorspace scene_linear
+  name motion_back_write
+  xpos 1102
+  ypos -50
  }
  Input {
   inputs 0
   name content
-  xpos -59
-  ypos -76
+  xpos -18
+  ypos -225
+  number 5
+ }
+set Nb054cf00 [stack 0]
+push $Nb054cf00
+ Reformat {
+  format "1034 438 0 0 1034 438 1 halfApart"
+  name Reformat18
+  xpos 48
+  ypos -170
+ }
+ Switch {
+  inputs 2
+  which {{nst_fg_gizmo.resolution}}
+  name Switch2
+  xpos -18
+  ypos -103
  }
  Write {
-  file "\[python \{'/'.join(nuke.thisParent().knob(\"output_file\").value().split('/')\[:-1:]) + \"/tmp/content.####.exr\"\}]"
-  proxy "\[Group1.scale]"
-  raw true
+  file /mnt/ala/research/danielf/2022/nuke_nst/tmp/v007/2023-7-24--23-2-47/content/content.####.exr
+  file_type exr
+  first_part rgba
   create_directories true
-  render_order 0.7
-  name Write1
-  xpos -59
-  ypos 17
+  name content_write
+  xpos -18
+  ypos -48
  }
- MLClient {
-  inputs 8
+ OCIOColorSpace {
+  in_colorspace scene_linear
+  out_colorspace matte_paint
+  name OCIOColorSpace2
+  xpos -18
+  ypos 11
+ }
+set Nb050eb00 [stack 0]
+ Input {
+  inputs 0
+  name style_target
+  xpos 578
+  ypos -222
+  number 3
+ }
+set Nb050e400 [stack 0]
+push $Nb050e400
+ Reformat {
+  format "1034 438 0 0 1034 438 1 halfApart"
+  name Reformat2
+  xpos 688
+  ypos -167
+ }
+ Switch {
+  inputs 2
+  which {{nst_fg_gizmo.resolution}}
+  name Switch4
+  xpos 578
+  ypos -100
+ }
+ Write {
+  file /mnt/ala/research/danielf/2022/nuke_nst/tmp/v007/2023-7-24--23-2-47/style_target/style_target.####.exr
+  file_type exr
+  first_part rgba
+  create_directories true
+  name style_target_write
+  xpos 578
+  ypos -45
+ }
+ Dot {
+  name Dot1
+  xpos 612
+  ypos 104
+ }
+ Constant {
+  inputs 0
+  channels rgb
+  name Constant2
+  xpos 483
+  ypos -197
+ }
+ Input {
+  inputs 0
+  name style
+  xpos 368
+  ypos -222
+  number 2
+ }
+ CopyMetaData {
+  inputs 2
+  mergeMode "Meta only"
+  name CopyMetaData2
+  xpos 368
+  ypos -174
+ }
+ Write {
+  channels rgba
+  file /mnt/ala/research/danielf/2022/nuke_nst/tmp/v007/2023-7-24--23-2-47/style/style.####.exr
+  file_type exr
+  first_part rgba
+  create_directories true
+  name style_write
+  xpos 368
+  ypos -50
+ }
+push $Nb050eb00
+ Input {
+  inputs 0
+  name opt
+  xpos 183
+  ypos -224
+  number 4
+ }
+set Nb04dcf00 [stack 0]
+push $Nb04dcf00
+ Reformat {
+  format "1034 438 0 0 1034 438 1 halfApart"
+  name Reformat1
+  xpos 246
+  ypos -173
+ }
+ Switch {
+  inputs 2
+  which {{nst_fg_gizmo.resolution}}
+  name Switch1
+  xpos 183
+  ypos -100
+ }
+ Write {
+  file /mnt/ala/research/danielf/2022/nuke_nst/tmp/v007/2023-7-24--23-2-47/opt/opt.####.exr
+  file_type exr
+  first_part rgba
+  create_directories true
+  in_colorspace scene_linear
+  out_colorspace scene_linear
+  name opt_write
+  xpos 183
+  ypos -52
+ }
+ OCIOColorSpace {
+  in_colorspace scene_linear
+  out_colorspace matte_paint
+  name OCIOColorSpace1
+  xpos 183
+  ypos 10
+ }
+ Switch {
+  inputs 2
+  which {{nst_fg_gizmo.opt_is_content}}
+  name Switch3
+  xpos 100
+  ypos 76
+ }
+set Nb04ba400 [stack 0]
+ MLClientLive {
+  inputs 4
   host 172.22.15.27
   port 55555
-  models {{1} "Gaussian Blur" "Neural Style Transfer"}
-  serialiseKnob {model:Neural Style Transfer;style_mips:{"\[python \{nuke.thisNode().parent()\['style_mips'].getValue()\}]"};content_mips:{"\[python \{nuke.thisNode().parent()\['content_mips'].getValue()\}]"};iterations:{"\[python \{nuke.thisNode().parent()\['epochs_l'].getValue()\}]"};log_iterations:{"\[python \{int(nuke.thisNode().parent()\['log_epochs'].getValue())\}]"};enable_update:{"\[python \{int(nuke.thisNode().parent()\['allow_update'].getValue())\}]"};farm_iterations:{"\[python \{nuke.thisNode().parent()\['epochs_f'].getValue()\}]"};pyramid_scale_factor:{"\[python \{nuke.thisNode().parent()\['mip_scale_factor'].getValue()\}]"};learning_rate:{"\[python \{nuke.thisNode().parent()\['learning_rate'].getValue()\}]"};scale:{"\[python \{nuke.thisNode().parent()\['scale_l'].getValue()\}]"};farm_scale:{"\[python \{nuke.thisNode().parent()\['scale_f'].getValue()\}]"};engine:[python {nuke.thisNode().parent()['engine_l'].value().lower()}];optimiser:[python {nuke.thisNode().parent()['optimiser_l'].value().lower()}];style_layers:[python {nuke.thisNode().parent()['style_layers'].getValue()}];style_layer_weights:[python {nuke.thisNode().parent()['style_layer_weights'].getValue()}];style_mip_weights:[python {nuke.thisNode().parent()['style_mip_weights'].getValue()}];content_layer:[python {nuke.thisNode().parent()['content_layer'].getValue()}];content_layer_weight:[python {nuke.thisNode().parent()['content_layer_weight'].getValue()}];farm_engine:[python {nuke.thisNode().parent()['engine_f'].value().lower()}];farm_optimiser:[python {nuke.thisNode().parent()['optimiser_f'].value().lower().replace('-', '')}];farm_learning_rate:[python {nuke.thisNode().parent()['learning_rate_f'].value()}];content_fp:[python {nuke.thisNode().input(0).knob('file').getEvaluatedValue()}];opt_fp:[python {nuke.thisNode().input(1).knob('file').getEvaluatedValue()}];out_fp:[python {nuke.thisNode().parent().dependent()[0].knob('file').getEvaluatedValue()}];style1_fp:[python {nuke.thisNode().input(2).knob('file').getEvaluatedValue()}];style1_target_fp:[python {nuke.thisNode().input(3).knob('file').getEvaluatedValue()}];style2_fp:[python {nuke.thisNode().input(4).knob('file').getEvaluatedValue()}];style2_target_fp:[python {nuke.thisNode().input(5).knob('file').getEvaluatedValue()}];style3_fp:[python {nuke.thisNode().input(6).knob('file').getEvaluatedValue()}];style3_target_fp:[python {nuke.thisNode().input(7).knob('file').getEvaluatedValue()}];}
-  name MLClient1
-  xpos 349
-  ypos 183
+  serialiseKnob {model:Neural Style Transfer;style_mips:{"\[python \{nuke.thisNode().parent()\['style_mips'].getValue()\}]"};iterations:{"\[python \{nuke.thisNode().parent()\['iterations'].getValue()\}]"};log_iterations:{"\[python \{nuke.thisNode().parent()\['log_iterations'].getValue()\}]"};enable_update:{"\[python \{nuke.thisNode().parent()\['enable_update'].getValue()\}]"};batch_size:{"\[python \{nuke.thisNode().parent()\['batch_size'].getValue()\}]"};style_pyramid_span:{"\[python \{nuke.thisNode().parent()\['style_pyramid_span'].getValue()\}]"};style_zoom:{"\[python \{nuke.thisNode().parent()\['style_zoom'].getValue()\}]"};gram_weight:{"\[python \{nuke.thisNode().parent()\['gram_weight'].getValue()\}]"};histogram_weight:{"\[python \{nuke.thisNode().parent()\['histogram_weight'].getValue()\}]"};tv_weight:{"\[python \{nuke.thisNode().parent()\['tv_weight'].getValue()\}]"};laplacian_weight:{"\[python \{nuke.thisNode().parent()\['laplacian_weight'].getValue()\}]"};content_layer_weight:{"\[python \{nuke.thisNode().parent()\['content_layer_weight'].getValue()\}]"};learning_rate:{"\[python \{nuke.thisNode().parent()\['learning_rate'].getValue()\}]"};engine:nuke.thisNode().parent()['engine'].getValue();optimiser:nuke.thisNode().parent()['optimiser'].getValue();style_mip_weights:nuke.thisNode().parent()['style_mip_weights'].getValue();style_layers:nuke.thisNode().parent()['style_layers'].getValue();style_layer_weights:nuke.thisNode().parent()['style_layer_weights'].getValue();content_layer:nuke.thisNode().parent()['content_layer'].getValue();mask_layers:nuke.thisNode().parent()['mask_layers'].getValue();}
+  name MLClientLive1
+  xpos 100
+  ypos 244
  }
+ OCIOColorSpace {
+  in_colorspace matte_paint
+  out_colorspace compositing_linear
+  name OCIOColorSpace3
+  xpos 100
+  ypos 306
+ }
+set Nb04b8f00 [stack 0]
  Output {
   name Output1
-  xpos 349
-  ypos 273
+  xpos 100
+  ypos 482
  }
-push $N2c2a6400
+push $Nb04ba400
  Viewer {
-  frame_range 1-100
+  frame_range 1001-1067
+  viewerProcess "sRGB (ACES)"
   name Viewer1
-  xpos 600
-  ypos 150
+  xpos -138
+  ypos 109
+ }
+ Constant {
+  inputs 0
+  channels rgb
+  name Constant1
+  xpos 339
+  ypos 223
+ }
+push $Nb04b8f00
+ CopyMetaData {
+  inputs 2
+  mergeMode "Meta only"
+  name CopyMetaData1
+  xpos 339
+  ypos 306
+ }
+ ModifyMetaData {
+  metadata {
+   {set lock_connections false}
+   {set mapsize 0.15}
+   {set enable_update true}
+   {set iterations 200}
+   {set log_iterations 50}
+   {set batch_size 200}
+   {set optimiser lbfgs}
+   {set learning_rate 1}
+   {set engine gpu}
+   {set style_mips 2}
+   {set style_pyramid_span 0.8}
+   {set style_zoom 0.3}
+   {set style_mip_weights 1.0,1.0,1.0,1.0}
+   {set style_layers p1,p2,p3}
+   {set style_layer_weights 0.5,1.0,1.0,1.0}
+   {set mask_layers p3}
+   {set opt_is_content true}
+   {set content_layer p3}
+   {set content_layer_weight 1}
+   {set gram_weight 0}
+   {set histogram_weight 1000}
+   {set tv_weight 0}
+   {set laplacian_weight 5}
+   {set out_fp /mnt/ala/research/danielf/2022/nuke_nst/tmp/v007/nst.exr}
+   {set resolution proxy}
+   {set farm_engine gpu}
+   {set farm_optimiser lbfgs}
+   {set frames 1001-1067x10}
+   {set farm_style_mips 2}
+   {set proxy_scale 0.5}
+   {set farm_learning_rate 1}
+   {set farm_iterations 1000}
+   {set temporal_coherehce false}
+   {set service_key starfish}
+   {set job_name nuke_nst_v007}
+   {set tier default}
+   {set atmost 56}
+   {set checkpoint false}
+   {set checkpoint_interval 0}
+   {set output_gradients false}
+   {set output_style_pyraids false}
+   {set output_style_activations false}
+   {set output_gram false}
+   {set output_content_activations false}
+  }
+  name ModifySnapMetaData
+  xpos 339
+  ypos 343
+ }
+ Write {
+  file /var/tmp/nst_tmp/6e5032c49618.exr
+  colorspace scene_linear
+  file_type exr
+  metadata "all metadata"
+  noprefix true
+  first_part rgba
+  create_directories true
+  version 25
+  in_colorspace scene_linear
+  out_colorspace scene_linear
+  name snapshot
+  selected true
+  xpos 339
+  ypos 384
  }
 end_group

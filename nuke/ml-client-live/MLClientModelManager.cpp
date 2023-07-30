@@ -172,7 +172,7 @@ void MLClientModelManager::parseOptions(const mlserver::Model& m)
   for (int i = 0, endI = m.string_options_size(); i < endI; i++) {
     mlserver::StringAttrib option;
     option = m.string_options(i);
-    _dynamicStringValues.push_back(option.values(0));
+    _dynamicStringValues.push_back(option.values(0)); // eval expression?
     _dynamicStringNames.push_back(option.name());
   }
   for (int i = 0, endI = m.button_options_size(); i < endI; i++) {
@@ -234,13 +234,20 @@ void MLClientModelManager::updateOptions(mlserver::Model& m)
     option->set_name(_dynamicStringNames[i]);
     DD::Image::Knob* k = _parent->knob(_dynamicStringNames[i].c_str());
     const char* val = "";
+    const char* script_val = "";
     if(k != nullptr) {
       val = k->get_text();
-      if (val==nullptr) {
-        val = "";
+      
+      // evaluate the string as a python script
+      _parent->script_command(val, true, true);
+      script_val = _parent->script_result(); // this seems to print...
+      _parent->script_unlock();
+
+      if (script_val==nullptr) {
+        script_val = "";
       }
     }
-    option->add_values(val);
+    option->add_values(script_val);
   }
 
   m.clear_button_options();

@@ -16,6 +16,7 @@ def get_sg():
     sg = tank_vendor.shotgun_api3.Shotgun(url, api_key=api_key, script_name=api_script)
     return sg
 
+
 def sg_upload(shot_name, mov, img_seq, description):
     task_name = 'style'
     proj_id = 499
@@ -133,15 +134,18 @@ def main():
     '''
     '''
     p = OptionParser()
-    p.add_option("-s", "--shot", dest='shot', action='store')
     p.add_option("-i", "--img_seq", dest='img_seq', action='store')
+    p.add_option("-s", "--shot", dest='shot', action='store')
     p.add_option("-d", "--description", dest='description', action='store')
+
     opts, args = p.parse_args()
 
     mov = exr_to_mov(opts.img_seq)
     img_seq = opts.img_seq.replace('#', '####')
     img_seq = img_seq.replace('exr', 'png')
-    sg_upload(opts.shot, mov, img_seq, opts.description)
+
+    if opts.shot and opts.description:
+        sg_upload(opts.shot, mov, img_seq, opts.description)
 
 
 if __name__ == "__main__":

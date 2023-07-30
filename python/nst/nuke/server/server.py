@@ -13,7 +13,8 @@
 # limitations under the License.
 ##############################################################################
 
-from multiprocessing import Process
+import torch.multiprocessing as mp
+from multiprocessing import Process, Queue
 import math
 import argparse
 import os
@@ -40,6 +41,7 @@ class MLTCPServer(socketserver.TCPServer):
         model_dir = os.path.join(ML_SERVER_DIR, 'models')
         os.chdir(model_dir)
 
+        self.cancel = False
         # Each directory in models/ containing a model.py file is an available ML model
         # self.available_models = [name for name in next(os.walk('models'))[1]
         #     if os.path.isfile(os.path.join('models', name, 'model.py'))]
@@ -97,6 +99,10 @@ class ImageProcessTCPHandler(socketserver.BaseRequestHandler):
         # Process message
         self.process_message(req_msg)
 
+    def process_cancel(self, message):
+        self.vprint('Cancelling inference')
+        self.server.cancel = True
+
     def process_message(self, message):
         if message.HasField('r1'):
             self.vprint('Received info request')
@@ -104,6 +110,9 @@ class ImageProcessTCPHandler(socketserver.BaseRequestHandler):
         elif message.HasField('r2'):
             self.vprint('Received inference request')
             self.process_inference(message)
+        elif message.HasField('r3'):
+            self.vprint('Received cancel request')
+            self.process_cancel(message)
         else:
             msg = "Server received unindentified request from client."
             send_msg(self, msg)
@@ -208,7 +217,31 @@ class ImageProcessTCPHandler(socketserver.BaseRequestHandler):
             self.vprint('Starting inference')
 
             # main call:
-            res = self.server.models[m.name].inference()
+            model = self.server.models[m.name]
+
+            # an issue here is that once inference starts we can't pause and poll
+            # for a kill signal.
+
+            # todo: do the inference in a multiproc Process
+            result = model.inference()
+
+            #
+
+            # model.share_memory()
+            # processes = [1]
+            # for rank in range(1):
+            #     p = mp.Process(target=model.inference)
+            #     p.start()
+            #     processes.append(p)
+            # for p in processes:
+            #     p.join()
+
+            # queue = Queue()
+            # process = torch.multiprocessing.Process(target=model.inference)
+            # process.start()
+            # process.join() # this blocks
+            # result = queue.get()
+
 
             print('job progress: %d' % job_progress + '%')
             if job_progress == 100:
@@ -218,7 +251,7 @@ class ImageProcessTCPHandler(socketserver.BaseRequestHandler):
             resp_msg = RespondWrapper()
             resp_msg.info = True
             resp_inf = RespondInference()
-            img = np.flipud(res)
+            img = np.flipud(result)
             image = resp_inf.images.add()
             image.width = np.shape(img)[1]
             image.height = np.shape(img)[0]
@@ -229,6 +262,7 @@ class ImageProcessTCPHandler(socketserver.BaseRequestHandler):
             resp_msg.r2.CopyFrom(resp_inf)
             self.vprint('sending inteference response')
 
+            # todo: want to call this when next batch is running in subproc
             send_msg(self, resp_msg)
             # p = Process(target=send_msg, args=(self, resp_msg))
             # p.start()
@@ -245,7 +279,7 @@ class ImageProcessTCPHandler(socketserver.BaseRequestHandler):
             send_msg(self, resp_msg)
 
     def recvall(self, n):
-        """Helper function to receive n bytes or return None if EOF is hit"""
+        """Helper function to receive node bytes or return None if EOF is hit"""
         data = b''
         while len(data) < n:
             packet = self.request.recv(n - len(data))
@@ -284,7 +318,8 @@ if __name__ == "__main__":
     # Get the current hostname of the server
     server_hostname = socket.gethostbyname(socket.gethostname())
     # Create the server
-    server = MLTCPServer((server_hostname, args.port), ImageProcessTCPHandler, False)
+    server = MLTCPServer((server_hostname, args.port),
+                         ImageProcessTCPHandler, False)
 
     # Bind and activate the server
     server.allow_reuse_address = True

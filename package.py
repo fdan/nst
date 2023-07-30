@@ -2,15 +2,15 @@
 
 name = 'nst'
 
-version = '3.0.1'
+version = '3.0.2'
 
 authors = ['daniel.flood']
 
 requires = [
             'tractor',
-            'oiio',
-            'ocio_configs',
-            'shotgun_utils'
+            # 'oiio',
+            # 'ocio_configs',
+            # 'shotgun_utils'
            ]
 
 build_requires = ['cmake-3.10+']

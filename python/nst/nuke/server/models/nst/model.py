@@ -27,111 +27,51 @@ class Model(BaseModel):
                         "gram_weight",
                         "histogram_weight",
                         "tv_weight",
+                        "laplacian_weight",
                         "style_mips",
                         "style_mip_weights",
                         "style_layers",
                         "style_layer_weights",
                         "content_layer",
                         "content_layer_weight",
-                        "content_mips",
                         "learning_rate",
                         "iterations",
                         "log_iterations",
                         "enable_update",
                         "batch_size",
-
-                        # farm related
-                        "job_name",
-                        "service_key",
-                        "tier",
-                        "frames",
-                        "farm_engine",
-                        "farm_cpu_threads",
-                        "farm_optimiser",
-                        "farm_learning_rate",
-                        "farm_iterations",
-                        "farm_pyramid_span",
-                        "farm_style_zoom",
-                        "content_fp",
-                        "opt_fp",
-                        "out_fp",
-                        "style1_fp",
-                        "style1_target_fp",
-                        "style2_fp",
-                        "style2_target_fp",
-                        "style3_fp",
-                        "style3_target_fp"
+                        "mask_layers",
                         )
 
-        self.buttons = ["farm"]
-
         self.inputs = {'opt_img': 3,
-                       'style1': 4,
-                       'style1_target': 1,
+                       'style': 4,
+                       'style_target': 1,
                        'content': 3}
-
-        # self.inputs = {'content': 3,
-        #                'opt_img': 3,
-        #                'style1': 4,
-        #                'style1_target': 1,
-        #                'style2': 4,
-        #                'style2_target': 1,
-        #                'style3': 4,
-        #                'style3_target': 1}
 
         self.outputs = {'output': 3}
 
         # option states
         self.engine = "gpu"
-        self.optimiser = "adam"
-        self.style_mips = 2
+        self.optimiser = "lbfgs"
+        self.style_mips = 4
         self.style_zoom = 1.0
         self.gram_weight = 1.0
         self.histogram_weight = 10000.0
         self.tv_weight = 5.0
+        self.laplacian_weight = 1.0
         self.style_mip_weights = '1.0,1.0,1.0,1.0'
         self.style_layers = 'p1,p2,r31,r42'
+        self.mask_layers = 'p1,p2,r31,r42'
         self.style_layer_weights = '1.0,1.0,1.0,1.0'
-        self.style_pyramid_span = "0.7"
+        self.style_pyramid_span = 0.5
         self.content_layer = 'r41'
-        self.content_layer_weight = "1.0"
-        self.content_mips = 1
-        self.learning_rate = 10.0
-        self.iterations = 50
-        self.log_iterations = 1
+        self.content_layer_weight = 1.0
+        self.learning_rate = 1.0
+        self.iterations = 200
+        self.log_iterations = 10
         self.enable_update = 1
 
-        # farm related
-        self.job_name = "nst_job"
-        self.service_key = "ac1"
-        self.tier = "batch"
-        self.frames = 1
-        self.farm_engine = "cpu"
-        self.farm_cpu_threads = 48
-        self.farm_optimiser = "lbfgs"
-        self.farm_learning_rate = 1.0
-        self.farm_style_mips = 2
-        self.farm_pyramid_span = 0.7
-        self.farm_style_zoom = 1.0
-
-        self.content_fp = ""
-        self.opt_fp = ""
-        self.style1_fp = ""
-        self.style1_target_fp = ""
-        self.style2_fp = ""
-        self.style2_target_fp = ""
-        self.style3_fp = ""
-        self.style3_target_fp = ""
-        self.style_targets_fp = ""
-        self.out_fp = ""
-        self.farm_scale = 1.0
-        self.farm_iterations = 500
-
-        # button states
-        self.farm = False
-
         # internal
-        self.batch_size = 10
+        self.batch_size = 200
         self.prepared = False
 
         self.nst_settings = NstSettings()
@@ -160,13 +100,14 @@ class Model(BaseModel):
         self.nst_settings.gram_weight = float(self.gram_weight)
         self.nst_settings.histogram_weight = float(self.histogram_weight)
         self.nst_settings.tv_weight = float(self.tv_weight)
+        self.nst_settings.laplacian_weight = float(self.laplacian_weight)
         self.nst_settings.style_mips = int(self.style_mips)
         self.nst_settings.mip_weights = [float(x) for x in self.style_mip_weights.split(',')]
         self.nst_settings.style_layers = self.style_layers.split(',')
+        self.nst_settings.mask_layers = self.mask_layers.split(',')
         self.nst_settings.style_layer_weights = [float(x) for x in self.style_layer_weights.split(',')]
         self.nst_settings.content_layer = self.content_layer
         self.nst_settings.content_layer_weight = float(self.content_layer_weight)
-        self.nst_settings.content_mips = int(self.content_mips)
         self.nst_settings.learning_rate = float(self.learning_rate)
         self.nst_settings.iterations = int(self.iterations)
         self.nst_settings.log_iterations = int(self.log_iterations)
@@ -197,30 +138,35 @@ class Model(BaseModel):
             raise RuntimeError("An optimisation image must be given")
 
         try:
-            style1_np = image_list[1]
-            style1_tensor = torch.Tensor(style1_np.copy())
-            style1_tensor = style1_tensor.transpose(0, 2)
-            style1_tensor = style1_tensor[:3:]
-            style1_tensor = style1_tensor.transpose(0, 2)
-            style1_tensor = color_in(style1_tensor, do_cuda=cuda)
+            style_np = image_list[1]
+            style_tensor = torch.Tensor(style_np.copy())
+            style_tensor = style_tensor.transpose(0, 2)
+            style_tensor = style_tensor[:3:]
+            style_tensor = style_tensor.transpose(0, 2)
+            style_tensor = color_in(style_tensor, do_cuda=cuda)
 
-            style1_alpha_tensor = torch.Tensor(style1_np.copy())
-            style1_alpha_tensor = style1_alpha_tensor.transpose(0, 2)
-            style1_alpha_tensor[0] = style1_alpha_tensor[3]
-            style1_alpha_tensor[1] = style1_alpha_tensor[3]
-            style1_alpha_tensor[2] = style1_alpha_tensor[3]
-            style1_alpha_tensor = style1_alpha_tensor[:3:]
-            style1_alpha_tensor = style1_alpha_tensor.transpose(0, 2)
-            style1_alpha_tensor = color_in(style1_alpha_tensor, do_cuda=cuda, raw=True)
+            style_alpha_tensor = torch.Tensor(style_np.copy())
+            style_alpha_tensor = style_alpha_tensor.transpose(0, 2)
+            style_alpha_tensor[0] = style_alpha_tensor[3]
+            style_alpha_tensor[1] = style_alpha_tensor[3]
+            style_alpha_tensor[2] = style_alpha_tensor[3]
+            style_alpha_tensor = style_alpha_tensor[:3:]
+            style_alpha_tensor = style_alpha_tensor.transpose(0, 2)
+            style_alpha_tensor = color_in(style_alpha_tensor, do_cuda=cuda, raw=True)
 
-            style1_target_np = image_list[2]
-            style1_target_tensor = torch.Tensor(style1_target_np.copy())
-            style1_target_tensor = color_in(style1_target_tensor, do_cuda=cuda, raw=True)
+            style = TorchStyle(style_tensor, style_alpha_tensor)
+            self.style = style
 
-            style1 = TorchStyle(style1_tensor, style1_alpha_tensor)
-            self.style1 = style1
-            style1.target_map = style1_target_tensor
-            self.nst.styles.append(style1)
+            try:
+                # todo: handle scenario where no target is given
+                style_target_np = image_list[2]
+                style_target_tensor = torch.Tensor(style_target_np.copy())
+                style_target_tensor = color_in(style_target_tensor, do_cuda=cuda, raw=True)
+                style.target_map = style_target_tensor
+            except:
+                pass
+
+            self.nst.styles.append(style)
         except:
             raise RuntimeError("There must be at least one style image")
 
@@ -232,7 +178,9 @@ class Model(BaseModel):
         self.prepared = True
 
     def inference(self) -> List[torch.Tensor]:
-        # print(self.nst.settings)
+        if not self.enable_update:
+            print('update disabled')
+            return # to do: return the opt iamge
 
         self.nst.start_iter = 1
 
