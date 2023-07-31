@@ -41,7 +41,6 @@ class StyleWriter(object):
         self.nst = model.Nst()
         self.nst.settings = self.settings.core
 
-
     def get_output_dir(self):
         if not self.output_dir:
             self.output_dir = os.path.abspath(os.path.join(self.settings.out, (os.path.pardir)))
@@ -122,6 +121,7 @@ class StyleWriter(object):
         return content_tensor
 
     def prepare_opt(self):
+
         opt_filepath = self.settings.opt_image.rgb_filepath
 
         if opt_filepath.endswith('.exr'):
@@ -244,10 +244,13 @@ class AnimWriter(StyleWriter):
 
         super(AnimWriter, self).__init__(styles, opt_image, content)
         self.settings = settings.AnimSettings()
+        self.settings.output_format = 'pt'
 
     def run(self):
         for pass_ in range(self.settings.starting_pass, self.settings.passes):
             # if direction is 1, we are in a forward pass.  if 0, negative.
+            self.settings.core.iterations = int(self.settings.core.iterations / self.passes)
+
             direction = pass_ % 2
             start = self.settings.last_frame if direction == 0 else self.settings.first_frame
             end = self.settings.first_frame if direction == 0 else self.settings.last_frame
@@ -256,6 +259,7 @@ class AnimWriter(StyleWriter):
              # if direction is backwards, use the forewards disocclusion mask
 
             for this_frame in range(start, end, increment_by):
+                self.settings.frame = this_frame
 
                 # warp_from_frame is the temporal prior in the context of pass direction
                 # i.e. the color image we are wanting to warp
@@ -277,3 +281,18 @@ class AnimWriter(StyleWriter):
                     flow_weight = self.settings.motion_back_weight.replace('####', '%04d' % this_frame + 1)
 
                 # if direction is backwards->forwards, use the motionBackWeight at prev_frame
+
+
+                out_fp = self.settings.out.replace('####', '%04d' % this_frame)
+                if os.path.isfile(out_fp):
+                    self._opt_tensor = torch.load(out_fp)
+
+                # main nst call
+                self.write()
+
+        #todo:
+        # for each frame, convert the .pt to .exr
+
+    def prepare_opt(self):
+        return self._opt_tensor
+

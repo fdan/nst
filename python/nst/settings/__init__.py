@@ -144,11 +144,36 @@ class AnimSettings(WriterSettings):
         self.last_frame = 1010
         self.starting_pass = 1
         self.passes = 15
+        # self.pass_iterations = 30 # should derive this
         self.use_temporal_loss_after = 8
         self.motion_fore = ''
         self.motion_fore_weight = ''
         self.motion_back = ''
         self.motion_back_weight = ''
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
