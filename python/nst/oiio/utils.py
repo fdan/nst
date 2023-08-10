@@ -196,7 +196,7 @@ def buf_to_tensor(buf: oiio.ImageBuf, do_cuda: bool, raw=False) -> torch.Tensor:
     tforms = transforms.Compose(tforms_)
 
     # note: oiio implicitely converts to 0-1 floating point data here regardless of format:
-    it = torch.Tensor(buf.get_pixels())
+    it = torch.Tensor(buf.get_pixels(roi=buf.roi_full))
 
     it = torch.transpose(it, 2, 0)
     it = torch.transpose(it, 2, 1)
@@ -396,32 +396,78 @@ def write_noise_img(x, y, filepath):
     write_exr(buf, filepath)
 
 
-# @numba.guvectorize([(numba.float32[:, :, :], numba.float32[:, :, :], numba.int64, numba.float32[:, :, :])],"(m,node,o),(m,node,o),()->(m,node,o)")
-# def _warp_np(col_np, vec_np, radius, output):
-#     x, y, z = vec_np.shape
+
+# @numba.vectorize([(numba.float32[:, :, :], numba.float32[:, :, :])])
+# def warp_image_cpu(image, flow):
+#     x, y, z = image.shape
 #
-#     for old_x in range(0, x):
-#         for old_y in range(0, y):
-#             my, mx, _ = vec_np[old_x][old_y]  # flip axis
-#             nx = old_x + int(mx) # floor?
-#             ny = old_y + int(my) # floor?
+#     # init result
+#     result = ''
 #
-#             if nx not in range(0, x) or ny not in range(0, y):
+#     for ay in range(0, y-1):
+#         for ax in range(0, x-1):
+#
+#             bx = ax + flow[ax][ay][2]
+#             by = ay + flow[ax][ay][1]
+#
+#             # interpolation
+#             x1 = math.floor(bx)
+#             y1 = math.floor(by)
+#             x2 = x1 + 1
+#             y2 = y1 + 1
+#
+#             if x1 < 0 or x2 >= x or y1 < 0 or y2 >= y:
+#                 result[ax][ay] = 0.0
 #                 continue
 #
-#             if radius:
-#                 for px in range(nx - radius, nx + radius):
-#                     for py in range(ny - radius, ny + radius):
-#                         ox = old_x + px - nx
-#                         oy = old_y + py - ny
-#                         if px in range(0, x) and py in range(0, y):
-#                             if ox in range(0, x) and oy in range(0, y):
-#                                 output[px][py] = col_np[ox][oy]
-#             else:
-#                 output[nx][ny] = col_np[old_x][old_y]
+#             alphaX = bx - x1
+#             alphaY = by - y1
+#
+#             ra = ((1.0 - alphaX) * image[x1][y1][0]) + (alphaX * image[x2][y1][0])
+#             rb = ((1.0 - alphaX) * image[x1][y2][0]) + (alphaX * image[x2][y2][0])
+#             red = ((1.0 - alphaY) * ra) + (alphaY * rb)
+#
+#             ga = ((1.0 - alphaX) * image[x1][y1][1]) + (alphaX * image[x2][y1][1])
+#             gb = ((1.0 - alphaX) * image[x1][y2][1]) + (alphaX * image[x2][y2][1])
+#             green = ((1.0 - alphaY) * ga) + (alphaY * gb)
+#
+#             ba = ((1.0 - alphaX) * image[x1][y1][2]) + (alphaX * image[x2][y1][2])
+#             bb = ((1.0 - alphaX) * image[x1][y2][2]) + (alphaX * image[x2][y2][2])
+#             blue = ((1.0 - alphaY) * ba) + (alphaY * bb)
+#
+#             result[ax][ay][0] = red
+#             result[ax][ay][1] = green
+#             result[ax][ay][2] = blue
+#
+#         return result
 
-@numba.guvectorize([(numba.float32[:, :, :], numba.float32[:, :, :], numba.float32[:, :, :], numba.float32[:, :, :])],"(m,node,o),(m,node,o),(m,node,o)->(m,node,o)")
-def warp_image(image, flow, mask, result):
+
+def warp_image(image, flow, cuda):
+
+    result = torch.zeros(image.size())
+    img_np = image[0].transpose(0, 2).transpose(0, 1).numpy()
+    flow_np = flow[0].transpose(0, 2).transpose(0, 1).numpy()
+
+    if cuda:
+        result_np = torch.zeros(img_np.shape).numpy()
+        warp_image_gpu(img_np, flow_np, result_np)
+    else:
+        result_np = warp_image_cpu(image, flow)
+
+    result[0] = torch.Tensor(result_np).transpose(0, 1).transpose(0, 2)
+    return result
+
+
+
+def warp_image_cpu(image, flow):
+    raise NotImplementedError
+
+
+@numba.guvectorize([(numba.float32[:, :, :],
+                     numba.float32[:, :, :],
+                     numba.float32[:, :, :])],
+                     "(m,node,o),(m,node,o)->(m,node,o)")
+def warp_image_gpu(image, flow, result):
     x, y, z = image.shape
 
     for ay in range(0, y-1):
@@ -430,7 +476,7 @@ def warp_image(image, flow, mask, result):
             bx = ax + flow[ax][ay][2]
             by = ay + flow[ax][ay][1]
 
-            # INTERPOLATION
+            # interpolation
             x1 = math.floor(bx)
             y1 = math.floor(by)
             x2 = x1 + 1
@@ -455,10 +501,9 @@ def warp_image(image, flow, mask, result):
             bb = ((1.0 - alphaX) * image[x1][y2][2]) + (alphaX * image[x2][y2][2])
             blue = ((1.0 - alphaY) * ba) + (alphaY * bb)
 
-            if mask[ax][ay][0] != 0:
-                result[ax][ay][0] = red
-                result[ax][ay][1] = green
-                result[ax][ay][2] = blue
+            result[ax][ay][0] = red
+            result[ax][ay][1] = green
+            result[ax][ay][2] = blue
 
 
 @numba.guvectorize([(numba.float32[:, :, :], numba.float32[:, :, :], numba.float32[:, :, :])],"(m,node,o),(m,node,o)->(m,node,o)")

@@ -1,3 +1,4 @@
+import re
 from typing import List
 import os
 
@@ -49,22 +50,23 @@ class StyleWriter(object):
     def write(self) -> None:
 
         frame = self.settings.frame
+        # print(2.0, frame)
+        # print(self.settings)
+
+        reg = r"\.([0-9]{4}|[#]{4})\."
 
         if self.settings.content:
             if self.settings.content.rgb_filepath:
-                if '####' in self.settings.content.rgb_filepath and frame:
-                    self.settings.content.rgb_filepath = self.settings.content.rgb_filepath.replace('####', '%04d' % frame)
+                self.settings.content.rgb_filepath = re.sub(reg, ".%s." % frame, self.settings.content.rgb_filepath)
+                print(2.1, self.settings.content.rgb_filepath)
 
         if self.settings.opt_image:
             if self.settings.opt_image.rgb_filepath:
-                if '####' in self.settings.opt_image.rgb_filepath and frame:
-                    self.settings.opt_image.rgb_filepath = self.settings.opt_image.rgb_filepath.replace('####', '%04d' % frame)
+                self.settings.opt_image.rgb_filepath = re.sub(reg, ".%s." % frame, self.settings.opt_image.rgb_filepath)
+                print(2.2, self.settings.opt_image.rgb_filepath)
 
         if self.settings.out:
-            if '####' in self.settings.out and frame:
-                out_fp = self.settings.out.replace('####', '%04d' % frame)
-            else:
-                out_fp = self.settings.out
+            self.settings.out = re.sub(reg, ".%s." % frame, self.settings.out)
 
         out_dir = os.path.abspath(os.path.join(self.settings.out, os.path.pardir))
         os.makedirs(out_dir, exist_ok=True)
@@ -86,14 +88,23 @@ class StyleWriter(object):
         # do style transfer
         tensor = self.nst()
 
-        if self.settings.output_format == 'exr':
+        out_format = self.settings.out.split('.')[-1]
+
+        # if self.settings.output_format == 'exr':
+        if out_format == 'exr':
+            print('writing exr ', self.settings.out)
             buf = utils.tensor_to_buf(tensor)
             if self.settings.out_colorspace != 'srgb_texture':
                 buf = oiio.ImageBufAlgo.colorconvert(buf, 'srgb_texture', self.settings.out_colorspace)
-            buf.write(out_fp)
+            buf.write(self.settings.out)
 
-        elif self.settings.output_format == 'pt':
-            torch.save(tensor, out_fp)
+        # elif self.settings.output_format == 'pt':
+        elif out_format == 'pt':
+            print('writing pt %s \n' % self.settings.out)
+            torch.save(tensor, self.settings.out)
+
+        else:
+            print('not writing anything')
 
     def prepare_styles(self):
         styles = []
@@ -241,24 +252,31 @@ class AnimWriter(StyleWriter):
                  styles: List[settings.StyleImage] = None,
                  opt_image: settings.Image = None,
                  content: settings.Image = None):
-
         super(AnimWriter, self).__init__(styles, opt_image, content)
+
         self.settings = settings.AnimSettings()
-        self.settings.output_format = 'pt'
+        # self.settings.output_format = 'pt'
+        self._opt_tensor = torch.zeros(1)
 
     def run(self):
-        for pass_ in range(self.settings.starting_pass, self.settings.passes):
+        for pass_ in range(self.settings.starting_pass, self.settings.passes+1):
+            print('pass:', pass_)
+
             # if direction is 1, we are in a forward pass.  if 0, negative.
-            self.settings.core.iterations = int(self.settings.core.iterations / self.passes)
+            self.settings.core.iterations = int(self.settings.core.iterations / self.settings.passes)
 
             direction = pass_ % 2
+            direction_ = 'forward' if direction else 'backward'
+            print('direction:', direction_)
+
             start = self.settings.last_frame if direction == 0 else self.settings.first_frame
             end = self.settings.first_frame if direction == 0 else self.settings.last_frame
             increment_by = -1 if direction == 0 else 1
 
-             # if direction is backwards, use the forewards disocclusion mask
+            # if direction is backwards, use the forewards disocclusion mask
 
             for this_frame in range(start, end, increment_by):
+                print('frame:', this_frame)
                 self.settings.frame = this_frame
 
                 # warp_from_frame is the temporal prior in the context of pass direction
@@ -266,26 +284,45 @@ class AnimWriter(StyleWriter):
                 if this_frame == self.settings.first_frame and pass_ == 1:
                     warp_from_frame = -1
                 elif this_frame == self.settings.first_frame:
-                    warp_from_frame = this_frame + 1
+                    warp_from_frame = (this_frame + 1)
                 elif this_frame == self.settings.last_frame:
-                    warp_from_frame = this_frame - 1
+                    warp_from_frame = (this_frame - 1)
                 else:
-                    warp_from_frame = this_frame + 1 if direction == 0 else this_frame - 1
+                    warp_from_frame = (this_frame + 1) if direction == 0 else (this_frame - 1)
+
+                reg = r"\.([0-9]{4}|[#]{4})\."
 
                 # backwards->forwards pass
                 if direction == 1:
-                    flow = self.settings.motion_fore.replace('####', '%04d' % this_frame - 1)
-                    flow_weight = self.settings.motion_fore_weight.replace('####', '%04d' % this_frame - 1)
+                    prev_frame = this_frame - 1
+                    flow = re.sub(reg, ".%s." % prev_frame, self.settings.motion_fore)
+                    flow_weight = re.sub(reg, ".%s." % prev_frame, self.settings.motion_fore_weight)
+
+                # forwards->backwards pass
                 elif direction == 0:
-                    flow = self.settings.motion_back.replace('####', '%04d' % this_frame + 1)
-                    flow_weight = self.settings.motion_back_weight.replace('####', '%04d' % this_frame + 1)
+                    prev_frame = this_frame + 1
+                    flow = re.sub(reg, ".%s." % prev_frame, self.settings.motion_back)
+                    flow_weight = re.sub(reg, ".%s." % prev_frame, self.settings.motion_back_weight)
+                else:
+                    raise Exception('Direction must be 0 or 1')
 
-                # if direction is backwards->forwards, use the motionBackWeight at prev_frame
+                out_fp = re.sub(reg, ".%s." % this_frame, self.settings.out)
 
+                # check if a pt exists for the prior frame
+                prev_out_fp = re.sub(reg, ".%s." % prev_frame, self.settings.out)
+                prev_out_fp_pt = prev_out_fp.replace('.exr', '.pt')
+                if os.path.isfile(prev_out_fp_pt):
+                    print('warping previous frame:', prev_out_fp_pt)
+                    prev_out_fp_tensor = torch.load(prev_out_fp_pt)
+                    print(3.1, prev_out_fp_tensor.size())
 
-                out_fp = self.settings.out.replace('####', '%04d' % this_frame)
-                if os.path.isfile(out_fp):
-                    self._opt_tensor = torch.load(out_fp)
+                # load the flow and flow weight into tensors
+
+                out_fp_pt = out_fp.replace('.exr', '.pt')
+                if os.path.isfile(out_fp_pt):
+                    print('found previous .pt for frame:', out_fp_pt)
+                    out_fp = out_fp_pt
+                    self.settings.opt_image.rgb_filepath = out_fp
 
                 # main nst call
                 self.write()
@@ -293,6 +330,5 @@ class AnimWriter(StyleWriter):
         #todo:
         # for each frame, convert the .pt to .exr
 
-    def prepare_opt(self):
-        return self._opt_tensor
+
 

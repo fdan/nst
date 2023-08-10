@@ -61,28 +61,28 @@ class Nst(torch.nn.Module):
 
         # optimiser
         if self.settings.optimiser == 'lbfgs':
-            print('optimiser is lbfgs')
+            # print('optimiser is lbfgs')
             self.optimiser = optim.LBFGS([self.opt_tensor],
                                          lr=self.settings.learning_rate)
 
         elif self.settings.optimiser == 'adam':
-            print('optimiser is adam')
+            # print('optimiser is adam')
             self.optimiser = optim.Adam([self.opt_tensor], lr=self.settings.learning_rate, amsgrad=True)
 
         elif self.settings.optimiser == 'adamw':
-            print('optimiser is adam')
+            # print('optimiser is adamw')
             self.optimiser = optim.AdamW([self.opt_tensor], lr=self.settings.learning_rate)
 
         elif self.settings.optimiser == 'adagrad':
-            print('optimiser is adagrad')
+            # print('optimiser is adagrad')
             self.optimiser = optim.Adagrad([self.opt_tensor], lr=self.settings.learning_rate)
 
         elif self.settings.optimiser == 'rmsprop':
-            print('optimiser is rmsprop')
+            # print('optimiser is rmsprop')
             self.optimiser = optim.RMSprop([self.opt_tensor], lr=self.settings.learning_rate)
 
         elif self.settings.optimiser == 'asgd':
-            print('optimiser is asgd')
+            # print('optimiser is asgd')
             self.optimiser = optim.ASGD([self.opt_tensor], lr=self.settings.learning_rate)
 
 

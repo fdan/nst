@@ -8,6 +8,7 @@ authors = ['daniel.flood']
 
 requires = [
             'tractor',
+            'cryptomatte'
             # 'oiio',
             # 'ocio_configs',
             # 'shotgun_utils'
