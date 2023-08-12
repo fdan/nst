@@ -3,14 +3,19 @@ from typing import List
 import os
 
 import OpenImageIO as oiio
+import numpy as np
 from torch.autograd import Variable
 import torch
 
 from . import utils
+from . import temporal_coherence
 
 from nst.core import model, loss
 from nst.core import utils as core_utils
 import nst.settings as settings
+
+
+FRAME_REGEX = r"\.([0-9]{4}|[#]{4})\."
 
 
 class StyleWriter(object):
@@ -53,20 +58,18 @@ class StyleWriter(object):
         # print(2.0, frame)
         # print(self.settings)
 
-        reg = r"\.([0-9]{4}|[#]{4})\."
-
         if self.settings.content:
             if self.settings.content.rgb_filepath:
-                self.settings.content.rgb_filepath = re.sub(reg, ".%s." % frame, self.settings.content.rgb_filepath)
+                self.settings.content.rgb_filepath = re.sub(FRAME_REGEX, ".%s." % frame, self.settings.content.rgb_filepath)
                 print(2.1, self.settings.content.rgb_filepath)
 
         if self.settings.opt_image:
             if self.settings.opt_image.rgb_filepath:
-                self.settings.opt_image.rgb_filepath = re.sub(reg, ".%s." % frame, self.settings.opt_image.rgb_filepath)
+                self.settings.opt_image.rgb_filepath = re.sub(FRAME_REGEX, ".%s." % frame, self.settings.opt_image.rgb_filepath)
                 print(2.2, self.settings.opt_image.rgb_filepath)
 
         if self.settings.out:
-            self.settings.out = re.sub(reg, ".%s." % frame, self.settings.out)
+            self.settings.out = re.sub(FRAME_REGEX, ".%s." % frame, self.settings.out)
 
         out_dir = os.path.abspath(os.path.join(self.settings.out, os.path.pardir))
         os.makedirs(out_dir, exist_ok=True)
@@ -132,6 +135,13 @@ class StyleWriter(object):
         return content_tensor
 
     def prepare_opt(self):
+
+        if self.settings.core.temporal_weight:
+            this_frame = int(self.settings.frame) + int(self.settings.pre)
+            re.sub(FRAME_REGEX, )
+            pass
+            # 1.  check if prev frame output exists
+
 
         opt_filepath = self.settings.opt_image.rgb_filepath
 
@@ -258,7 +268,72 @@ class AnimWriter(StyleWriter):
         # self.settings.output_format = 'pt'
         self._opt_tensor = torch.zeros(1)
 
+    def load_output(self, path):
+        if path.endswith('.exr'):
+            tensor = utils.image_to_tensor(path, self.settings.core.cuda,
+                                           colorspace=self.settings.opt_image.colorspace)
+
+        elif path.endswith('.pt'):
+            tensor = torch.load(path)
+
+        return tensor
+
+    def prepare_opt(self):
+
+        opt_filepath = self.settings.opt_image.rgb_filepath
+        opt_tensor = self.load_output(opt_filepath)
+
+        if self.settings.core.temporal_weight:
+            # prev frame can be +1 or -1 depending on starting pass
+            prev_frame = int(self.settings.frame) + self.settings.starting_pass
+            prev_output = re.sub(FRAME_REGEX, prev_frame, self.settings.out)
+
+            if os.path.isfile(prev_output):
+                # slide to a numpy image
+                prev_opt = self.load_output(prev_output)
+                prev_opt_np = '' # to cpu, to numpy, slice, transpose?
+
+                # load flow
+                if self.settings.starting_pass:
+                    flow_path = self.settings.motion_fore
+                else:
+                    flow_path = self.settings.motion_back
+                flow_path = re.sub(FRAME_REGEX, prev_frame, flow_path)
+                flow_buf = oiio.ImageBuf(flow_path)
+                flow_np = flow_buf.get_pixels(roi=flow_buf.roi_full)
+
+                # load depth
+                depth_path = re.sub(FRAME_REGEX, prev_frame, self.settings.depth_map.rgb_filepath)
+                depth_buf = oiio.ImageBuf(depth_path)
+                depth_np = depth_buf.get_pixels(roi=depth_buf.roi_full)
+
+                x, y, z = flow_np.shape
+                warp_output = np.zeros((x, y, z), dtype=np.float32)
+
+                temporal_coherence.depth_warp(prev_opt_np, flow_np, depth_np, warp_output)
+
+        # composite warp_output and opt_tensor, using motion mask as alpha
+        # store motion mask for temporal guide
+
+        opt_tensor = Variable(opt_tensor.data.clone(), requires_grad=True)
+        return opt_tensor
+
     def run(self):
+        if self.settings.interleaved:
+            self._run_interleaved()
+        else:
+            self._run_sequential()
+
+    def _run_sequential(self):
+        """
+        Process one frame at a time to full optimisation, from start to finish
+        """
+        pass
+
+    def _run_interleaved(self):
+        """
+        Interleave results across the sequence, slowly optimise each frame and propagate results
+        """
         for pass_ in range(self.settings.starting_pass, self.settings.passes+1):
             print('pass:', pass_)
 
@@ -290,26 +365,24 @@ class AnimWriter(StyleWriter):
                 else:
                     warp_from_frame = (this_frame + 1) if direction == 0 else (this_frame - 1)
 
-                reg = r"\.([0-9]{4}|[#]{4})\."
-
                 # backwards->forwards pass
                 if direction == 1:
                     prev_frame = this_frame - 1
-                    flow = re.sub(reg, ".%s." % prev_frame, self.settings.motion_fore)
-                    flow_weight = re.sub(reg, ".%s." % prev_frame, self.settings.motion_fore_weight)
+                    flow = re.sub(FRAME_REGEX, ".%s." % prev_frame, self.settings.motion_fore)
+                    flow_weight = re.sub(FRAME_REGEX, ".%s." % prev_frame, self.settings.motion_fore_weight)
 
                 # forwards->backwards pass
                 elif direction == 0:
                     prev_frame = this_frame + 1
-                    flow = re.sub(reg, ".%s." % prev_frame, self.settings.motion_back)
-                    flow_weight = re.sub(reg, ".%s." % prev_frame, self.settings.motion_back_weight)
+                    flow = re.sub(FRAME_REGEX, ".%s." % prev_frame, self.settings.motion_back)
+                    flow_weight = re.sub(FRAME_REGEX, ".%s." % prev_frame, self.settings.motion_back_weight)
                 else:
                     raise Exception('Direction must be 0 or 1')
 
-                out_fp = re.sub(reg, ".%s." % this_frame, self.settings.out)
+                out_fp = re.sub(FRAME_REGEX, ".%s." % this_frame, self.settings.out)
 
                 # check if a pt exists for the prior frame
-                prev_out_fp = re.sub(reg, ".%s." % prev_frame, self.settings.out)
+                prev_out_fp = re.sub(FRAME_REGEX, ".%s." % prev_frame, self.settings.out)
                 prev_out_fp_pt = prev_out_fp.replace('.exr', '.pt')
                 if os.path.isfile(prev_out_fp_pt):
                     print('warping previous frame:', prev_out_fp_pt)

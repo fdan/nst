@@ -101,7 +101,6 @@ class Nst(torch.nn.Module):
                                                 self.settings.cuda_device)
 
             content_guide.prepare()
-
             self.opt_guides.append(content_guide)
         else:
             print('not using content guide')
@@ -116,7 +115,6 @@ class Nst(torch.nn.Module):
             )
 
             laplacian_guide.prepare()
-
             self.opt_guides.append(laplacian_guide)
 
         if self.settings.gram_weight:
@@ -167,6 +165,19 @@ class Nst(torch.nn.Module):
             )
 
             self.opt_guides.append(tv_guide)
+
+        if self.settings.temporal_weight:
+            temporal_guide = guides.TemporalGuide(
+                self.content,
+                self.vgg,
+                self.settings.content_layer,
+                self.settings.content_layer_weight,
+                self.temporal_loss_mask,
+                self.settings.cuda_device
+            )
+
+            temporal_guide.prepare()
+            self.opt_guides.append(temporal_guide)
 
     def forward(self):
         n_iter = [self.start_iter]

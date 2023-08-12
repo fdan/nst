@@ -65,26 +65,50 @@ class ContentGuide(OptGuide):
         return opt_tensor.grad.clone()
 
 
-# class HistogramGuide(OptGuide):
-#     def __init__(self, tensor, weight, cuda_device=None):
-#         super(HistogramGuide, self).__init__()
-#         self.tensor = tensor
-#         self.weight = weight
-#         self.cuda_device = cuda_device
-#         self.target = None
-#
-#     def prepare(self):
-#         pass
-#
-#     def loss(self, opt, target, weight):
-#         loss_fn = loss.MSELoss()
-#         return loss_fn(opt, target, weight)
-#
-#     def forward(self, optimiser, opt_tensor, loss, iteration):
-#         optimiser.zero_grad()
-#         opt_hist = torch.histc(opt_tensor, bins=100, min=0, max=1)
-#         loss += self.loss(opt_hist, self.target, self.weight)
-#         return opt_tensor.grad.clone()
+class TemporalGuide(OptGuide):
+    def __init__(self, tensor, vgg, layer, layer_weight, mask,
+                 cuda_device=None):
+        super(ContentGuide, self).__init__()
+        self.name = "content guide"
+        self.tensor = tensor
+        self.target = None
+        self.weight = layer_weight
+        self.vgg = vgg
+        self.mask = mask
+        self.layer = layer
+        self.cuda_device = cuda_device
+
+    def prepare(self):
+        self.target = self.vgg([self.tensor], [self.layer])[0]
+
+        # mresize mask and apply to target
+
+    def loss(self, opt, target):
+        loss_fn = loss.MipMSELoss()
+
+        if self.cuda_device:
+            loss_fn = loss_fn.cuda()
+
+        return loss_fn(opt, target)
+
+    def forward(self, optimiser, opt_tensor, loss, iteration):
+        if self.cuda_device:
+            cuda = True
+        else:
+            cuda = False
+
+        opt_pyramid = utils.make_gaussian_pyramid(opt_tensor, 1, 1, cuda=cuda)
+        opt_activation = self.vgg(opt_pyramid, [self.layer])[0]
+
+        optimiser.zero_grad()
+        weighted_loss = self.loss(opt_activation, self.target) * self.weight
+
+        # backpropagate our weighted loss to calculate gradients
+        weighted_loss.backward(retain_graph=True)
+        # from here on, opt_tensor.grad contains the derived gradients
+
+        loss += weighted_loss
+        return opt_tensor.grad.clone()
 
 
 class TVGuide(OptGuide):

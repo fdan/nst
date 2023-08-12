@@ -90,6 +90,8 @@ class NstSettings(BaseSettings):
         self.tv_weight = 5.0
         self.laplacian_weight = 0.0
         self.laplacian_loss_layer = 'r41'
+        self.temporal_weight = 0.0
+        self.temporal_weight_mask = ''
 
 
 class WriterSettings(BaseSettings):
@@ -114,8 +116,8 @@ class WriterSettings(BaseSettings):
             data = json.loads(data)
         self.__dict__ = data
 
-        from pprint import pprint
-        pprint(data)
+        # from pprint import pprint
+        # pprint(data)
 
         core = data.get('core')
         self.core = NstSettings()
@@ -150,30 +152,7 @@ class AnimSettings(WriterSettings):
         self.motion_fore_weight = ''
         self.motion_back = ''
         self.motion_back_weight = ''
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+        self.interleave = True
+        self.depth_map = Image()
+        self.id_map = Image()
 

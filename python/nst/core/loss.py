@@ -112,6 +112,10 @@ class MipHistogramMSELoss(nn.Module):
         return loss
 
 
+class TemporalLoss(nn.Module):
+    pass
+
+
 class MSELoss(nn.Module):
     def forward(self, input, target, mip_weight):
         a_ = torch.sub(input, target)
