@@ -35,6 +35,7 @@ class Nst(torch.nn.Module):
         super(Nst, self).__init__()
         self.vgg = vgg.VGG()
         self.content = torch.zeros(0)
+        self.temporal_weight_mask = torch.zeros(0)
         self.content_scale = 1.0
         self.styles = []
         self.opt_tensor = torch.zeros(0)
@@ -94,11 +95,13 @@ class Nst(torch.nn.Module):
 
         # content can be null
         if self.content.numel() != 0:
-            content_guide = guides.ContentGuide(self.content,
-                                                self.vgg,
-                                                self.settings.content_layer,
-                                                self.settings.content_layer_weight,
-                                                self.settings.cuda_device)
+            content_guide = guides.ContentGuide(
+                self.content,
+                self.vgg,
+                self.settings.content_layer,
+                self.settings.content_layer_weight,
+                self.settings.cuda_device
+            )
 
             content_guide.prepare()
             self.opt_guides.append(content_guide)
@@ -111,7 +114,10 @@ class Nst(torch.nn.Module):
                 self.content,
                 self.settings.laplacian_weight,
                 self.settings.laplacian_loss_layer,
-                self.settings.cuda_device
+                self.settings.laplacian_filter_kernel,
+                self.settings.laplacian_blur_kernel,
+                self.settings.laplacian_blur_sigma,
+                self.settings.cuda_device,
             )
 
             laplacian_guide.prepare()
@@ -131,7 +137,8 @@ class Nst(torch.nn.Module):
                 outdir=self.settings.outdir,
                 write_pyramids=self.settings.write_pyramids,
                 write_gradients=self.settings.write_gradients,
-                cuda_device=self.settings.cuda_device
+                cuda_device=self.settings.cuda_device,
+                mask_layers=self.settings.mask_layers
             )
 
             style_gram_guide.prepare()
@@ -148,6 +155,7 @@ class Nst(torch.nn.Module):
                 self.settings.style_pyramid_span,
                 self.settings.style_zoom,
                 self.settings.histogram_weight,
+                self.settings.histogram_bins,
                 outdir=self.settings.outdir,
                 write_pyramids=self.settings.write_pyramids,
                 write_gradients=self.settings.write_gradients,
@@ -166,18 +174,20 @@ class Nst(torch.nn.Module):
 
             self.opt_guides.append(tv_guide)
 
-        if self.settings.temporal_weight:
-            temporal_guide = guides.TemporalGuide(
+        if self.settings.temporal_weight and self.temporal_weight_mask.numel() != 0:
+            temporal_guide = guides.TemporalContentGuide(
                 self.content,
                 self.vgg,
                 self.settings.content_layer,
                 self.settings.content_layer_weight,
-                self.temporal_loss_mask,
+                self.temporal_weight_mask,
                 self.settings.cuda_device
             )
 
             temporal_guide.prepare()
             self.opt_guides.append(temporal_guide)
+        # else:
+        #     print(11.2, self.settings.temporal_weight, self.temporal_weight_mask)
 
     def forward(self):
         n_iter = [self.start_iter]

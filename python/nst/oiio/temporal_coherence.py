@@ -1,3 +1,7 @@
+import re
+import skimage.color as sc
+import skimage.filters as sf
+import skimage.morphology as sm
 import cv2
 import numba
 import kornia
@@ -6,22 +10,80 @@ import numpy as np
 import OpenImageIO as oiio
 import torch
 
+from . import utils
 
-@numba.guvectorize([(numba.float32[:, :, :], numba.float32[:, :, :], numba.float32[:, :, :], numba.float32[:, :, :])],
-                   "(a,b,c),(a,b,c),(a,b,c)->(a,b,c)")
-def depth_warp(img_np, flow_np, depth_np, output):
+
+def depth_warp_files(img, flow, depth, output=None):
+    img_buf = oiio.ImageBuf(img)
+    img_np = img_buf.get_pixels(roi=img_buf.roi_full)
+
+    flow_buf = oiio.ImageBuf(flow)
+    flow_np = flow_buf.get_pixels(roi=flow_buf.roi_full)
+
+    depth_buf = oiio.ImageBuf(depth)
+    depth_np = depth_buf.get_pixels(roi=depth_buf.roi_full)
+
+    if output:
+        output_buf = oiio.ImageBuf(output)
+        output_np = output_buf.get_pixels(roi=output_buf.roi_full)
+    else:
+        x, y, z = flow_np.shape
+        output_np = np.zeros((x, y, z), dtype=np.float32)
+
+    depth_warp(img_np, flow_np, depth_np, output_np)
+
+    return output_np
+
+
+def depth_warp_step(img_fp, flow_fp, depth_fp, from_frame, to_frame, boundary=0):
+    """
+    Warp an input image a specified number of frames using a flow sequence
+    """
+    img_fp_ = img_fp.replace('####', '%04d' % from_frame)
+    img_buf = oiio.ImageBuf(img_fp_)
+    img_np = img_buf.get_pixels(roi=img_buf.roi_full)
+    x, y, z = img_np.shape
+
+    input_np = img_np
+    frame = from_frame
+
+    for step in range(from_frame, to_frame):
+        out_np = np.zeros((x, y, z), dtype=np.float32)
+
+        flow_fp_ = flow_fp.replace('####', '%04d' % (frame))
+        flow_buf = oiio.ImageBuf(flow_fp_)
+        flow_np = flow_buf.get_pixels(roi=flow_buf.roi_full)
+
+        depth_fp_ = depth_fp.replace('####', '%04d' % frame)
+        depth_buf = oiio.ImageBuf(depth_fp_)
+        depth_np = depth_buf.get_pixels(roi=depth_buf.roi_full)
+
+        depth_warp(input_np, flow_np, depth_np, boundary, out_np)
+
+        # the output of this step becomes the input of next step
+        input_np = out_np.copy()
+
+        frame += 1
+
+    return out_np
+
+
+@numba.guvectorize([(numba.float32[:, :, :], numba.float32[:, :, :], numba.float32[:, :, :],
+                     numba.float32, numba.float32[:, :, :])],
+                   "(a,b,c),(a,b,c),(a,b,c),()->(a,b,c)")
+def depth_warp(img_np, flow_np, depth_np, boundary, output):
+
     x, y, z = flow_np.shape
     d = math.ceil(depth_np.max())
     deep_img = np.zeros((x, y, d, z), dtype=np.float32)
 
     for old_x in range(0, x):
         for old_y in range(0, y):
+
             img_value = img_np[old_x][old_y]
 
             # flip axis
             flow_y, flow_x, _ = flow_np[old_x][old_y]
-
-            depth = depth_np[old_x][old_y][0]
 
             min_depth = math.floor(depth_np[old_x][old_y][0])
 
@@ -30,9 +92,12 @@ def depth_warp(img_np, flow_np, depth_np, output):
             min_y = old_y + math.floor(flow_y)
             max_y = old_y + math.ceil(flow_y)
 
-            if min_x not in range(0, x) or min_y not in range(0, y) or max_x not in range(0, x) or max_y not in range(0,
-                                                                                                                      y):
+            if min_x not in range(0, x) or min_y not in range(0, y) or max_x not in range(0, x) or max_y not in range(0, y):
                 continue
+
+            if min(old_x, x-old_x) < boundary or min(old_y, y-old_y) < boundary:
+                if flow_x != 0 and flow_y != 0:
+                    img_value = np.zeros(3, np.float32)
 
             deep_img[min_x][min_y][min_depth] = img_value
             deep_img[max_x][min_y][min_depth] = img_value
@@ -48,99 +113,270 @@ def depth_warp(img_np, flow_np, depth_np, output):
                     break
 
 
-@numba.guvectorize([(numba.float32[:, :, :], numba.float32[:, :, :], numba.float32[:, :, :])],
-                   "(a,b,c),(a,b,c)->(a,b,c)")
-def check_id(crypto1, crypto2, output):
-    x, y, z = crypto1.shape
+@numba.guvectorize([(numba.float32[:, :, :], numba.float32[:, :, :], numba.float32, numba.float32, numba.float32[:, :, :])],
+                   "(a,b,c),(a,b,c),(),()->(a,b,c)")
+def compare_images(img1, img2, rtol, atol, output):
+    x, y, z = img1.shape
 
     for i in range(0, x):
         for j in range(0, y):
-            crypto1_value = crypto1[i][j]
-            crypto2_value = crypto2[i][j]
+            img1_value = img1[i][j]
+            img2_value = img2[i][j]
 
-            if not np.array_equal(crypto1_value, crypto2_value):
+            if False in np.isclose(img1_value, img2_value, rtol=float(rtol), atol=atol):
                 output[i][j] = [0.0, 0.0, 0.0]
 
 
-# not sure this is still necessary
-def make_motion_boundary(flow):
-    b, c, w, h = flow.shape
-    output = torch.ones(b, c, w, h)
-    laplacian = kornia.filters.laplacian(flow, 5, normalized=True)
-
-    @numba.guvectorize([(numba.float32[:, :, :, :], numba.float32[:, :, :, :])], "(m,node,o,p),(m,node,o,p)")
-    def _make_motion_mask(t, output):
-        b, c, w, h = t.shape
-        for i in range(0, w):
-            for j in range(0, h):
-                lvr1 = t[0][2][i][j]
-                if not -0.1 < lvr1 < 0.1:
-                    output[0][0][i][j] = 0.0
-                    output[0][1][i][j] = 0.0
-                    output[0][2][i][j] = 0.0
-
-                lvr2 = t[0][1][i][j]
-                if not -0.1 < lvr2 < 0.1:
-                    output[0][0][i][j] = 0.0
-                    output[0][1][i][j] = 0.0
-                    output[0][2][i][j] = 0.0
-
-    _make_motion_mask(laplacian, output)
-    return output
-
-
-def make_motion_mask(id_path, depth_path, flow_path, id_ref_path, depth=50, median_kernel=5, median_reps=2,
-                     erode_kernel=3):
-    """
-    id_ref_path is the "to" frame, which depends on the direction of the pass,
-    i.e. t-1 for a backwards pass, t+1 for a forewards pass
-
-    depth = '/mnt/ala/research/danielf/2023/disocc/v06/depth.0015.exr'
-    crypto = '/mnt/ala/research/danielf/2023/disocc/v02/cryptoRGB.0015.exr'
-    crypto2 = '/mnt/ala/research/danielf/2023/disocc/v02/cryptoRGB.0014.exr'
-    mfore = '/mnt/ala/research/danielf/2023/disocc/v06/motionBack.0015.exr'
-    mask = make_motion_mask(crypto, depth, mfore, crypto2)
-    mask_output = '/mnt/ala/research/danielf/warp/disocc/motionMask.v002.1015.exr'
-    utils.np_write(mask, mask_output, ext='exr')
-    """
+# # not sure this is still necessary
+# def make_motion_boundary(flow):
+#     b, c, w, h = flow.shape
+#     output = torch.ones(b, c, w, h)
+#     laplacian = kornia.filters.laplacian(flow, 5, normalized=True)
+#
+#     @numba.guvectorize([(numba.float32[:, :, :, :], numba.float32[:, :, :, :])], "(m,node,o,p),(m,node,o,p)")
+#     def _make_motion_mask(t, output):
+#         b, c, w, h = t.shape
+#         for i in range(0, w):
+#             for j in range(0, h):
+#                 lvr1 = t[0][2][i][j]
+#                 if not -0.1 < lvr1 < 0.1:
+#                     output[0][0][i][j] = 0.0
+#                     output[0][1][i][j] = 0.0
+#                     output[0][2][i][j] = 0.0
+#
+#                 lvr2 = t[0][1][i][j]
+#                 if not -0.1 < lvr2 < 0.1:
+#                     output[0][0][i][j] = 0.0
+#                     output[0][1][i][j] = 0.0
+#                     output[0][2][i][j] = 0.0
+#
+#     _make_motion_mask(laplacian, output)
+#     return output
 
 
-    id_buf = oiio.ImageBuf(id_path)
-    id_np = id_buf.get_pixels(roi=id_buf.roi_full)
+def make_motion_mask(depth_path,
+                     flow_path,
+                     id_path,
+                     albedo_path,
+                     render_path,
+                     frame,
+                     out_path,
+                     debug_masks=False,
+                     direction=1,
 
-    depth_buf = oiio.ImageBuf(depth_path)
+                     id_erode=10,
+                     id_area_threshold=64,
+                     id_connectivity=1,
+                     id_blur=5,
+                     id_rtol=1e-05,
+                     id_atol=1e-02,
+
+                     albedo_erode=10,
+                     albedo_area_threshold=64,
+                     albedo_connectivity=1,
+                     albedo_blur=5,
+                     albedo_rtol=1e-02,
+                     albedo_atol=1e-01,
+
+                     render_erode=3,
+                     render_blur=4,
+                     render_connectivity=1,
+                     render_area_threshold=30,
+                     render_rtol=0.3,
+                     render_atol=1e-08):
+
+    depth_path_ = depth_path.replace('####', '%04d' % frame)
+    flow_path_ = flow_path.replace('####', '%04d' % frame)
+    id_path_ = id_path.replace('####', '%04d' % frame)
+    id_ref_path_ = id_path.replace('####', '%04d' % (frame + direction))
+    albedo_path_ = albedo_path.replace('####', '%04d' % frame)
+    albedo_ref_path_ = albedo_path.replace('####', '%04d' % (frame + direction))
+    render_path_ = render_path.replace('####', '%04d' % frame)
+    render_ref_path_ = render_path.replace('####', '%04d' % (frame + direction))
+
+    depth_buf = oiio.ImageBuf(depth_path_)
     depth_np = depth_buf.get_pixels(roi=depth_buf.roi_full)
 
-    flow_buf = oiio.ImageBuf(flow_path)
+    flow_buf = oiio.ImageBuf(flow_path_)
     flow_np = flow_buf.get_pixels(roi=flow_buf.roi_full)
 
     x, y, z = flow_np.shape
-    warp_output = np.zeros((x, y, z), dtype=np.float32)
 
-    # get motionm boundaries - dont think we need this anymore
-    # flow_tensor = utils.buf_to_tensor(flow_buf, False, raw=True)
-    # motion_boundary = make_motion_boundary(flow_tensor)[0].transpose(0,1).transpose(1, 2)
-    # motion_boundary_np = motion_boundary.numpy()
+    #####################################################################
+    # id
+    #####################################################################
+    id_buf = oiio.ImageBuf(id_path_)
+    id_np = id_buf.get_pixels(roi=id_buf.roi_full)
 
-    # do warp
-    depth_warp(id_np, flow_np, depth_np, warp_output)
-
-    id_ref_buf = oiio.ImageBuf(id_ref_path)
+    id_ref_buf = oiio.ImageBuf(id_ref_path_)
     id_ref_np = id_ref_buf.get_pixels(roi=id_ref_buf.roi_full)
 
-    check_id_output = np.ones((x, y, z), dtype=np.float32)
+    id_warp = np.zeros((x, y, z), dtype=np.float32)
+    depth_warp(id_np, flow_np, depth_np, id_warp)
 
-    # mask by id correspondences
-    check_id(warp_output, id_ref_np, check_id_output)
+    id_compare = np.ones((x, y, z), dtype=np.float32)
+    compare_images(id_warp, id_ref_np, id_rtol, id_atol, id_compare)
 
-    for med in range(0, median_reps):
-        check_id_output = cv2.medianBlur(check_id_output, median_kernel)
+    id_gray = sc.rgb2gray(id_compare)
+    # id_gray = sm.area_closing(id_gray, area_threshold=id_area_threshold, connectivity=id_connectivity)
+    id_gray = sm.area_opening(id_gray, area_threshold=id_area_threshold, connectivity=id_connectivity)
+    id_footprint = sm.disk(id_erode)
+    id_gray = sm.erosion(id_gray, id_footprint)
+    if id_blur:
+        id_gray = sf.gaussian(id_gray, sigma=id_blur, truncate=1.0)
+    id_compare = sc.gray2rgb(id_gray)
 
-    kernel = np.ones((erode_kernel, erode_kernel), np.uint8)
-    check_id_output = cv2.erode(check_id_output, kernel)
+    #####################################################################
+    # albedo
+    #####################################################################
+    # albedo_buf = oiio.ImageBuf(albedo_path_)
+    # albedo_np = albedo_buf.get_pixels(roi=albedo_buf.roi_full)
+    #
+    # albedo_ref_buf = oiio.ImageBuf(albedo_ref_path_)
+    # albedo_ref_np = albedo_ref_buf.get_pixels(roi=albedo_ref_buf.roi_full)
+    #
+    # albedo_warp = np.zeros((x, y, z), dtype=np.float32)
+    # depth_warp(albedo_np, flow_np, depth_np, albedo_warp)
+    #
+    # albedo_compare = np.ones((x, y, z), dtype=np.float32)
+    # compare_images(albedo_warp, albedo_ref_np, albedo_rtol, albedo_atol, albedo_compare)
+    #
+    # albedo_gray = sc.rgb2gray(albedo_compare)
+    # # albedo_gray = sm.area_closing(albedo_gray, area_threshold=albedo_area_threshold, connectivity=albedo_connectivity)
+    # albedo_gray = sm.area_opening(albedo_gray, area_threshold=albedo_area_threshold, connectivity=albedo_connectivity)
+    # albedo_footprint = sm.disk(albedo_erode)
+    # albedo_gray = sm.erosion(albedo_gray, albedo_footprint)
+    # if albedo_blur:
+    #     albedo_gray = sf.gaussian(albedo_gray, sigma=albedo_blur, truncate=1.0)
+    # albedo_compare = sc.gray2rgb(albedo_gray)
+    
 
-    # return np.multiply(check_id_output, motion_boundary_np)
-    return check_id_output
+    #####################################################################
+    # render
+    #####################################################################
+    render_buf = oiio.ImageBuf(render_path_)
+    render_np = render_buf.get_pixels(roi=render_buf.roi_full)
+
+    render_ref_buf = oiio.ImageBuf(render_ref_path_)
+    render_ref_np = render_ref_buf.get_pixels(roi=render_ref_buf.roi_full)
+
+    render_warp = np.zeros((x, y, z), dtype=np.float32)
+    depth_warp(render_np, flow_np, depth_np, render_warp)
+
+    render_compare = np.ones((x, y, z), dtype=np.float32)
+    compare_images(render_warp, render_ref_np, render_rtol, render_atol, render_compare)
+
+    render_gray = sc.rgb2gray(render_compare)
+    render_gray = sm.area_closing(render_gray, area_threshold=render_area_threshold, connectivity=render_connectivity)
+    render_gray = sm.area_opening(render_gray, area_threshold=render_area_threshold, connectivity=render_connectivity)
+    render_footprint = sm.disk(render_erode)
+    render_gray = sm.erosion(render_gray, render_footprint)
+    if render_blur:
+        render_gray = sf.gaussian(render_gray, sigma=render_blur, truncate=1.0)
+    render_compare = sc.gray2rgb(render_gray)
+
+    #####################################################################
+    # combine
+    #####################################################################
+
+    # output = id_compare * albedo_compare * render_compare
+    output = id_compare * render_compare
+    # output = render_compare
+
+    if debug_masks:
+        render_check_path = re.sub(r'(\.[0-9]{4}\.)', r'_renderCheck\1', out_path)
+        utils.np_write(render_compare, render_check_path, ext='exr')
+
+        # albedo_check_path = re.sub(r'(\.[0-9]{4}\.)', r'_albedoCheck\1', out_path)
+        # utils.np_write(albedo_compare, albedo_check_path, ext='exr')
+
+        id_check_path = re.sub(r'(\.[0-9]{4}\.)', r'_idCheck\1', out_path)
+        utils.np_write(id_compare, id_check_path, ext='exr')
+
+    utils.np_write(output, out_path, ext='exr')
+
+
+def make_motion_mask_step(depth_path,
+                          flow_path,
+                          id_path,
+                          render_path,
+                          from_frame,
+                          to_frame,
+                          out_path,
+                          debug_masks=False,
+
+                          id_erode=10,
+                          id_area_threshold=64,
+                          id_connectivity=1,
+                          id_blur=5,
+                          id_rtol=1e-05,
+                          id_atol=1e-02,
+
+                          render_erode=3,
+                          render_blur=4,
+                          render_connectivity=1,
+                          render_area_threshold=30,
+                          render_rtol=0.3,
+                          render_atol=1e-08):
+
+    id_ref_path_ = id_path.replace('####', '%04d' % to_frame)
+    render_ref_path_ = render_path.replace('####', '%04d' % to_frame)
+
+    #####################################################################
+    # id
+    #####################################################################
+    id_ref_buf = oiio.ImageBuf(id_ref_path_)
+    id_ref_np = id_ref_buf.get_pixels(roi=id_ref_buf.roi_full)
+    x, y, z = id_ref_np.shape
+
+    id_warp = depth_warp_step(id_path, flow_path, depth_path, from_frame, to_frame)
+    id_compare = np.ones((x, y, z), dtype=np.float32)
+    compare_images(id_warp, id_ref_np, id_rtol, id_atol, id_compare)
+
+    id_gray = sc.rgb2gray(id_compare)
+    id_gray = sm.area_opening(id_gray, area_threshold=id_area_threshold, connectivity=id_connectivity)
+    id_footprint = sm.disk(id_erode)
+    id_gray = sm.erosion(id_gray, id_footprint)
+    if id_blur:
+        id_gray = sf.gaussian(id_gray, sigma=id_blur, truncate=1.0)
+    id_compare = sc.gray2rgb(id_gray)
+
+    #####################################################################
+    # render
+    #####################################################################
+    render_ref_buf = oiio.ImageBuf(render_ref_path_)
+    render_ref_np = render_ref_buf.get_pixels(roi=render_ref_buf.roi_full)
+
+    render_warp = depth_warp_step(render_path, flow_path, depth_path, from_frame, to_frame)
+
+    render_compare = np.ones((x, y, z), dtype=np.float32)
+    compare_images(render_warp, render_ref_np, render_rtol, render_atol, render_compare)
+
+    render_gray = sc.rgb2gray(render_compare)
+    render_gray = sm.area_closing(render_gray, area_threshold=render_area_threshold, connectivity=render_connectivity)
+    render_gray = sm.area_opening(render_gray, area_threshold=render_area_threshold, connectivity=render_connectivity)
+    render_footprint = sm.disk(render_erode)
+    render_gray = sm.erosion(render_gray, render_footprint)
+    if render_blur:
+        render_gray = sf.gaussian(render_gray, sigma=render_blur, truncate=1.0)
+    render_compare = sc.gray2rgb(render_gray)
+
+    #####################################################################
+    # combine
+    #####################################################################
+
+    output = id_compare * render_compare
+
+    if debug_masks:
+        render_check_path = re.sub(r'(\.[0-9]{4}\.)', r'_renderCheck\1', out_path)
+        utils.np_write(render_compare, render_check_path, ext='exr')
+
+        id_check_path = re.sub(r'(\.[0-9]{4}\.)', r'_idCheck\1', out_path)
+        utils.np_write(id_compare, id_check_path, ext='exr')
+
+    utils.np_write(output, out_path, ext='exr')
+
+
 
 
 

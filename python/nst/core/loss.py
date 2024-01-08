@@ -72,7 +72,7 @@ class MipGramMSELoss(nn.Module):
 
 class MipHistogramMSELoss(nn.Module):
 
-    def computeHistogramMatchedActivation(self, input, target):
+    def computeHistogramMatchedActivation(self, input, target, bins):
         target_ = target[0]
         minv = target[1]
         maxv = target[2]
@@ -82,7 +82,8 @@ class MipHistogramMSELoss(nn.Module):
         assert(target_.shape[0] == input.shape[0])
         assert(minv.shape[0] == input.shape[0])
         assert(maxv.shape[0] == input.shape[0])
-        assert(target_.shape[1] == 256)
+        # todo: get n. bins from settings
+        assert(target_.shape[1] == bins)
         res = input.data.clone() # Clone, we don'input want to change the values of features map or target histogram
         histogram.matchHistogram(res, target_.clone())
         for c in range(res.size(0)):
@@ -90,7 +91,7 @@ class MipHistogramMSELoss(nn.Module):
             res[c].add_(minv[c])           # Values in range [min, max]
         return res.data.unsqueeze(0)
 
-    def forward(self, input, target, mip_weights):
+    def forward(self, input, target, mip_weights, bins):
         opt_layer_activation_pyramid = input
         target_layer_histogram_pyramid = target
         loss = 0
@@ -100,7 +101,8 @@ class MipHistogramMSELoss(nn.Module):
             opt_activation = opt_layer_activation_pyramid[index]
 
             histogramCorrectedTarget = self.computeHistogramMatchedActivation(opt_activation[0],
-                                                                              target_histogram)
+                                                                              target_histogram,
+                                                                              bins)
 
             a_ = torch.sub(opt_activation[0], histogramCorrectedTarget)
             b_ = torch.pow(a_, 2)
@@ -123,3 +125,14 @@ class MSELoss(nn.Module):
         c_ = torch.mean(b_)
         c_ *= mip_weight
         return c_
+
+
+# class MaskedMSELoss(nn.Module):
+#     def forward(self, input, target, mip_weight):
+#         a_ = torch.sub(input, target)
+#         b_ = torch.pow(a_, 2)
+#         c_ = torch.mean(b_)
+#         c_ *= mip_weight
+#         return c_
+#
+#

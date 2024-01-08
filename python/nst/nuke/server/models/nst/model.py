@@ -26,6 +26,7 @@ class Model(BaseModel):
                         "style_zoom",
                         "gram_weight",
                         "histogram_weight",
+                        "histogram_bins",
                         "tv_weight",
                         "laplacian_weight",
                         "style_mips",
@@ -56,6 +57,7 @@ class Model(BaseModel):
         self.style_zoom = 1.0
         self.gram_weight = 1.0
         self.histogram_weight = 10000.0
+        self.histogram_bins = 256
         self.tv_weight = 5.0
         self.laplacian_weight = 1.0
         self.style_mip_weights = '1.0,1.0,1.0,1.0'
@@ -99,6 +101,7 @@ class Model(BaseModel):
         self.nst_settings.style_zoom = float(self.style_zoom)
         self.nst_settings.gram_weight = float(self.gram_weight)
         self.nst_settings.histogram_weight = float(self.histogram_weight)
+        self.nst_settings.histogram_bins = int(self.histogram_bins)
         self.nst_settings.tv_weight = float(self.tv_weight)
         self.nst_settings.laplacian_weight = float(self.laplacian_weight)
         self.nst_settings.style_mips = int(self.style_mips)

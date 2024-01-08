@@ -13,7 +13,7 @@ class OptGuide(nn.Module):
         super(OptGuide, self).__init__()
         self.name = ""
         self.cuda = cuda
-        self.target_map = None
+        self.target_map = torch.Tensor(0)
         self.loss_layers = []
         self.loss_function = None
         self.weight = 1.0
@@ -24,7 +24,7 @@ class OptGuide(nn.Module):
 
 
 class ContentGuide(OptGuide):
-    def __init__(self, tensor, vgg, layer, layer_weight, cuda_device=None):
+    def __init__(self, tensor, vgg, layer, layer_weight, mask, cuda_device=None):
         super(ContentGuide, self).__init__()
         self.name = "content guide"
         self.tensor = tensor
@@ -65,50 +65,27 @@ class ContentGuide(OptGuide):
         return opt_tensor.grad.clone()
 
 
-class TemporalGuide(OptGuide):
-    def __init__(self, tensor, vgg, layer, layer_weight, mask,
-                 cuda_device=None):
-        super(ContentGuide, self).__init__()
-        self.name = "content guide"
-        self.tensor = tensor
-        self.target = None
-        self.weight = layer_weight
-        self.vgg = vgg
+class TemporalContentGuide(ContentGuide):
+    def __init__(self, tensor, vgg, layer, layer_weight, mask, cuda_device=None):
+        super(TemporalContentGuide, self).__init__(tensor, vgg, layer, layer_weight, mask, cuda_device=cuda_device)
+        self.name = "temporal guide"
         self.mask = mask
-        self.layer = layer
-        self.cuda_device = cuda_device
 
     def prepare(self):
         self.target = self.vgg([self.tensor], [self.layer])[0]
+        b, c, h, w = self.target[0].size()
+        resized_mask = utils.rescale_tensor_by_tensor(self.mask, self.target[0])
+        normalised_mask = torch.sqrt(resized_mask)
 
-        # mresize mask and apply to target
+        print(4.0, normalised_mask.sum())
 
-    def loss(self, opt, target):
-        loss_fn = loss.MipMSELoss()
+        print(4.1, self.target[0].sum())
 
-        if self.cuda_device:
-            loss_fn = loss_fn.cuda()
+        # this isn't doing what I think it should be doing:
+        for i in range(0, c):
+            self.target[0][0][i] *= normalised_mask[0][0]
 
-        return loss_fn(opt, target)
-
-    def forward(self, optimiser, opt_tensor, loss, iteration):
-        if self.cuda_device:
-            cuda = True
-        else:
-            cuda = False
-
-        opt_pyramid = utils.make_gaussian_pyramid(opt_tensor, 1, 1, cuda=cuda)
-        opt_activation = self.vgg(opt_pyramid, [self.layer])[0]
-
-        optimiser.zero_grad()
-        weighted_loss = self.loss(opt_activation, self.target) * self.weight
-
-        # backpropagate our weighted loss to calculate gradients
-        weighted_loss.backward(retain_graph=True)
-        # from here on, opt_tensor.grad contains the derived gradients
-
-        loss += weighted_loss
-        return opt_tensor.grad.clone()
+        print(4.2, self.target[0].sum())
 
 
 class TVGuide(OptGuide):
@@ -142,12 +119,18 @@ class LaplacianGuide(OptGuide):
                  tensor,
                  weight,
                  layer,
+                 laplacian_kernel,
+                 blur_kernel,
+                 blur_sigma,
                  cuda_device=None):
         super(LaplacianGuide, self).__init__()
         self.vgg = vgg
         self.tensor = tensor
         self.weight = weight
         self.layer = layer
+        self.laplacian_kernel = laplacian_kernel
+        self.blur_kernel = blur_kernel
+        self.blur_sigma = blur_sigma
         self.cuda_device = cuda_device
         self.target = None
 
@@ -156,9 +139,9 @@ class LaplacianGuide(OptGuide):
         self.target = self.vgg([target_deriv], [self.layer])[0]
 
     def _get_laplacian(self, t):
-        t = kornia.filters.gaussian_blur2d(t, (9, 9), (8, 8))
-        t = kornia.filters.laplacian(t, 21)
-        t = kornia.filters.laplacian(t, 21)
+        t = kornia.filters.gaussian_blur2d(t, (self.blur_kernel, self.blur_kernel), (self.blur_sigma, self.blur_sigma))
+        t = kornia.filters.laplacian(t, self.laplacian_kernel)
+        t = kornia.filters.laplacian(t, self.laplacian_kernel)
         return t
 
     def loss(self, opt, target):
@@ -209,8 +192,14 @@ class StyleGramGuide(OptGuide):
         super(StyleGramGuide, self).__init__()
         self.name = "style gram guide"
         self.styles = styles
-        self.target = []
         self.target_maps = []
+
+        for s in styles:
+            if s.target_map.numel() != 0:
+                self.target_maps.append(s.target_map)
+
+        self.target = []
+
         self.vgg = vgg
         self.cuda_device = cuda_device
         self.style_mips = style_mips
@@ -236,6 +225,9 @@ class StyleGramGuide(OptGuide):
             tensor = style.tensor
 
             if style.target_map.numel() != 0:
+                # normalise the map
+                style.target_map *= 1000
+
                 self.target_maps += [style.target_map] * len(self.layers)
             else:
                 self.target_maps += [None] * len(self.layers)
@@ -278,6 +270,8 @@ class StyleGramGuide(OptGuide):
         return loss_fn(opt, target, weight) * self.weight
 
     def forward(self, optimiser, opt_tensor, loss, iteration):
+        # print(5.0)
+
         if self.cuda_device:
             cuda = True
         else:
@@ -314,10 +308,13 @@ class StyleGramGuide(OptGuide):
 
             # if a target map is provided, apply it to the gradients
             if torch.is_tensor(self.target_maps[index]) and layer_name in self.mask_layers:
+                # print(5.5)
                 b, c, w, h = opt_tensor.grad.size()
 
                 for i in range(0, c):
                     layer_gradients[0][i] *= self.target_maps[index][0][0]
+            # else:
+            #     print(5.6)
 
             style_gradients.append(layer_gradients)
 
@@ -336,6 +333,7 @@ class StyleHistogramGuide(OptGuide):
                  style_pyramid_span,
                  style_zoom,
                  weight,
+                 bins,
                  cuda_device=None,
                  write_gradients=False,
                  write_pyramids = False,
@@ -357,6 +355,7 @@ class StyleHistogramGuide(OptGuide):
         self.style_pyramid_span = style_pyramid_span
         self.zoom = style_zoom
         self.weight = weight
+        self.bins = bins
         self.write_gradients = write_gradients
         self.write_pyramids = write_pyramids
         self.outdir = outdir
@@ -388,13 +387,11 @@ class StyleHistogramGuide(OptGuide):
 
             style_pyramid_activations = self.vgg(style_pyramid, self.layers, mask=style.alpha)
 
-            bins = 256
-
             for vgg_layer in style_pyramid_activations:
                 histogram_pyramid = []
                 for mip_activations in vgg_layer:
 
-                    hist = histogram.computeHistogram(mip_activations[0], bins)
+                    hist = histogram.computeHistogram(mip_activations[0], self.bins)
                     min_ = torch.min(mip_activations[0].view(mip_activations.shape[1], -1), 1)[0].data.clone()
                     max_ = torch.max(mip_activations[0].view(mip_activations.shape[1], -1), 1)[0].data.clone()
                     histogram_pyramid.append((hist, min_, max_))
@@ -407,7 +404,7 @@ class StyleHistogramGuide(OptGuide):
         if self.cuda_device:
             loss_fn = loss_fn.cuda()
 
-        return loss_fn(opt, target, weight) * self.weight
+        return loss_fn(opt, target, weight, self.bins) * self.weight
 
     def forward(self, optimiser, opt_tensor, loss, iteration):
         if self.cuda_device:

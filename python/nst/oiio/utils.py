@@ -1,5 +1,5 @@
 """
-Repetitive utility functions that have nothing to do with style transfer
+Repetitive utility functions
 """
 import math
 from typing import List
@@ -7,8 +7,10 @@ import subprocess
 import shutil
 import os
 
+import kornia
 import numpy as np
 import torch
+from torch import nn
 from torchvision import transforms
 import OpenImageIO as oiio
 from OpenImageIO import ImageBuf, ImageSpec, ROI
@@ -122,6 +124,21 @@ def pt_to_exr(inpath, raw=False, cleanup=False):
         os.remove(inpath)
 
 
+def jitter(img):
+    b, c, h, w = img.size()
+
+    rand_rotation = 1.0
+    rand_crop_scale = (0.97, 1.0)
+    rand_crop_ratio = (0.97, 1.03)
+
+    transform = nn.Sequential(
+        kornia.augmentation.RandomResizedCrop(size=(h, w), scale=rand_crop_scale, ratio=rand_crop_ratio),
+        kornia.augmentation.RandomRotation(degrees=rand_rotation)
+    )
+
+    return transform(img)
+
+
 def transform_image_tensor(tensor: torch.Tensor, do_cuda: bool, raw=False) -> torch.Tensor:
 
     tforms_ = []
@@ -156,6 +173,7 @@ def transform_image_tensor(tensor: torch.Tensor, do_cuda: bool, raw=False) -> to
 
 def image_to_tensor(image: str, do_cuda: bool, resize: float=None, colorspace=None, raw=False) -> torch.Tensor:
         # note: oiio implicitely converts to 0-1 floating point data here regardless of format:
+
         buf = ImageBuf(image)
 
         o_width = buf.oriented_full_width

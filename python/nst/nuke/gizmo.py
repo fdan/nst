@@ -1,3 +1,5 @@
+import os
+import uuid
 import nuke
 import nukescripts
 
@@ -44,6 +46,7 @@ def create_expressions(mlc, parent):
         "content_layer_weight",
         "gram_weight",
         "histogram_weight",
+        "histogram_bins",
         "tv_weight",
         "laplacian_weight",
     ]
@@ -61,13 +64,45 @@ def create_expressions(mlc, parent):
     for float_knob in float_knobs:
         try:
             mlc.knob(float_knob).setExpression('[python {nuke.thisNode().parent()[\'%s\'].getValue()}]' % float_knob)
-            # mlc.knob(float_knob).setExpression('%s.%s' % (parent.name(), float_knob))
         except:
-            print(1.1, float_knob)
+            print('cannot set expression on:', float_knob)
 
     for str_knob in str_knobs:
-        print(1.2, str_knob)
         mlc.knob(str_knob).setValue('nuke.thisNode().parent()[\'%s\'].getValue()' % str_knob)
-        # value = str(parent[str_knob].getValue())
-        # mlc.knob(str_knob).setValue(value)
 
+
+def snapshot():
+    n = nuke.thisNode()
+    snaps = [x for x in n.nodes() if x.name() == "snapshot"]
+    assert len(snaps) == 1
+    snap = snaps[0]
+    fpk = snap.knob('file')
+    uid = str(uuid.uuid4()).split('-')[-1]
+    print('snapshot uuid:', uid)
+
+    snapshot_dir = os.getenv('NST_SNAPSHOT_DIR')
+    os.makedirs(snapshot_dir, exist_ok=True)
+
+    ofp = '%s/%s.exr' % (snapshot_dir, uid)
+    fpk.setValue(ofp)
+    frame = nuke.frame()
+    nuke.render(snap, frame, frame)
+
+    mmd = n.node('ModifySnapMetaData')
+    mmd['metadata'].fromScript("")
+
+    a = str(n).split('\n')
+    metaKeys = []
+    for i in a:
+        try:
+            key, value = i.split(' ')
+            metaKeys.append('{set %s %s}' % (key, value))
+        except:
+            pass
+
+    mmd['metadata'].fromScript("\n".join(metaKeys))
+
+    n.end()
+
+    r1 = nuke.createNode('Read')
+    r1.knob('file').setValue(ofp)

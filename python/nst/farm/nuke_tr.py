@@ -12,6 +12,7 @@ import os
 
 def init_write_nodes(node):
     out_fp = node.knob('out_fp').value()
+    out_fp = out_fp.replace('%04d', '####')
     out_dir = os.path.abspath(os.path.join(out_fp, os.path.pardir))
     now = datetime.datetime.today()
     temp_dir = '%s-%s-%s--%s-%s-%s' % (now.year, now.month, now.day, now.hour, now.minute, now.second)
@@ -27,10 +28,18 @@ def init_write_nodes(node):
     node.node('style_write').knob('file').setValue(style_fp)
     node.node('style_target_write').knob('file').setValue(style_target_fp)
 
+    # change gizmo switches to use farm resolution
+    lookdev_resolution = node.knob('resolution').value()
+    farm_resolution = node.knob('farm_resolution').value()
+    node.knob('resolution').setValue(farm_resolution)
+
     nuke.scriptSave()
     orig_script_path = nuke.scriptName()
     archive_script_path = os.path.join(temp_dir, os.path.basename(orig_script_path))
     shutil.copy(orig_script_path, archive_script_path)
+
+    # swap back to the original lookdev resolution
+    node.knob('resolution').setValue(lookdev_resolution)
 
     pd = {
         'temp_dir': temp_dir,
@@ -54,8 +63,6 @@ def nuke_submit(node, dry_run=False):
 
     cache_paths = init_write_nodes(node)
 
-
-
     ws = settings.WriterSettings()
 
     script_path = cache_paths['script_path']
@@ -68,15 +75,21 @@ def nuke_submit(node, dry_run=False):
     ws.core.style_mips = int(node.knob('farm_style_mips').value())
     ws.core.learning_rate = float(node.knob('farm_learning_rate').value())
     ws.core.iterations = int(node.knob('farm_iterations').value())
-    ws.core.log_iterations = 1
+    ws.core.log_iterations = 10
 
     proxy_scale = float(node.knob('proxy_scale').value())
     nuke_pyramid_span = float(node.knob('style_pyramid_span').value())
     nuke_style_zoom = float(node.knob('style_zoom').value())
-    ws.core.pyramid_span = nuke_pyramid_span * proxy_scale # check this is correct
-    ws.core.zoom = nuke_style_zoom / proxy_scale # check this is correct
+    ws.core.style_pyramid_span = nuke_pyramid_span * proxy_scale
+    ws.core.style_zoom = nuke_style_zoom / proxy_scale
 
-    ws.core.style_mips = int(node.knob('style_mips').value())
+    # scale laplacian filters if necessary
+    ws.core.laplacian_filter_kernel /= proxy_scale
+    ws.core.laplacian_filter_kernel = int(ws.core.laplacian_filter_kernel + 1)
+    ws.core.laplacian_blur_kernel /= proxy_scale
+    ws.core.laplacian_blur_kernel = int(ws.core.laplacian_blur_kernel + 1)
+    # ws.core.laplacian_blur_sigma /= proxy_scale
+
     ws.core.mip_weights = [float(x) for x in node.knob('style_mip_weights').value().split(',')]
     ws.core.style_layers = node.knob('style_layers').value().split(',')
     ws.core.mask_layers = node.knob('mask_layers').value().split(',')
@@ -92,7 +105,6 @@ def nuke_submit(node, dry_run=False):
     job.title = node.knob('job_name').value()
     job.service = node.knob('service_key').value()
     job.tier = node.knob('tier').value()
-    # job.atleast = str(int(node.knob('atleast').value()))
     job.atmost = int(ws.core.cpu_threads)
     frames = str(node.knob('frames').value())
 
@@ -105,7 +117,18 @@ def nuke_submit(node, dry_run=False):
     rez_packages = 'rez-pkgs=' + rez_resolve
 
     # nuke job to cache inputs
-    write_nodes = ','.join(['%s.%s' % (node.name(), x.name()) for x in node.nodes() if x.Class() == 'Write'])
+    write_nodes = []
+    for x in node.nodes():
+        if x.Class() != 'Write':
+            continue
+        if 'snapshot' in x.name():
+            continue
+        if not x.knob('file').value():
+            continue
+        write_nodes.append('%s.%s' % (node.name(), x.name()))
+    write_nodes = ','.join(write_nodes)
+
+    # write_nodes = ','.join(['%s.%s' % (node.name(), x.name()) for x in node.nodes() if x.Class() == 'Write'])
 
     nuke_cmd = ['nukex_run']
     nuke_cmd += ['-t']
@@ -173,11 +196,10 @@ def nuke_submit(node, dry_run=False):
         command_3 = tractor.api.author.Command(argv=frame_cmd, envkey=envkey_oiio)
         frame_task.addCommand(command_3)
 
-
-
-
-    print(job.asTcl())
+    # print(job.asTcl())
 
     if not dry_run:
-        j = job.spool()
-        print(1.1, dir(j))
+        try:
+            job.spool()
+        except:
+            pass

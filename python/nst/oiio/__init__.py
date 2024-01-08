@@ -30,6 +30,16 @@ class StyleWriter(object):
         self.settings.opt_image = opt_image
         self.settings.content = content
         self.output_dir = ''
+        self._prepared = False
+
+        # # pretty sure this can live in the constructor?
+        # if self.settings.core.engine == "gpu":
+        #     self.settings.core.cuda = True
+        # elif self.settings.core.engine == "cpu":
+        #     self.settings.core.cuda = False
+        #
+        # self.nst = model.Nst()
+        # self.nst.settings = self.settings.core
 
     def load(self, fp):
         self.settings.load(fp)
@@ -38,6 +48,8 @@ class StyleWriter(object):
         # pretty sure this is unecessary
         # self.vgg, self.settings.core.cuda = core_utils.get_vgg(self.settings.core.engine,
         #                                                        self.settings.core.model_path)
+        if self._prepared:
+            return
 
         if self.settings.core.engine == "gpu":
             self.settings.core.cuda = True
@@ -47,6 +59,8 @@ class StyleWriter(object):
         self.nst = model.Nst()
         self.nst.settings = self.settings.core
 
+        self._prepared = True
+
     def get_output_dir(self):
         if not self.output_dir:
             self.output_dir = os.path.abspath(os.path.join(self.settings.out, (os.path.pardir)))
@@ -55,21 +69,19 @@ class StyleWriter(object):
     def write(self) -> None:
 
         frame = self.settings.frame
-        # print(2.0, frame)
-        # print(self.settings)
+        if frame:
+            if self.settings.content:
+                if self.settings.content.rgb_filepath:
+                    self.settings.content.rgb_filepath = re.sub(FRAME_REGEX, ".%s." % frame, self.settings.content.rgb_filepath)
+                    # print(2.1, self.settings.content.rgb_filepath)
 
-        if self.settings.content:
-            if self.settings.content.rgb_filepath:
-                self.settings.content.rgb_filepath = re.sub(FRAME_REGEX, ".%s." % frame, self.settings.content.rgb_filepath)
-                print(2.1, self.settings.content.rgb_filepath)
+            if self.settings.opt_image:
+                if self.settings.opt_image.rgb_filepath:
+                    self.settings.opt_image.rgb_filepath = re.sub(FRAME_REGEX, ".%s." % frame, self.settings.opt_image.rgb_filepath)
+                    # print(2.2, self.settings.opt_image.rgb_filepath)
 
-        if self.settings.opt_image:
-            if self.settings.opt_image.rgb_filepath:
-                self.settings.opt_image.rgb_filepath = re.sub(FRAME_REGEX, ".%s." % frame, self.settings.opt_image.rgb_filepath)
-                print(2.2, self.settings.opt_image.rgb_filepath)
-
-        if self.settings.out:
-            self.settings.out = re.sub(FRAME_REGEX, ".%s." % frame, self.settings.out)
+            if self.settings.out:
+                self.settings.out = re.sub(FRAME_REGEX, ".%s." % frame, self.settings.out)
 
         out_dir = os.path.abspath(os.path.join(self.settings.out, os.path.pardir))
         os.makedirs(out_dir, exist_ok=True)
@@ -84,6 +96,7 @@ class StyleWriter(object):
         self.nst.styles = self.prepare_styles()
         self.nst.prepare()
         assert self.settings.core == self.nst.settings
+        # print(5.5, self.nst.settings)
 
         # set num cpus
         torch.set_num_threads = int(self.settings.core.cpu_threads)
@@ -136,11 +149,11 @@ class StyleWriter(object):
 
     def prepare_opt(self):
 
-        if self.settings.core.temporal_weight:
-            this_frame = int(self.settings.frame) + int(self.settings.pre)
-            re.sub(FRAME_REGEX, )
-            pass
-            # 1.  check if prev frame output exists
+        # if self.settings.core.temporal_weight:
+        #     this_frame = int(self.settings.frame) + int(self.settings.pre)
+        #     re.sub(FRAME_REGEX, ".%s." % this_frame)
+        #     pass
+        #     # 1.  check if prev frame output exists
 
 
         opt_filepath = self.settings.opt_image.rgb_filepath
@@ -278,45 +291,63 @@ class AnimWriter(StyleWriter):
 
         return tensor
 
-    def prepare_opt(self):
+    # def prepare_opt(self):
+    #
+    #     opt_filepath = self.settings.opt_image.rgb_filepath
+    #     opt_tensor = self.load_output(opt_filepath)
+    #
+    #     if self.settings.core.temporal_weight:
+    #         # prev frame can be +1 or -1 depending on starting pass
+    #         prev_frame = int(self.settings.frame) - self.settings.starting_pass
+    #         print('prev frame:', prev_frame)
+    #         prev_output = re.sub(FRAME_REGEX, prev_frame, self.settings.out)
+    #
+    #         if os.path.isfile(prev_output):
+    #             # slide to a numpy image
+    #             prev_opt = self.load_output(prev_output)
+    #             prev_opt_np = '' # to cpu, to numpy, slice, transpose?
+    #
+    #             # load flow
+    #             if self.settings.starting_pass:
+    #                 flow_path = self.settings.motion_fore
+    #             else:
+    #                 flow_path = self.settings.motion_back
+    #             flow_path = re.sub(FRAME_REGEX, prev_frame, flow_path)
+    #             flow_buf = oiio.ImageBuf(flow_path)
+    #             flow_np = flow_buf.get_pixels(roi=flow_buf.roi_full)
+    #
+    #             # load depth
+    #             depth_path = re.sub(FRAME_REGEX, prev_frame, self.settings.depth_map.rgb_filepath)
+    #             depth_buf = oiio.ImageBuf(depth_path)
+    #             depth_np = depth_buf.get_pixels(roi=depth_buf.roi_full)
+    #
+    #             x, y, z = flow_np.shape
+    #             warp_output = np.zeros((x, y, z), dtype=np.float32)
+    #
+    #             temporal_coherence.depth_warp(prev_opt_np, flow_np, depth_np, warp_output)
+    #
+    #     # composite warp_output and opt_tensor, using motion mask as alpha
+    #     # store motion mask for temporal guide
+    #
+    #     opt_tensor = Variable(opt_tensor.data.clone(), requires_grad=True)
+    #     return opt_tensor
 
-        opt_filepath = self.settings.opt_image.rgb_filepath
-        opt_tensor = self.load_output(opt_filepath)
+    def prepare_temporal_weight_mask(self):
+        temporal_weight_tensor = utils.image_to_tensor(self.settings.temporal_weight_mask.rgb_filepath,
+                                                       self.settings.core.cuda,
+                                                       raw=True
+                                                       )
 
-        if self.settings.core.temporal_weight:
-            # prev frame can be +1 or -1 depending on starting pass
-            prev_frame = int(self.settings.frame) + self.settings.starting_pass
-            prev_output = re.sub(FRAME_REGEX, prev_frame, self.settings.out)
+        return temporal_weight_tensor
 
-            if os.path.isfile(prev_output):
-                # slide to a numpy image
-                prev_opt = self.load_output(prev_output)
-                prev_opt_np = '' # to cpu, to numpy, slice, transpose?
+    def write(self) -> None:
 
-                # load flow
-                if self.settings.starting_pass:
-                    flow_path = self.settings.motion_fore
-                else:
-                    flow_path = self.settings.motion_back
-                flow_path = re.sub(FRAME_REGEX, prev_frame, flow_path)
-                flow_buf = oiio.ImageBuf(flow_path)
-                flow_np = flow_buf.get_pixels(roi=flow_buf.roi_full)
+        self.prepare_model()
 
-                # load depth
-                depth_path = re.sub(FRAME_REGEX, prev_frame, self.settings.depth_map.rgb_filepath)
-                depth_buf = oiio.ImageBuf(depth_path)
-                depth_np = depth_buf.get_pixels(roi=depth_buf.roi_full)
+        if self.settings.temporal_weight_mask:
+            self.nst.temporal_weight_mask = self.prepare_temporal_weight_mask()
 
-                x, y, z = flow_np.shape
-                warp_output = np.zeros((x, y, z), dtype=np.float32)
-
-                temporal_coherence.depth_warp(prev_opt_np, flow_np, depth_np, warp_output)
-
-        # composite warp_output and opt_tensor, using motion mask as alpha
-        # store motion mask for temporal guide
-
-        opt_tensor = Variable(opt_tensor.data.clone(), requires_grad=True)
-        return opt_tensor
+        super(AnimWriter, self).write()
 
     def run(self):
         if self.settings.interleaved:

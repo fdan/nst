@@ -44,6 +44,18 @@ def get_vgg(engine, model_path):
     return vgg, do_cuda
 
 
+def rescale_tensor_by_tensor(tensor1, tensor2, requires_grad=False):
+    b, c, w, h = tensor2.size()
+
+    tensor = torch.nn.functional.interpolate(tensor1, size=[int(w), int(h)],
+                                             mode='bilinear')
+
+    if requires_grad:
+        tensor = Variable(tensor.data.clone(), requires_grad=True)
+
+    return tensor
+
+
 def rescale_tensor(tensor, scale_factor, requires_grad=False):
     b, c, w, h = tensor.size()
     tensor = torch.nn.functional.interpolate(tensor, size=[int(w*scale_factor), int(h*scale_factor)],
@@ -141,11 +153,11 @@ def make_gaussian_pyramid(img, span, mips, cuda=True):
     return gaus_pyramid
 
 
-# todo: replace with kornia to avoid numpy dependency, which breaks torchscript
+# todo: kernel sizes should come from settings so we can scale them for full res image
 def _build_gauss_kernel(cuda, size=5, sigma=1.0, n_channels=3):
     if size % 2 != 1:
         raise ValueError("kernel size must be uneven")
-    grid = np.float32(np.mgrid[0:size,0:size].T)
+    grid = np.float32(np.mgrid[0:size, 0:size].T)
     gaussian = lambda x: np.exp((x - size//2)**2/(-2*sigma**2))**2
     kernel = np.sum(gaussian(grid), axis=2)
     kernel /= np.sum(kernel)
@@ -166,7 +178,6 @@ def _gaussian_pyramid(img, kernel, max_levels, pyramid_scale_factor):
     current = img
     pyr = [current]
 
-    # for level in range(0, max_levels-1):
     for level in range(1, max_levels):
         filtered = _conv_gauss(current, kernel)
         current = torch.nn.functional.interpolate(filtered, scale_factor=pyramid_scale_factor)

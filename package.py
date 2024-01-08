@@ -8,17 +8,18 @@ authors = ['daniel.flood']
 
 requires = [
             'tractor',
-            'cryptomatte'
+            'cryptomatte',
             # 'oiio',
-            # 'ocio_configs',
-            # 'shotgun_utils'
+#            'ocio_configs',
+            'shotgun_utils'
            ]
 
 build_requires = ['cmake-3.10+']
 
 variants = [
 #           ['nuke-12'],
-            ['nuke-13', 'devtoolset-6']
+            ['nuke-13', 'devtoolset-6'],
+            ['nuke-14', 'devtoolset-6']
            ]
 
 
@@ -28,6 +29,7 @@ def commands():
     env.PYTHONPATH.append('{root}/python')
     env.PATH.append('{root}/bin')
     env.NST_VGG_MODEL.set('/mnt/ala/research/danielf/git/nst/models/vgg_conv.pth')
+    env.NST_SNAPSHOT_DIR.set('/mnt/ala/research/danielf/snapshots')
 
 
 

@@ -52,11 +52,13 @@ RUN python3.10 -m pip install --no-cache-dir matplotlib
 RUN python3.10 -m pip install --no-cache-dir jupyterlab
 RUN python3.10 -m pip install --no-cache-dir pybind11
 RUN python3.10 -m pip install --no-cache-dir ninja
+RUN python3.10 -m pip install --no-cache-dir torch-lucent
+RUN python3.10 -m pip install --no-cache-dir pytorch_histogram_matching
 
-RUN wget --quiet https://github.com/fdan/NeuralTextureSynthesis/archive/refs/heads/nomedia.zip && \
-    unzip nomedia.zip && \
-    cd NeuralTextureSynthesis-nomedia && \
-    python setup.py install
+#RUN wget --quiet https://github.com/fdan/NeuralTextureSynthesis/archive/refs/heads/nomedia.zip && \
+#    unzip nomedia.zip && \
+#    cd NeuralTextureSynthesis-nomedia && \
+#    python setup.py install
 
 RUN mkdir -p /.local/share/jupyter/runtime/
 RUN chmod -R 777 /.local

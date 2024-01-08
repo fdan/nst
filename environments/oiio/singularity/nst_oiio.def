@@ -57,10 +57,13 @@ python3.10 -m pip install --no-cache-dir matplotlib
 python3.10 -m pip install --no-cache-dir jupyterlab
 python3.10 -m pip install --no-cache-dir pybind11
 python3.10 -m pip install --no-cache-dir ninja
+python3.10 -m pip install --no-cache-dir torch-lucent
+python3.10 -m pip install --no-cache-dir pytorch_histogram_matching
 
-wget --quiet https://github.com/fdan/NeuralTextureSynthesis/archive/refs/heads/nomedia.zip && \
-    unzip nomedia.zip && \
-    cd NeuralTextureSynthesis-nomedia && \
+
+wget --quiet https://github.com/fdan/NeuralTextureSynthesis/archive/refs/heads/cpp_build.zip
+    unzip cpp_build.zip && \
+    cd NeuralTextureSynthesis-cpp_build && \
     python setup.py install
 
 %environment

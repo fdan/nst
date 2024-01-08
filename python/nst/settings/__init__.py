@@ -46,12 +46,13 @@ class BaseSettings(object):
                     pass
 
         with open(fp, 'w') as outfile:
-            json.dump(json.dumps(self.__dict__, default=lambda o: o.__dict__, indent=4), outfile)
+            outfile.write(json.dumps(self.__dict__, default=lambda o: o.__dict__, indent=4))
 
     def load(self, fp):
         with open(fp) as json_file:
             data = json.load(json_file)
-        self.__dict__ = json.loads(data)
+        self.__dict__ = data
+
 
 
 class NstSettings(BaseSettings):
@@ -74,6 +75,7 @@ class NstSettings(BaseSettings):
         self.write_pyramids = False
         self.progressive_output = False
         self.progressive_intertal = 1
+        self.histogram_bins = 256
 
         ## to do: migrate these to TorchStyle and StyleImage classes?
         self.style_zoom = 1.0
@@ -91,7 +93,12 @@ class NstSettings(BaseSettings):
         self.laplacian_weight = 0.0
         self.laplacian_loss_layer = 'r41'
         self.temporal_weight = 0.0
-        self.temporal_weight_mask = ''
+
+        self.laplacian_filter_kernel = 21
+        self.laplacian_blur_sigma = 8
+        self.laplacian_blur_kernel = 9
+
+        self.pyramid_kernel_size = 5
 
 
 class WriterSettings(BaseSettings):
@@ -113,19 +120,16 @@ class WriterSettings(BaseSettings):
     def load(self, fp):
         with open(fp) as json_file:
             data = json.load(json_file)
-            data = json.loads(data)
         self.__dict__ = data
-
-        # from pprint import pprint
-        # pprint(data)
 
         core = data.get('core')
         self.core = NstSettings()
         self.core.__dict__ = core
 
         content = data.get('content')
-        self.content = Image()
-        self.content.__dict__ = content
+        if content:
+            self.content = Image()
+            self.content.__dict__ = content
 
         opt_image = data.get('opt_image')
         self.opt_image = Image()
@@ -152,7 +156,8 @@ class AnimSettings(WriterSettings):
         self.motion_fore_weight = ''
         self.motion_back = ''
         self.motion_back_weight = ''
-        self.interleave = True
-        self.depth_map = Image()
-        self.id_map = Image()
+        self.interleave = False
+        self.depth = Image()
+        self.id = Image()
+        self.temporal_weight_mask = Image()
 
