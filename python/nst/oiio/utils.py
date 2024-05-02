@@ -115,28 +115,22 @@ def pts_to_exrs(outdir, raw=False, cleanup=False):
         pt_to_exr(fp, raw=raw, cleanup=cleanup)
 
 
-def pt_to_exr(inpath, raw=False, cleanup=False):
+def pt_to_exr(inpath, raw=False, colorspace='acescg', cleanup=False):
     tensor = torch.load(inpath)
     buf = tensor_to_buf(tensor, raw=raw)
+    if colorspace != 'srgb_texture':
+        buf = oiio.ImageBufAlgo.colorconvert(buf, 'srgb_texture', colorspace)
     outpath = inpath.replace('.pt', '.exr')
     write_exr(buf, outpath)
     if cleanup:
         os.remove(inpath)
 
 
-def jitter(img):
-    b, c, h, w = img.size()
+def pt_to_acescg_tensor(inpath, raw=False):
+    tensor = torch.load(inpath)
+    buf = tensor_to_buf(tensor, raw=raw)
+    buf = oiio.ImageBufAlgo.colorconvert(buf, 'srgb_texture', 'acescg')
 
-    rand_rotation = 1.0
-    rand_crop_scale = (0.97, 1.0)
-    rand_crop_ratio = (0.97, 1.03)
-
-    transform = nn.Sequential(
-        kornia.augmentation.RandomResizedCrop(size=(h, w), scale=rand_crop_scale, ratio=rand_crop_ratio),
-        kornia.augmentation.RandomRotation(degrees=rand_rotation)
-    )
-
-    return transform(img)
 
 
 def transform_image_tensor(tensor: torch.Tensor, do_cuda: bool, raw=False) -> torch.Tensor:
@@ -225,7 +219,24 @@ def buf_to_tensor(buf: oiio.ImageBuf, do_cuda: bool, raw=False) -> torch.Tensor:
         return it.unsqueeze(0)
 
 
-def tensor_to_buf(tensor: torch.Tensor, raw=False) -> oiio.ImageBuf:
+def np_to_tensor(np_array, do_cuda, colorspace='acescg'):
+    """
+    given a simple float rgb tensor as loaded by oiio, convert to an imagenet tensor
+    """
+    x, y, z = np_array.shape
+    buf = oiio.ImageBuf(oiio.ImageSpec(y, x, z, oiio.FLOAT))
+    buf.set_pixels(oiio.ROI(), np_array)
+
+    # do colorspace conversion?
+    if colorspace:
+        if colorspace != 'srgb_texture':
+            buf = oiio.ImageBufAlgo.colorconvert(buf, colorspace, 'srgb_texture')
+
+    return buf_to_tensor(buf, do_cuda)
+
+
+def tensor_to_buf(tensor: torch.Tensor, raw=False, colorspace='srgb_texture') -> oiio.ImageBuf:
+
     tforms_ = []
 
     if not raw:
@@ -248,7 +259,28 @@ def tensor_to_buf(tensor: torch.Tensor, raw=False) -> oiio.ImageBuf:
     x, y, z = n.shape
     buf = ImageBuf(ImageSpec(y, x, z, oiio.FLOAT))
     buf.set_pixels(ROI(), n)
+
+    if colorspace != 'srgb_texture':
+        buf = oiio.ImageBufAlgo.colorconvert(buf, 'srgb_texture', colorspace)
+
     return buf
+
+
+def imagenet_to_rgb(tensor):
+    tforms_ = []
+    tforms_ += [transforms.Lambda(lambda x: x.mul_(1. / 255.))]
+
+    # add imagenet mean
+    tforms_ += [transforms.Normalize(mean=[(-0.40760392), -0.45795686, -0.48501961], std=[1, 1, 1])]
+
+    # turn to RGB
+    tforms_ += [transforms.Lambda(lambda x: x[torch.LongTensor([2, 1, 0])])]
+
+    tforms = transforms.Compose(tforms_)
+    tensor_ = torch.clone(tensor)
+    # return tforms(tensor_)
+    return tforms(tensor_.data[0].cpu())
+    # return tforms(tensor_.data[0].cpu().squeeze())
 
 
 def write_exr(exr_buf: oiio.ImageBuf, filepath: str) -> None:

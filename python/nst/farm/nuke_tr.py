@@ -33,6 +33,15 @@ def init_write_nodes(node):
     farm_resolution = node.knob('farm_resolution').value()
     node.knob('resolution').setValue(farm_resolution)
 
+    # # if run_parent is true, chance the opt image to be the output from the parent job
+    # parent = node.knob('parent').value
+    # if parent and node.knob('run_parent').value():
+    #     # get the parent gizmo's out_fp file knob
+    #     p_node = nuke.toNode(parent)
+    #     p_out_fp = p_node.knob('out_fp').value()
+    #     node.node('opt_override_read').knob('file').setValue(p_out_fp)
+    #     node.node('opt_override_switch').knob('which').setValue(1)
+
     nuke.scriptSave()
     orig_script_path = nuke.scriptName()
     archive_script_path = os.path.join(temp_dir, os.path.basename(orig_script_path))
@@ -40,6 +49,10 @@ def init_write_nodes(node):
 
     # swap back to the original lookdev resolution
     node.knob('resolution').setValue(lookdev_resolution)
+
+    # # reset the opt override switch
+    # if parent and node.knob('run_parent').value():
+    #     node.node('opt_override_switch').knob('which').setValue(0)
 
     pd = {
         'temp_dir': temp_dir,
@@ -77,18 +90,25 @@ def nuke_submit(node, dry_run=False):
     ws.core.iterations = int(node.knob('farm_iterations').value())
     ws.core.log_iterations = 10
 
-    proxy_scale = float(node.knob('proxy_scale').value())
+    # only apply proxy scaling if engine resolution is proxy!
+    lookdev_resolution = node.knob('resolution').value()
+
+    if lookdev_resolution == 'proxy':
+        proxy_scale = float(node.knob('proxy_scale').value())
+    else:
+        proxy_scale = 1.0
+
     nuke_pyramid_span = float(node.knob('style_pyramid_span').value())
     nuke_style_zoom = float(node.knob('style_zoom').value())
     ws.core.style_pyramid_span = nuke_pyramid_span * proxy_scale
     ws.core.style_zoom = nuke_style_zoom / proxy_scale
 
-    # scale laplacian filters if necessary
-    ws.core.laplacian_filter_kernel /= proxy_scale
-    ws.core.laplacian_filter_kernel = int(ws.core.laplacian_filter_kernel + 1)
-    ws.core.laplacian_blur_kernel /= proxy_scale
-    ws.core.laplacian_blur_kernel = int(ws.core.laplacian_blur_kernel + 1)
-    # ws.core.laplacian_blur_sigma /= proxy_scale
+    # if lookdev_resolution == 'proxy':
+    #     ws.core.laplacian_filter_kernel /= proxy_scale
+    #     ws.core.laplacian_filter_kernel = int(ws.core.laplacian_filter_kernel + 1)
+    #     ws.core.laplacian_blur_kernel /= proxy_scale
+    #     ws.core.laplacian_blur_kernel = int(ws.core.laplacian_blur_kernel + 1)
+    #     # ws.core.laplacian_blur_sigma /= proxy_scale
 
     ws.core.mip_weights = [float(x) for x in node.knob('style_mip_weights').value().split(',')]
     ws.core.style_layers = node.knob('style_layers').value().split(',')
@@ -101,12 +121,22 @@ def nuke_submit(node, dry_run=False):
     ws.core.tv_weight = float(node.knob('tv_weight').value())
     ws.core.laplacian_weight = float(node.knob('laplacian_weight').value())
 
+    ws.core.histogram_loss_type = node.knob('histogram_loss_type').value()
+    ws.core.gram_loss_type = node.knob('gram_loss_type').value()
+    ws.core.content_loss_type = node.knob('content_loss_type').value()
+    ws.core.laplacian_loss_type = node.knob('laplacian_loss_type').value()
+
+    after_jobs = node.knob('run_after').value()
+
     job = tractor.api.author.Job()
     job.title = node.knob('job_name').value()
     job.service = node.knob('service_key').value()
     job.tier = node.knob('tier').value()
     job.atmost = int(ws.core.cpu_threads)
     frames = str(node.knob('frames').value())
+
+    if after_jobs:
+        job.afterjids = [int(j) for j in after_jobs.split(' ')]
 
     rez_resolve = ' '.join([x for x in os.getenv('REZ_RESOLVE').split(' ')
                             if 'tk_nuke' not in x
@@ -199,7 +229,11 @@ def nuke_submit(node, dry_run=False):
     # print(job.asTcl())
 
     if not dry_run:
-        try:
-            job.spool()
-        except:
-            pass
+        job.spool()
+
+        # try:
+        #     print(job.spool())
+        # except:
+        #     pass
+
+    print("job submitted", dir(job))

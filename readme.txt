@@ -14,10 +14,12 @@ instructions
 
 how to generate a new messageLive_pb2.py
 
+NOTE: requires protoc 3.0.0 (nuke image, oiio image uses 3.12.4)
+
 this can be necessary if the protobuf version changes.  the docker image itself contains the protobuf compiler, use like so:
 
-/workspace/git/nst/nuke/ml-client-live/proto# protoc --python_out=/workspace/git/nst/nuke/ml-client-live/proto/output messageLive.proto
-
+mkdir -p /workspace/git/nst/nuke/ml-client-live/proto/output
+/workspace/git/nst/nuke/ml-client-live# protoc --python_out=/workspace/git/nst/nuke/ml-client-live/proto/output messageLive.proto
 
 ...
 

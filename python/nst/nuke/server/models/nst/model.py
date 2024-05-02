@@ -7,7 +7,7 @@ import torch
 from torchvision import transforms
 from torch.autograd import Variable
 
-from nst.core.model import Nst, TorchStyle
+from nst.core.model import Nst, TorchStyle, TorchMaskedImage
 import nst.core.utils as core_utils
 from nst.settings import Image, StyleImage, NstSettings, WriterSettings
 
@@ -29,30 +29,50 @@ class Model(BaseModel):
                         "histogram_bins",
                         "tv_weight",
                         "laplacian_weight",
+                        "histogram_loss_type",
+                        "gram_loss_type",
+                        "content_loss_type",
+                        "laplacian_loss_type",
                         "style_mips",
                         "style_mip_weights",
                         "style_layers",
                         "style_layer_weights",
                         "content_layer",
                         "content_layer_weight",
+                        "temporal_weight",
                         "learning_rate",
                         "iterations",
                         "log_iterations",
-                        "enable_update",
+                        # "enable_update",
                         "batch_size",
+                        "dummy",
                         "mask_layers",
+                        "random_rotate_mode",
+                        "random_rotate",
+                        "random_crop",
                         )
 
         self.inputs = {'opt_img': 3,
                        'style': 4,
                        'style_target': 1,
-                       'content': 3}
+                       'content': 3,
+                       'temporal_content': 4}
 
         self.outputs = {'output': 3}
 
         # option states
-        self.engine = "gpu"
-        self.optimiser = "lbfgs"
+        self.engine = '\"gpu\"'
+        self.optimiser = '\"lbfgs\"'
+        self.histogram_loss_type = '\"mse\"'
+        self.gram_loss_type = '\"mse\"'
+        self.content_loss_type = '\"mse\"'
+        self.laplacian_loss_type = '\"mse\"'
+        self.style_mip_weights = '\"1.0,1.0,1.0,1.0\"'
+        self.style_layers = '\"p1,p2,r31,r42\"'
+        self.mask_layers = '\"p1,p2,r31,r42\"'
+        self.style_layer_weights = '\"1.0,1.0,1.0,1.0\"'
+        self.content_layer = '\"r41\"'
+
         self.style_mips = 4
         self.style_zoom = 1.0
         self.gram_weight = 1.0
@@ -60,20 +80,23 @@ class Model(BaseModel):
         self.histogram_bins = 256
         self.tv_weight = 5.0
         self.laplacian_weight = 1.0
-        self.style_mip_weights = '1.0,1.0,1.0,1.0'
-        self.style_layers = 'p1,p2,r31,r42'
-        self.mask_layers = 'p1,p2,r31,r42'
-        self.style_layer_weights = '1.0,1.0,1.0,1.0'
         self.style_pyramid_span = 0.5
-        self.content_layer = 'r41'
         self.content_layer_weight = 1.0
+        self.temporal_weight = 1.0
         self.learning_rate = 1.0
-        self.iterations = 200
-        self.log_iterations = 10
-        self.enable_update = 1
+        # self.iterations = 200
+        # self.log_iterations = 10
+        self.iterations = 100
+        self.log_iterations = 20
+
+        self.random_rotate_mode = "none"
+        self.random_rotate = "0, 360"
+        self.random_crop = "0.3, 1.0"
 
         # internal
-        self.batch_size = 200
+        # self.batch_size = 200
+        self.batch_size = 20
+        self.dummy = 1
         self.prepared = False
 
         self.nst_settings = NstSettings()
@@ -90,6 +113,7 @@ class Model(BaseModel):
             return
 
         print('preparing nst model')
+        # print('optimiser:', self.optimiser)
 
         self.nst = Nst()
 
@@ -104,13 +128,29 @@ class Model(BaseModel):
         self.nst_settings.histogram_bins = int(self.histogram_bins)
         self.nst_settings.tv_weight = float(self.tv_weight)
         self.nst_settings.laplacian_weight = float(self.laplacian_weight)
+        self.nst_settings.histogram_loss_type = self.histogram_loss_type
+        self.nst_settings.gram_loss_type = self.gram_loss_type
+        self.nst_settings.content_loss_type = self.content_loss_type
+        self.nst_settings.laplacian_loss_type = self.laplacian_loss_type
         self.nst_settings.style_mips = int(self.style_mips)
+
         self.nst_settings.mip_weights = [float(x) for x in self.style_mip_weights.split(',')]
         self.nst_settings.style_layers = self.style_layers.split(',')
         self.nst_settings.mask_layers = self.mask_layers.split(',')
         self.nst_settings.style_layer_weights = [float(x) for x in self.style_layer_weights.split(',')]
+
+        self.nst_settings.random_rotate_mode = self.random_rotate_mode
+        self.nst_settings.random_rotate = [float(x) for x in self.random_rotate.split(',')]
+        self.nst_settings.random_crop = [float(x) for x in self.random_crop.split(',')]
+
+        # self.nst_settings.mip_weights = self.style_mip_weights
+        # self.nst_settings.style_layers = self.style_layers
+        # self.nst_settings.mask_layers = self.mask_layers
+        # self.nst_settings.style_layer_weights = self.style_layer_weights
+
         self.nst_settings.content_layer = self.content_layer
         self.nst_settings.content_layer_weight = float(self.content_layer_weight)
+        self.nst_settings.temporal_weight = float(self.temporal_weight)
         self.nst_settings.learning_rate = float(self.learning_rate)
         self.nst_settings.iterations = int(self.iterations)
         self.nst_settings.log_iterations = int(self.log_iterations)
@@ -131,6 +171,34 @@ class Model(BaseModel):
         except:
             self.nst.content = torch.zeros(0)
 
+        if self.temporal_weight > 0:
+            try:
+                # print(1.1, len(image_list))
+                temporal_content_np = image_list[4]
+                temporal_content_tensor = torch.Tensor(temporal_content_np.copy())
+                temporal_content_tensor = temporal_content_tensor.transpose(0, 2)
+                temporal_content_tensor = temporal_content_tensor[:3:]
+                temporal_content_tensor = temporal_content_tensor.transpose(0, 2)
+                temporal_content_tensor = color_in(temporal_content_tensor, do_cuda=cuda)
+
+                temporal_content_alpha_tensor = torch.Tensor(temporal_content_np.copy())
+                temporal_content_alpha_tensor = temporal_content_alpha_tensor.transpose(0, 2)
+                temporal_content_alpha_tensor[0] = temporal_content_alpha_tensor[3]
+                temporal_content_alpha_tensor[1] = temporal_content_alpha_tensor[3]
+                temporal_content_alpha_tensor[2] = temporal_content_alpha_tensor[3]
+                temporal_content_alpha_tensor = temporal_content_alpha_tensor[:3:]
+                temporal_content_alpha_tensor = temporal_content_alpha_tensor.transpose(0, 2)
+                temporal_content_alpha_tensor = color_in(temporal_content_alpha_tensor, do_cuda=cuda, raw=True)
+
+                # temporal_content = TorchMaskedImage(temporal_content_tensor, temporal_content_alpha_tensor)
+                self.nst.temporal_content = temporal_content_tensor
+                # self.nst.temporal_weight_mask = temporal_content_alpha_tensor
+
+            except:
+                print("something went wrong with the temporal content inputs...")
+                self.nst.temporal_content = torch.zeros(0)
+                # self.nst.temporal_weight_mask = torch.zeros(0)
+
         try:
             opt_np = image_list[0]
             opt_tensor = torch.Tensor(opt_np.copy())
@@ -139,6 +207,7 @@ class Model(BaseModel):
             self.nst.opt_tensor = opt_tensor
         except:
             raise RuntimeError("An optimisation image must be given")
+
 
         try:
             style_np = image_list[1]
@@ -177,13 +246,14 @@ class Model(BaseModel):
 
         print("finished preparing")
         print('-----------------------------------------------')
+        print('starting job')
 
         self.prepared = True
 
     def inference(self) -> List[torch.Tensor]:
-        if not self.enable_update:
-            print('update disabled')
-            return # to do: return the opt iamge
+        # if not self.enable_update:
+        #     print('update disabled')
+        #     return # to do: return the opt iamge
 
         self.nst.start_iter = 1
 

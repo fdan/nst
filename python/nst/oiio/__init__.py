@@ -1,4 +1,5 @@
 import re
+import shutil
 from typing import List
 import os
 
@@ -23,12 +24,15 @@ class StyleWriter(object):
     def __init__(self,
                  styles: List[settings.StyleImage]=None,
                  opt_image: settings.Image=None,
-                 content: settings.Image=None):
+                 content: settings.Image=None,
+                 temporal_content: settings.Image = None,
+                 ):
 
         self.settings = settings.WriterSettings()
         self.settings.styles = styles
         self.settings.opt_image = opt_image
         self.settings.content = content
+        self.settings.temporal_content = temporal_content
         self.output_dir = ''
         self._prepared = False
 
@@ -73,12 +77,10 @@ class StyleWriter(object):
             if self.settings.content:
                 if self.settings.content.rgb_filepath:
                     self.settings.content.rgb_filepath = re.sub(FRAME_REGEX, ".%s." % frame, self.settings.content.rgb_filepath)
-                    # print(2.1, self.settings.content.rgb_filepath)
 
             if self.settings.opt_image:
                 if self.settings.opt_image.rgb_filepath:
                     self.settings.opt_image.rgb_filepath = re.sub(FRAME_REGEX, ".%s." % frame, self.settings.opt_image.rgb_filepath)
-                    # print(2.2, self.settings.opt_image.rgb_filepath)
 
             if self.settings.out:
                 self.settings.out = re.sub(FRAME_REGEX, ".%s." % frame, self.settings.out)
@@ -91,12 +93,15 @@ class StyleWriter(object):
         if self.settings.content:
             self.nst.content = self.prepare_content()
 
-        self.nst.opt_tensor = self.prepare_opt()
+        if self.settings.temporal_content:
+            self.nst.temporal_content = self.prepare_temporal_content()
+
+        if self.nst.opt_tensor.numel() == 0:
+            self.nst.opt_tensor = self.prepare_opt()
 
         self.nst.styles = self.prepare_styles()
         self.nst.prepare()
         assert self.settings.core == self.nst.settings
-        # print(5.5, self.nst.settings)
 
         # set num cpus
         torch.set_num_threads = int(self.settings.core.cpu_threads)
@@ -104,20 +109,20 @@ class StyleWriter(object):
         # do style transfer
         tensor = self.nst()
 
-        out_format = self.settings.out.split('.')[-1]
+        # print('out format:', self.settings.output_format)
 
-        # if self.settings.output_format == 'exr':
-        if out_format == 'exr':
-            print('writing exr ', self.settings.out)
-            buf = utils.tensor_to_buf(tensor)
-            if self.settings.out_colorspace != 'srgb_texture':
-                buf = oiio.ImageBufAlgo.colorconvert(buf, 'srgb_texture', self.settings.out_colorspace)
+        if self.settings.output_format == 'exr':
+            # print('writing exr %s' % self.settings.out)
+            buf = utils.tensor_to_buf(tensor, colorspace=self.settings.out_colorspace)
+            # buf = utils.tensor_to_buf(tensor)
+            # if self.settings.out_colorspace != 'srgb_texture':
+            #     buf = oiio.ImageBufAlgo.colorconvert(buf, 'srgb_texture', self.settings.out_colorspace)
             buf.write(self.settings.out)
 
         # elif self.settings.output_format == 'pt':
-        elif out_format == 'pt':
-            print('writing pt %s \n' % self.settings.out)
-            torch.save(tensor, self.settings.out)
+        #     out = self.settings.out.replace('.exr', '.pt')
+        #     print('writing pt %s \n' % out)
+        #     torch.save(tensor, out)
 
         else:
             print('not writing anything')
@@ -147,23 +152,41 @@ class StyleWriter(object):
                                                colorspace=self.settings.content.colorspace)
         return content_tensor
 
-    def prepare_opt(self):
+    # def prepare_temporal_mask(self):
+    #     mask_tensor = utils.image_to_tensor(self.settings.temporal_mask.rgb_filepath, self.settings.core.cuda,
+    #                                         raw=True)
+    #     return mask_tensor
 
+    def prepare_temporal_content(self):
+
+        tc_tensor, tc_alpha = utils.style_image_to_tensors(self.settings.temporal_content.rgba_filepath,
+                                                                 self.settings.core.cuda,
+                                                                 colorspace=self.settings.temporal_content.colorspace)
+
+        t = model.TorchMaskedImage(tc_tensor)
+        t.alpha = tc_alpha
+
+        return t
+
+    def prepare_opt(self):
+        # print(3.0)
         # if self.settings.core.temporal_weight:
         #     this_frame = int(self.settings.frame) + int(self.settings.pre)
         #     re.sub(FRAME_REGEX, ".%s." % this_frame)
         #     pass
         #     # 1.  check if prev frame output exists
-
-
         opt_filepath = self.settings.opt_image.rgb_filepath
+
+        # if direction is backwards, use the forewards disocclusion mask
+
+        # print('preparing opt image:', opt_filepath)
 
         if opt_filepath.endswith('.exr'):
             opt_tensor = utils.image_to_tensor(opt_filepath, self.settings.core.cuda,
                                            colorspace=self.settings.opt_image.colorspace)
 
-        elif opt_filepath.endswith('.pt'):
-            opt_tensor = torch.load(opt_filepath)
+        # elif opt_filepath.endswith('.pt'):
+        #     opt_tensor = torch.load(opt_filepath)
 
         opt_tensor = Variable(opt_tensor.data.clone(), requires_grad=True)
         return opt_tensor
@@ -278,76 +301,16 @@ class AnimWriter(StyleWriter):
         super(AnimWriter, self).__init__(styles, opt_image, content)
 
         self.settings = settings.AnimSettings()
-        # self.settings.output_format = 'pt'
-        self._opt_tensor = torch.zeros(1)
+        self.settings.output_format = 'exr'
+        self.out_fp = ''
+        self.this_frame = 0
+        self.direction = 1
+        self.pass_ = 1
+        self.outdir = ''
 
-    def load_output(self, path):
-        if path.endswith('.exr'):
-            tensor = utils.image_to_tensor(path, self.settings.core.cuda,
-                                           colorspace=self.settings.opt_image.colorspace)
-
-        elif path.endswith('.pt'):
-            tensor = torch.load(path)
-
-        return tensor
-
-    # def prepare_opt(self):
-    #
-    #     opt_filepath = self.settings.opt_image.rgb_filepath
-    #     opt_tensor = self.load_output(opt_filepath)
-    #
-    #     if self.settings.core.temporal_weight:
-    #         # prev frame can be +1 or -1 depending on starting pass
-    #         prev_frame = int(self.settings.frame) - self.settings.starting_pass
-    #         print('prev frame:', prev_frame)
-    #         prev_output = re.sub(FRAME_REGEX, prev_frame, self.settings.out)
-    #
-    #         if os.path.isfile(prev_output):
-    #             # slide to a numpy image
-    #             prev_opt = self.load_output(prev_output)
-    #             prev_opt_np = '' # to cpu, to numpy, slice, transpose?
-    #
-    #             # load flow
-    #             if self.settings.starting_pass:
-    #                 flow_path = self.settings.motion_fore
-    #             else:
-    #                 flow_path = self.settings.motion_back
-    #             flow_path = re.sub(FRAME_REGEX, prev_frame, flow_path)
-    #             flow_buf = oiio.ImageBuf(flow_path)
-    #             flow_np = flow_buf.get_pixels(roi=flow_buf.roi_full)
-    #
-    #             # load depth
-    #             depth_path = re.sub(FRAME_REGEX, prev_frame, self.settings.depth_map.rgb_filepath)
-    #             depth_buf = oiio.ImageBuf(depth_path)
-    #             depth_np = depth_buf.get_pixels(roi=depth_buf.roi_full)
-    #
-    #             x, y, z = flow_np.shape
-    #             warp_output = np.zeros((x, y, z), dtype=np.float32)
-    #
-    #             temporal_coherence.depth_warp(prev_opt_np, flow_np, depth_np, warp_output)
-    #
-    #     # composite warp_output and opt_tensor, using motion mask as alpha
-    #     # store motion mask for temporal guide
-    #
-    #     opt_tensor = Variable(opt_tensor.data.clone(), requires_grad=True)
-    #     return opt_tensor
-
-    def prepare_temporal_weight_mask(self):
-        temporal_weight_tensor = utils.image_to_tensor(self.settings.temporal_weight_mask.rgb_filepath,
-                                                       self.settings.core.cuda,
-                                                       raw=True
-                                                       )
-
-        return temporal_weight_tensor
-
-    def write(self) -> None:
-
-        self.prepare_model()
-
-        if self.settings.temporal_weight_mask:
-            self.nst.temporal_weight_mask = self.prepare_temporal_weight_mask()
-
-        super(AnimWriter, self).write()
+    # def write(self) -> None:
+    #     self.prepare_model()
+    #     super(AnimWriter, self).write()
 
     def run(self):
         if self.settings.interleaved:
@@ -365,74 +328,156 @@ class AnimWriter(StyleWriter):
         """
         Interleave results across the sequence, slowly optimise each frame and propagate results
         """
-        for pass_ in range(self.settings.starting_pass, self.settings.passes+1):
-            print('pass:', pass_)
+        # self.settings.output_format = 'pt'
+        self.outdir = os.path.abspath(os.path.join(self.settings.out, os.path.pardir))
+
+        # clean any previous output
+        if os.path.isdir(self.outdir):
+            shutil.rmtree(self.outdir)
+        os.makedirs(self.outdir)
+
+        # todo: how to handle when there's a remainder?
+        passes = int(self.settings.core.iterations / self.settings.iterations_per_pass)
+        self.settings.core.iterations = int(self.settings.core.iterations / passes)
+        # for pass_ in range(self.settings.starting_pass, self.settings.passes+1):
+        for pass_ in range(self.settings.starting_pass, passes+1):
+            # print('pass: %s\n' % pass_)
+            self.pass_ = pass_
 
             # if direction is 1, we are in a forward pass.  if 0, negative.
-            self.settings.core.iterations = int(self.settings.core.iterations / self.settings.passes)
+            # self.settings.core.iterations = int(self.settings.core.iterations / passes)
 
             direction = pass_ % 2
-            direction_ = 'forward' if direction else 'backward'
-            print('direction:', direction_)
+            # direction_ = 'forward' if direction else 'backward'
 
             start = self.settings.last_frame if direction == 0 else self.settings.first_frame
             end = self.settings.first_frame if direction == 0 else self.settings.last_frame
             increment_by = -1 if direction == 0 else 1
 
-            # if direction is backwards, use the forewards disocclusion mask
-
             for this_frame in range(start, end, increment_by):
-                print('frame:', this_frame)
+            # for this_frame in range(start, end+increment_by):
+                print('frame: %s pass: %s' % (this_frame, pass_))
                 self.settings.frame = this_frame
+                self.this_frame = this_frame
+                self.direction = direction
 
-                # warp_from_frame is the temporal prior in the context of pass direction
-                # i.e. the color image we are wanting to warp
-                if this_frame == self.settings.first_frame and pass_ == 1:
-                    warp_from_frame = -1
-                elif this_frame == self.settings.first_frame:
-                    warp_from_frame = (this_frame + 1)
-                elif this_frame == self.settings.last_frame:
-                    warp_from_frame = (this_frame - 1)
-                else:
-                    warp_from_frame = (this_frame + 1) if direction == 0 else (this_frame - 1)
+                # prevent accumulation of graph on gpu
+                # https://discuss.pytorch.org/t/how-can-we-release-gpu-memory-cache/14530
+                with torch.no_grad():
+                    self.write()
+                    self.nst = None
+                    self._prepared = False
+                torch.cuda.empty_cache()
+                # self.nst.opt_tensor = torch.zeros(0)
 
-                # backwards->forwards pass
-                if direction == 1:
-                    prev_frame = this_frame - 1
-                    flow = re.sub(FRAME_REGEX, ".%s." % prev_frame, self.settings.motion_fore)
-                    flow_weight = re.sub(FRAME_REGEX, ".%s." % prev_frame, self.settings.motion_fore_weight)
+        # print('converting output to exrs')
+        # utils.pts_to_exrs(self.outdir)
+        # print('finished')
 
-                # forwards->backwards pass
-                elif direction == 0:
-                    prev_frame = this_frame + 1
-                    flow = re.sub(FRAME_REGEX, ".%s." % prev_frame, self.settings.motion_back)
-                    flow_weight = re.sub(FRAME_REGEX, ".%s." % prev_frame, self.settings.motion_back_weight)
-                else:
-                    raise Exception('Direction must be 0 or 1')
+    def prepare_opt(self):
 
-                out_fp = re.sub(FRAME_REGEX, ".%s." % this_frame, self.settings.out)
+        # backwards->forwards pass
+        if self.direction == 1:
+            prev_frame = self.this_frame - 1
+            flow = re.sub(FRAME_REGEX, ".%s." % self.this_frame, self.settings.motion_back)
+            flow_weight = re.sub(FRAME_REGEX, ".%s." % self.this_frame, self.settings.motion_fore_weight)
 
-                # check if a pt exists for the prior frame
-                prev_out_fp = re.sub(FRAME_REGEX, ".%s." % prev_frame, self.settings.out)
-                prev_out_fp_pt = prev_out_fp.replace('.exr', '.pt')
-                if os.path.isfile(prev_out_fp_pt):
-                    print('warping previous frame:', prev_out_fp_pt)
-                    prev_out_fp_tensor = torch.load(prev_out_fp_pt)
-                    print(3.1, prev_out_fp_tensor.size())
+        # forwards->backwards pass
+        elif self.direction == 0:
+            prev_frame = self.this_frame + 1
+            flow = re.sub(FRAME_REGEX, ".%s." % self.this_frame, self.settings.motion_fore)
+            flow_weight = re.sub(FRAME_REGEX, ".%s." % self.this_frame, self.settings.motion_back_weight)
 
-                # load the flow and flow weight into tensors
+        else:
+            raise Exception('Direction must be 0 or 1')
 
-                out_fp_pt = out_fp.replace('.exr', '.pt')
-                if os.path.isfile(out_fp_pt):
-                    print('found previous .pt for frame:', out_fp_pt)
-                    out_fp = out_fp_pt
-                    self.settings.opt_image.rgb_filepath = out_fp
+        # print('flow filepath:', flow)
 
-                # main nst call
-                self.write()
+        curr_frame_checkpoint_fp = self.settings.out
+        # print('output filepath:', curr_frame_checkpoint_fp)
 
-        #todo:
-        # for each frame, convert the .pt to .exr
+        if self.pass_ == 1:
+            # print('first pass, not resuming from checkpoint')
+            return super(AnimWriter, self).prepare_opt()
 
+        # if we're at the first frame of a pass, there is no prior frame to warp
+        if (self.direction == 1 and self.this_frame == self.settings.first_frame) or \
+                (self.direction == 0 and self.this_frame == self.settings.last_frame):
+            # print('first frame of pass, no prior frame to warp')
 
+            # the first frame of a pass may not have a checkpoint if we're early in the process
+            if os.path.isfile(curr_frame_checkpoint_fp):
+                # print('resuming from checkpoint:', curr_frame_checkpoint_fp)
+
+                opt_tensor = utils.image_to_tensor(curr_frame_checkpoint_fp, self.settings.core.cuda,
+                                                   colorspace=self.settings.out_colorspace)
+
+                opt_tensor = Variable(opt_tensor.data.clone(), requires_grad=True)
+                return opt_tensor
+            else:
+                # print('no checkpoint to resume from')
+                return super(AnimWriter, self).prepare_opt()
+
+        # print('resuming from checkpoint:', curr_frame_checkpoint_fp)
+
+        curr_frame_checkpoint_buf = oiio.ImageBuf(curr_frame_checkpoint_fp)
+        curr_frame_checkpoint_np = curr_frame_checkpoint_buf.get_pixels(roi=curr_frame_checkpoint_buf.roi_full)
+
+        # warp the prior frame checkpoint and blend with the current frame checkpoint
+        prev_frame_checkpoint_fp = re.sub(FRAME_REGEX, ".%s." % prev_frame, self.settings.out)
+        # print('warping from frame:', prev_frame_checkpoint_fp)
+
+        prev_frame_checkpoint_buf = oiio.ImageBuf(prev_frame_checkpoint_fp)
+        prev_frame_checkpoint_np = prev_frame_checkpoint_buf.get_pixels(roi=prev_frame_checkpoint_buf.roi_full)
+
+        this_frame_flow_buf = oiio.ImageBuf(flow)
+        this_frame_flow_np = this_frame_flow_buf.get_pixels(roi=this_frame_flow_buf.roi_full)
+
+        depth = re.sub(FRAME_REGEX, '.%s.' % self.this_frame, self.settings.depth)
+        # print('depth filepath:', depth)
+
+        curr_frame_depth_buf = oiio.ImageBuf(depth)
+        curr_frame_depth_np = curr_frame_depth_buf.get_pixels(roi=curr_frame_depth_buf.roi_full)
+
+        x, y, z = curr_frame_depth_np.shape
+        prev_frame_warped_np = np.zeros((x, y, z), dtype=np.float32)
+        boundary = 10
+        # temporal_coherence.depth_warp(prev_frame_checkpoint_np, this_frame_flow_np, curr_frame_depth_np,
+        #                               boundary, prev_frame_warped_np)
+
+        temporal_coherence.sample_back(prev_frame_checkpoint_np, this_frame_flow_np, boundary, prev_frame_warped_np)
+
+        curr_frame_mask_buf = oiio.ImageBuf(flow_weight)
+        curr_frame_mask_np = curr_frame_mask_buf.get_pixels(roi=curr_frame_mask_buf.roi_full)
+
+        # # debug uutputs:
+        # a = '%s/%s_prev_frame_warped.%04d.exr' % (self.outdir, self.pass_, self.this_frame)
+        # utils.np_write(prev_frame_warped_np, a)
+        #
+        # prev_frame_warped_np *= curr_frame_mask_np
+        # b = '%s/%s_prev_frame_warped_weighted.%04d.exr' % (self.outdir, self.pass_, self.this_frame)
+        # utils.np_write(prev_frame_warped_np, b)
+        #
+        # c = '%s/%s_curr_frame_checkpoint.%04d.exr' % (self.outdir, self.pass_, self.this_frame)
+        # utils.np_write(curr_frame_checkpoint_np, c)
+
+        # apply weights and add to the current frame
+        curr_frame_checkpoint_np += (prev_frame_warped_np * curr_frame_mask_np)
+
+        divisor = np.ones((x, y, z), dtype=np.float32)
+        divisor += curr_frame_mask_np
+
+        curr_frame_checkpoint_np /= divisor
+
+        # move to imagenet space
+        opt_tensor = utils.np_to_tensor(curr_frame_checkpoint_np, self.settings.core.cuda,
+                                        colorspace=self.settings.out_colorspace)
+
+        # move to gpu
+        if self.settings.core.cuda:
+            device = core_utils.get_cuda_device()
+            opt_tensor = opt_tensor.detach().to(torch.device(device))
+        opt_tensor = Variable(opt_tensor.data.clone(), requires_grad=True)
+
+        return opt_tensor
 

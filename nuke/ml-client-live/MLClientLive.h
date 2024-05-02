@@ -31,7 +31,8 @@
 #include "MLClientComms.h"
 #include "MLClientModelManager.h"
 
-enum Status{ReadyToSend, Sending, Waiting, HasReceived};
+enum ResponseStatus{CanSend, HasReceived};
+enum JobStatus{InProgress, Completed};
 
 using namespace DD::Image;
 
@@ -54,16 +55,20 @@ public:
   static const int         kDefaultPortNumber;
   bool killthread;
   bool terminate;
-  Status status;
+  bool allowUpdate;
+  bool rendering;
+  ResponseStatus responseStatus;
+  JobStatus jobStatus;
   int batch;
   int hashCtr;
   mlserver::RespondWrapper responseWrapper;
 
+  Lock _lock;
   std::mutex m;
   std::string _host;
   int _port;
-  int iterations;
-  int batch_size;
+//  int iterations;
+//  int batch_size;
   int batches;
 
 private:
@@ -76,7 +81,6 @@ public:
   virtual ~MLClientLive();
 
 public:
-  void trigger();
   void append(Hash& hash);
 
   // DDImage::Iop overrides
@@ -122,7 +126,7 @@ public:
 
   bool getInferenceRequest(const std::string& hostStr, int port, std::string& errorMsg,
                            mlserver::RequestInference* requestInference, bool clearCache,
-                           int batch_total, int batch_current);
+                           int batch_total, int batch_current, int iterations);
 
 private:
   // Private functions for talking to the server

@@ -39,7 +39,9 @@ public:
   static const int kMaxNumberOfTry;
 
   // Static non-conts
-  static bool Verbose;
+  static bool DoPrint;
+  static bool DoDebugPrint;
+  static bool DoCommsPrint;
 
 public:
   //! Constructor. Initialize user controls to their default values, then try to
@@ -61,7 +63,9 @@ public:
   static bool ValidateHostName(const std::string& hostStr);
 
   //! Print debug related information to std::cout, when ::Verbose is set to true.
-  static void Vprint(std::string msg);
+  static void Print(std::string msg);
+  static void DebugPrint(std::string msg);
+  static void CommsPrint(std::string msg);
 
 public:
   // Public methods for client-server communication

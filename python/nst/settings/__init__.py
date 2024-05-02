@@ -1,11 +1,18 @@
 import json
 import os
 from platform import python_version
+from enum import Enum
 
 
 class Image(object):
     def __init__(self):
         self.rgb_filepath = ''
+        self.colorspace = 'acescg'
+
+
+class MaskedImage(object):
+    def __init__(self):
+        self.rgba_filepath = ''
         self.colorspace = 'acescg'
 
 
@@ -63,18 +70,22 @@ class NstSettings(BaseSettings):
         self.cuda = True
         self.model_path = os.getenv('NST_VGG_MODEL')
         self.cuda_device = 0
-        self.content_layer = 'r41'
+        self.content_layer = 'p4'
         self.content_layer_weight = 1.0
         self.content_mips = 1
-        self.optimiser = 'lbfgs'
+        self.optimiser = 'adam'
         self.learning_rate = 1.0
-        self.iterations = 500
+        self.histogram_loss_type = 'mae'
+        self.gram_loss_type = 'mae'
+        self.content_loss_type = 'mae'
+        self.laplacian_loss_type = 'mae'
+        self.iterations = 100
         self.log_iterations = 20
         self.outdir = ''
         self.write_gradients = False
         self.write_pyramids = False
         self.progressive_output = False
-        self.progressive_intertal = 1
+        self.progressive_interval = 1
         self.histogram_bins = 256
 
         ## to do: migrate these to TorchStyle and StyleImage classes?
@@ -82,14 +93,18 @@ class NstSettings(BaseSettings):
         self.style_pyramid_span = 0.5
         self.style_mips = 4
         self.mip_weights = [1.0, 1.0, 1.0, 1.0]
-        self.style_layers = ['p1', 'p2', 'r31', 'r42']
+        self.style_layers = ['p1', 'p2', 'p3', 'p4']
         self.style_layer_weights = [1.0, 1.0, 1.0, 1.0]
-        self.mask_layers = ['p1', 'p2', 'r31', 'r42']
-        ##
+        self.mask_layers = ['p1', 'p2', 'p3', 'p4']
 
-        self.gram_weight = 1.0
-        self.histogram_weight = 10000.0
-        self.tv_weight = 5.0
+        self.do_random_rotate = False
+        self.random_rotate = [0, 360]
+        self.random_crop = [0.3, 1.0]
+        self.random_rotate_mode = 'circular' # 'none', 'reflect'
+
+        self.gram_weight = 0.0
+        self.histogram_weight = 10
+        self.tv_weight = 0.0
         self.laplacian_weight = 0.0
         self.laplacian_loss_layer = 'r41'
         self.temporal_weight = 0.0
@@ -106,6 +121,8 @@ class WriterSettings(BaseSettings):
         super(WriterSettings, self).__init__()
         self.styles = [StyleImage()]
         self.content = None
+        self.temporal_content = None
+        # self.temporal_mask = None
         self.opt_image = Image()
         self.out = ''
         self.write_style_pyramid = False
@@ -149,15 +166,15 @@ class AnimSettings(WriterSettings):
         self.first_frame = 1001
         self.last_frame = 1010
         self.starting_pass = 1 # direction
-        self.passes = 15
-        # self.pass_iterations = 30 # should derive this
+        self.iterations_per_pass = 10
         self.use_temporal_loss_after = 8
         self.motion_fore = ''
         self.motion_fore_weight = ''
         self.motion_back = ''
         self.motion_back_weight = ''
-        self.interleave = False
-        self.depth = Image()
-        self.id = Image()
-        self.temporal_weight_mask = Image()
+        self.interleave = True
+        self.depth = ''
+        self.interleaved = True
+        self.checkpoint_format = 'pt'
+
 

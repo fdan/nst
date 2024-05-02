@@ -35,7 +35,7 @@ def create_expressions(mlc, parent):
     mlc.knob('models').setValue('Neural Style Transfer')
 
     float_knobs = [
-        "enable_update",
+        # "enable_update",
         "iterations",
         "log_iterations",
         "batch_size",
@@ -49,6 +49,12 @@ def create_expressions(mlc, parent):
         "histogram_bins",
         "tv_weight",
         "laplacian_weight",
+        "temporal_weight"
+    ]
+
+    bool_knobs = [
+        "allowUpdate"
+        # "liveRender"
     ]
 
     str_knobs = [
@@ -59,7 +65,19 @@ def create_expressions(mlc, parent):
         "mask_layers",
         "style_layer_weights",
         "content_layer",
+        "random_rotate",
+        "random_crop"
     ]
+
+    enum_knobs = [
+        "histogram_loss_type",
+        "gram_loss_type",
+        "content_loss_type",
+        "laplacian_loss_type",
+        "random_rotate_mode"
+    ]
+
+    # m = "[python \{nuke.thisNode().parent()\['iterations'].getValue()"
 
     for float_knob in float_knobs:
         try:
@@ -70,28 +88,36 @@ def create_expressions(mlc, parent):
     for str_knob in str_knobs:
         mlc.knob(str_knob).setValue('nuke.thisNode().parent()[\'%s\'].getValue()' % str_knob)
 
+    for enum_knob in enum_knobs:
+        mlc.knob(enum_knob).setValue('nuke.thisNode().parent()[\'%s\'].value()' % enum_knob)
 
-def snapshot():
+    for bool_knob in bool_knobs:
+        mlc.knob(bool_knob).setExpression('[python {nuke.thisNode().parent()[\'%s\'].getValue()}]' % bool_knob)
+
+    mlc.knob("liveRender").setExpression('[python {nuke.thisNode().parent()[\'render_mode\'].getValue()}]')
+
+
+def snapshot(filepath='', filename=''):
     n = nuke.thisNode()
     snaps = [x for x in n.nodes() if x.name() == "snapshot"]
     assert len(snaps) == 1
     snap = snaps[0]
     fpk = snap.knob('file')
-    uid = str(uuid.uuid4()).split('-')[-1]
-    print('snapshot uuid:', uid)
 
-    snapshot_dir = os.getenv('NST_SNAPSHOT_DIR')
+    if not filename:
+        filename = str(uuid.uuid4()).split('-')[-1]
+        print('snapshot uuid:', filename)
+
+    snapshot_dir = filepath or os.getenv('NST_SNAPSHOT_DIR')
     os.makedirs(snapshot_dir, exist_ok=True)
-
-    ofp = '%s/%s.exr' % (snapshot_dir, uid)
+    ofp = '%s/%s.exr' % (snapshot_dir, filename)
     fpk.setValue(ofp)
     frame = nuke.frame()
-    nuke.render(snap, frame, frame)
 
     mmd = n.node('ModifySnapMetaData')
     mmd['metadata'].fromScript("")
-
     a = str(n).split('\n')
+
     metaKeys = []
     for i in a:
         try:
@@ -101,6 +127,8 @@ def snapshot():
             pass
 
     mmd['metadata'].fromScript("\n".join(metaKeys))
+
+    nuke.render(snap, frame, frame)
 
     n.end()
 

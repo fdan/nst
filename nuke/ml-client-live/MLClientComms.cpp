@@ -44,7 +44,9 @@
 /*static*/ const int MLClientComms::kMaxNumberOfTry = 5;
 
 // Static non-const variables
-/*static*/ bool MLClientComms::Verbose = true;
+/*static*/ bool MLClientComms::DoPrint = true;
+/*static*/ bool MLClientComms::DoDebugPrint = true;
+/*static*/ bool MLClientComms::DoCommsPrint = true;
 
 //! Constructor. Initialize user controls to their default values, then try to
 //! connect to the specified host / port. Following the c-tor, you can test for
@@ -91,12 +93,28 @@ void MLClientComms::setHost(std::string& hostStr){
   return isIPv4 || isIPv6;
 }
 
-//! Print debug related information to std::cout, when ::Verbose is set to true.
-/*static*/ void MLClientComms::Vprint(std::string msg)
+//! Print normal
+/*static*/ void MLClientComms::Print(std::string msg)
 {
-  if (MLClientComms::Verbose) {
-    std::cerr << "Client -> " << msg << std::endl;
-  }
+    if (DoPrint) {
+        std::cerr << msg << std::endl;
+    }
+}
+
+//! Print debug info
+/*static*/ void MLClientComms::DebugPrint(std::string msg)
+{
+    if (DoDebugPrint){
+        std::cerr << msg << std::endl;
+    }
+}
+
+// Print comms info which is very verbose
+/*static*/ void MLClientComms::CommsPrint(std::string msg)
+{
+    if (DoCommsPrint){
+        std::cerr << "[COMMS] " << msg << std::endl;
+    }
 }
 
 //! Return whether this object is connected to the specified server.
@@ -108,6 +126,7 @@ bool MLClientComms::isConnected() const
 //! Function for discovering & negotiating the available models and their parameters.
 //! Return true on success, false otherwise with the errorMsg filled in.
 bool MLClientComms::sendInfoRequestAndReadInfoResponse(mlserver::RespondWrapper& responseWrapper,
+
                                                        std::string& errorMsg)
 {
   // Try connect if we haven't already
@@ -190,13 +209,13 @@ void MLClientComms::connectLoop()
       std::stringstream strStrm;
       strStrm << "Error setting up connection:" << std::endl;
       strStrm << "\t" << errorStr.c_str();
-      MLClientComms::Vprint(strStrm.str());
+      MLClientComms::CommsPrint(strStrm.str());
       _isConnected = false;
       return;
     }
     std::stringstream strStrm;
     strStrm << "Failing to connect. Attempts: " << i;
-    MLClientComms::Vprint(strStrm.str());
+    MLClientComms::CommsPrint(strStrm.str());
   }
   _isConnected = true;
 }
@@ -225,13 +244,13 @@ bool MLClientComms::setupConnection(std::string& errorStr)
 
     std::stringstream strStrm;
     strStrm << "Trying to connect to " << s;
-    MLClientComms::Vprint(strStrm.str());
+    MLClientComms::CommsPrint(strStrm.str());
 
     if (status != 0) {
       std::stringstream ss;
       ss << "getaddrinfo error: " << gai_strerror(status);
       errorStr = ss.str();
-      MLClientComms::Vprint(errorStr);
+      MLClientComms::CommsPrint(errorStr);
       return false;
     }
 
@@ -241,7 +260,7 @@ bool MLClientComms::setupConnection(std::string& errorStr)
       std::stringstream ss;
       ss << "Socket error: " << gai_strerror(_socket);
       errorStr = ss.str();
-      MLClientComms::Vprint(errorStr);
+      MLClientComms::CommsPrint(errorStr);
       return false;
     }
 
@@ -250,7 +269,7 @@ bool MLClientComms::setupConnection(std::string& errorStr)
     int enable = TRUE;
     if (setsockopt(_socket, SOL_SOCKET, SO_REUSEADDR, (char *)&enable, sizeof(BOOL)) < 0) {
       errorStr = "setsockopt(SO_REUSEADDR) failed";
-      MLClientComms::Vprint(errorStr);
+      MLClientComms::CommsPrint(errorStr);
       return false;
     }
 
@@ -261,7 +280,7 @@ bool MLClientComms::setupConnection(std::string& errorStr)
       std::stringstream ss;
       ss << "ioctlsocket failed with error: " << iResult;
       errorStr = ss.str();
-      MLClientComms::Vprint(errorStr);
+      MLClientComms::CommsPrint(errorStr);
       return false;
     }
 
@@ -289,7 +308,7 @@ bool MLClientComms::setupConnection(std::string& errorStr)
         if (status == 0) // Unnable to select socket within the time limit of timeout
         {
           errorStr = "Timeout reached when trying to select socket";
-          MLClientComms::Vprint(errorStr);
+          MLClientComms::CommsPrint(errorStr);
           return false;
         }
         else // file descriptors are ready to write or have error condition pending
@@ -301,7 +320,7 @@ bool MLClientComms::setupConnection(std::string& errorStr)
           if (FD_ISSET(_socket, &errfds))
           {
             errorStr = "Error in socket selection";
-            MLClientComms::Vprint(errorStr);
+            MLClientComms::CommsPrint(errorStr);
             return false;
           }
         }
@@ -311,7 +330,7 @@ bool MLClientComms::setupConnection(std::string& errorStr)
         std::stringstream ss;
         ss << "Socket error connecting " << WSAGetLastError();
         errorStr = ss.str();
-        MLClientComms::Vprint(errorStr);
+        MLClientComms::CommsPrint(errorStr);
         return false;
       }
     }
@@ -322,7 +341,7 @@ bool MLClientComms::setupConnection(std::string& errorStr)
       std::stringstream ss;
       ss << "ioctlsocket failed with error: " << iResult;
       errorStr = ss.str();
-      MLClientComms::Vprint(errorStr);
+      MLClientComms::CommsPrint(errorStr);
       return false;
     }
 #else
@@ -330,7 +349,7 @@ bool MLClientComms::setupConnection(std::string& errorStr)
     int enable = 1;
     if (setsockopt(_socket, SOL_SOCKET, SO_REUSEADDR, &enable, sizeof(int)) < 0) {
       errorStr = "setsockopt(SO_REUSEADDR) failed";
-      MLClientComms::Vprint(errorStr);
+      MLClientComms::CommsPrint(errorStr);
       return false;
     }
 
@@ -340,7 +359,7 @@ bool MLClientComms::setupConnection(std::string& errorStr)
       std::stringstream ss;
       ss << "Socket error fcntl(..., F_GETFL) (" << strerror(errno) << ")";
       errorStr = ss.str();
-      MLClientComms::Vprint(errorStr);
+      MLClientComms::CommsPrint(errorStr);
       return false;
     }
     socket_flags |= O_NONBLOCK; // add non-blocking flag to the socket flags
@@ -348,7 +367,7 @@ bool MLClientComms::setupConnection(std::string& errorStr)
       std::stringstream ss;
       ss << "Socket error fcntl(..., F_SETFL) (" << strerror(errno) << ")";
       errorStr = ss.str();
-      MLClientComms::Vprint(errorStr);
+      MLClientComms::CommsPrint(errorStr);
       return false;
     }
 
@@ -374,7 +393,7 @@ bool MLClientComms::setupConnection(std::string& errorStr)
             std::stringstream ss;
             ss << "Error in socket connection " << valopt << " - " << strerror(valopt);
             errorStr = ss.str();
-            MLClientComms::Vprint(errorStr);
+            MLClientComms::CommsPrint(errorStr);
             return false;
           }
         }
@@ -386,7 +405,7 @@ bool MLClientComms::setupConnection(std::string& errorStr)
         std::stringstream ss;
         ss << "Socket error connecting " << errno << " " << strerror(errno);
         errorStr = ss.str();
-        MLClientComms::Vprint(errorStr);
+        MLClientComms::CommsPrint(errorStr);
         return false;
       }
     }
@@ -395,7 +414,7 @@ bool MLClientComms::setupConnection(std::string& errorStr)
       std::stringstream ss;
       ss << "Socket error fcntl(..., F_GETFL) (" << strerror(errno) << ")";
       errorStr = ss.str();
-      MLClientComms::Vprint(errorStr);
+      MLClientComms::CommsPrint(errorStr);
       return false;
     }
     socket_flags &= (~O_NONBLOCK); // remove non-blocking flag from the socket
@@ -403,7 +422,7 @@ bool MLClientComms::setupConnection(std::string& errorStr)
       std::stringstream ss;
       ss << "Socket error fcntl(..., F_SETFL) (" << strerror(errno) << ")";
       errorStr = ss.str();
-      MLClientComms::Vprint(errorStr);
+      MLClientComms::CommsPrint(errorStr);
       return false;
     }
 #endif
@@ -412,7 +431,7 @@ bool MLClientComms::setupConnection(std::string& errorStr)
 
     std::stringstream ss;
     ss << "Connected to " << s;
-    MLClientComms::Vprint(ss.str());
+    MLClientComms::CommsPrint(ss.str());
 
     // Free the aiResult linked list after we are done with it
     freeaddrinfo(aiResult);
@@ -421,7 +440,7 @@ bool MLClientComms::setupConnection(std::string& errorStr)
     std::stringstream ss;
     ss << e.what();
     errorStr = ss.str();
-    MLClientComms::Vprint(errorStr);
+    MLClientComms::CommsPrint(errorStr);
     return false;
   }
   return true;
@@ -432,7 +451,7 @@ bool MLClientComms::setupConnection(std::string& errorStr)
 bool MLClientComms::sendInfoRequest()
 {
   int bytecount;
-  MLClientComms::Vprint("Sending info request");
+  MLClientComms::CommsPrint("Sending info request");
 
   // Create message
   mlserver::RequestWrapper requestWrapper;
@@ -440,20 +459,20 @@ bool MLClientComms::sendInfoRequest()
   mlserver::RequestInfo* requestInfo = new mlserver::RequestInfo;
   requestInfo->set_info(true);
   requestWrapper.set_allocated_r1(requestInfo);
-  MLClientComms::Vprint("Created message");
+  MLClientComms::CommsPrint("Created message");
 
   // Generate the data which should be sent over the network
   std::string requestStr;
   requestWrapper.SerializeToString(&requestStr);
   size_t length = requestStr.size();
-  MLClientComms::Vprint("Serialized message of length");
+  MLClientComms::CommsPrint("Serialized message of length");
 
   // Creating header
   char hdrSend[kNumberOfBytesHeaderSize];
   std::ostringstream ss;
   ss << std::setw(kNumberOfBytesHeaderSize) << std::setfill('0') << length;
   ss.str().copy(hdrSend, kNumberOfBytesHeaderSize);
-  MLClientComms::Vprint("Created char array of length " + std::to_string(length));
+  MLClientComms::CommsPrint("Created char array of length " + std::to_string(length));
 
   // Copy to char array
   std::vector<char> toSend(kNumberOfBytesHeaderSize + length);
@@ -465,24 +484,23 @@ bool MLClientComms::sendInfoRequest()
     char val = requestStr[i];
     toSend[i + kNumberOfBytesHeaderSize] = val;
   }
-  MLClientComms::Vprint("Copied to char array");
+  MLClientComms::CommsPrint("Copied to char array");
 
   // Send header with number of bytes
   if ((bytecount = send(_socket, (const char *)&toSend[0], kNumberOfBytesHeaderSize + length, 0)) == -1) {
     std::stringstream ss;
     ss << "Error sending data " << errno;
-    MLClientComms::Vprint(ss.str());
+    MLClientComms::CommsPrint(ss.str());
     return false;
   }
-
-  MLClientComms::Vprint("Message sent");
+  MLClientComms::CommsPrint("Message sent");
 
   return true;
 }
 
 bool MLClientComms::sendCancelRequest(){
     int bytecount;
-    MLClientComms::Vprint("Sending cancel request");
+    MLClientComms::CommsPrint("Sending cancel request");
 
     mlserver::RequestWrapper requestWrapper;
     mlserver::RequestCancel* requestCancel = new mlserver::RequestCancel;
@@ -499,7 +517,7 @@ bool MLClientComms::sendCancelRequest(){
     std::ostringstream ss;
     ss << std::setw(kNumberOfBytesHeaderSize) << std::setfill('0') << length;
     ss.str().copy(hdrSend, kNumberOfBytesHeaderSize);
-    MLClientComms::Vprint("Created char array of length " + std::to_string(length));
+    MLClientComms::CommsPrint("Created char array of length " + std::to_string(length));
 
     // Copy to char array
     std::vector<char> toSend(kNumberOfBytesHeaderSize + length);
@@ -511,17 +529,17 @@ bool MLClientComms::sendCancelRequest(){
         char val = requestStr[i];
         toSend[i + kNumberOfBytesHeaderSize] = val;
     }
-    MLClientComms::Vprint("Copied to char array");
+    MLClientComms::CommsPrint("Copied to char array");
 
     // Send header with number of bytes
     if ((bytecount = send(_socket, (const char *)&toSend[0], kNumberOfBytesHeaderSize + length, 0)) == -1) {
         std::stringstream ss;
         ss << "Error sending cancel " << errno;
-        MLClientComms::Vprint(ss.str());
+        MLClientComms::CommsPrint(ss.str());
         return false;
     }
 
-    MLClientComms::Vprint("Message sent");
+    MLClientComms::CommsPrint("Message sent");
 
     return true;
 }
@@ -533,11 +551,11 @@ bool MLClientComms::readInfoResponse(mlserver::RespondWrapper& responseWrapper)
   int bytecount;
 
   // Read header first
-  MLClientComms::Vprint("Reading header data");
+  MLClientComms::CommsPrint("Reading header data");
   char hdrBuffer[kNumberOfBytesHeaderSize];
 
   if ((bytecount = recv(_socket, hdrBuffer, kNumberOfBytesHeaderSize, 0)) == -1) {
-    MLClientComms::Vprint("Error receiving data.");
+    MLClientComms::CommsPrint("Error receiving data.");
     return false;
   }
   google::protobuf::uint32 siz = readHdr(hdrBuffer);
@@ -550,7 +568,7 @@ bool MLClientComms::readInfoResponse(mlserver::RespondWrapper& responseWrapper)
 bool MLClientComms::readInfoResponse(google::protobuf::uint32 siz, mlserver::RespondWrapper& responseWrapper)
 {
   // Reading message data
-  MLClientComms::Vprint("Reading data of size: " + std::to_string(siz));
+  MLClientComms::CommsPrint("Reading data of size: " + std::to_string(siz));
   int bytecount;
   std::vector<char> buffer(siz);
   responseWrapper.set_info(true);
@@ -559,12 +577,12 @@ bool MLClientComms::readInfoResponse(google::protobuf::uint32 siz, mlserver::Res
   if ((bytecount = recv(_socket, &buffer[0], siz, 0)) == -1) {
     std::stringstream ss;
     ss << "Error receiving data " << errno;
-    MLClientComms::Vprint(ss.str());
+    MLClientComms::CommsPrint(ss.str());
     return false;
   }
 
   // Deserialize using protobuf functions
-  MLClientComms::Vprint("Deserializing message");
+  MLClientComms::CommsPrint("Deserializing message");
   google::protobuf::io::ArrayInputStream ais(&buffer[0], siz);
   google::protobuf::io::CodedInputStream codedInput(&ais);
   google::protobuf::io::CodedInputStream::Limit msgLimit = codedInput.PushLimit(siz);
@@ -579,7 +597,7 @@ bool MLClientComms::readInfoResponse(google::protobuf::uint32 siz, mlserver::Res
 //! Send a messaged image to to the server.
 bool MLClientComms::sendInferenceRequest(mlserver::RequestInference& requestInference) {
   int bytecount;
-  MLClientComms::Vprint("Sending inference request");
+  MLClientComms::CommsPrint("Sending inference request");
 
   // Create message
   mlserver::RequestWrapper requestWrapper;
@@ -589,23 +607,23 @@ bool MLClientComms::sendInferenceRequest(mlserver::RequestInference& requestInfe
 //  std::cout << requestInference;
 // need to deep copy the data being pointed to
   requestWrapper.set_allocated_r2(&requestInference);
-  MLClientComms::Vprint("Created message");
+  MLClientComms::CommsPrint("Created message");
 
   // Serialize message
   std::string requestStr;
 
   // this will crash if ran twice:
   requestWrapper.SerializeToString(&requestStr);
-  MLClientComms::Vprint("success");
+  MLClientComms::CommsPrint("success");
   size_t length = requestStr.size();
-  MLClientComms::Vprint("Serialized message of length");
+  MLClientComms::CommsPrint("Serialized message of length");
 
   // Creating header
   char hdrSend[kNumberOfBytesHeaderSize];
   std::ostringstream ss;
   ss << std::setw(kNumberOfBytesHeaderSize) << std::setfill('0') << length;
   ss.str().copy(hdrSend, kNumberOfBytesHeaderSize);
-  MLClientComms::Vprint("Created char array of length " + std::to_string(length));
+  MLClientComms::CommsPrint("Created char array of length " + std::to_string(length));
 
   // Copy to char array
   std::vector<char> toSend(kNumberOfBytesHeaderSize + length);
@@ -617,18 +635,18 @@ bool MLClientComms::sendInferenceRequest(mlserver::RequestInference& requestInfe
     char val = requestStr[i];
     toSend[i + kNumberOfBytesHeaderSize] = val;
   }
-  MLClientComms::Vprint("Copied to char array");
+  MLClientComms::CommsPrint("Copied to char array");
 
   // Send header with number of bytes
   if ((bytecount = send(_socket, (const char *)&toSend[0], kNumberOfBytesHeaderSize + length, 0)) == -1) {
 //    isConnected();
     std::stringstream ss;
     ss << "Error sending data " << errno;
-    MLClientComms::Vprint(ss.str());
+    MLClientComms::CommsPrint(ss.str());
     return false;
   }
 
-  MLClientComms::Vprint("Message sent");
+  MLClientComms::CommsPrint("Message sent");
 
   // Return true on success
   return true;
@@ -642,23 +660,23 @@ bool MLClientComms::readInferenceResponse(mlserver::RespondWrapper& responseWrap
   size_t bytecount;
 
   // Read header first
-  MLClientComms::Vprint("Reading header data");
+  MLClientComms::CommsPrint("Reading header data");
 
   char hdrBuffer[kNumberOfBytesHeaderSize];
 
   // get the message header.  this will block because the header is the first few bytes
   // of the whole message, so we don't get it until after the first send
   if ((bytecount = recv(_socket, hdrBuffer, kNumberOfBytesHeaderSize, 0)) == -1) {
-    MLClientComms::Vprint("Error receiving data.");
+    MLClientComms::CommsPrint("Error receiving data.");
     return false;
   }
 
-//  MLClientComms::Vprint("received header");
+//  MLClientComms::CommsPrint("received header");
   google::protobuf::uint32 siz = readHdr(hdrBuffer);
-//  MLClientComms::Vprint("read header");
+//  MLClientComms::CommsPrint("read header");
 
   if (siz == 0){
-      MLClientComms::Vprint("hdr size is zero, returning");
+      MLClientComms::CommsPrint("hdr size is zero, returning");
       return false;
   }
 
@@ -672,7 +690,7 @@ bool MLClientComms::readInferenceResponse(google::protobuf::uint32 siz,
                                           mlserver::RespondWrapper& responseWrapper)
 {
   // we enter this function after the first batch is sent
-  MLClientComms::Vprint("Reading data of size: " + std::to_string(siz));
+  MLClientComms::CommsPrint("Reading data of size: " + std::to_string(siz));
   responseWrapper.set_info(true);
 
   // Read the buffer
@@ -687,12 +705,12 @@ bool MLClientComms::readInferenceResponse(google::protobuf::uint32 siz,
   }
 
   if (bytecount < 0) {
-    MLClientComms::Vprint("Error receiving data.");
+    MLClientComms::CommsPrint("Error receiving data.");
     return false;
   }
 
   // Deserialize using protobuf functions
-  MLClientComms::Vprint("Deserializing message");
+  MLClientComms::CommsPrint("Deserializing message");
   google::protobuf::io::ArrayInputStream ais(output.c_str(), siz);
   google::protobuf::io::CodedInputStream codedInput(&ais);
   google::protobuf::io::CodedInputStream::Limit msgLimit = codedInput.PushLimit(siz);
@@ -717,7 +735,7 @@ void MLClientComms::closeConnection()
     close(_socket);
 #endif
     _socket = 0;
-    MLClientComms::Vprint("Closed connection\n"
+    MLClientComms::CommsPrint("Closed connection\n"
       "-----------------------------------------------");
   }
   _isConnected = false;

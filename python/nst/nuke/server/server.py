@@ -37,7 +37,7 @@ ML_SERVER_DIR = os.getenv('ML_SERVER_DIR')
 
 class MLTCPServer(socketserver.TCPServer):
     def __init__(self, server_address, handler_class, auto_bind=True):
-        self.verbose = False
+        self.verbose = True
         model_dir = os.path.join(ML_SERVER_DIR, 'models')
         os.chdir(model_dir)
 
@@ -83,12 +83,22 @@ class ImageProcessTCPHandler(socketserver.BaseRequestHandler):
     def handle(self):
         # Read the data headers
         data_hdr = self.request.recv(12)
+
+        if not data_hdr:
+            print('message has no data header, returning')
+            return
+
         self.vprint('Received data header: {}'.format(data_hdr))
         sz = int(data_hdr)
         self.vprint('Receiving message of size: {}'.format(sz))
 
         # Read data
         data = self.recvall(sz)
+
+        if not data:
+            print("message has no data, returning")
+            return
+
         self.vprint('{} bytes read'.format(len(data)))
 
         # Parse the message
@@ -195,9 +205,11 @@ class ImageProcessTCPHandler(socketserver.BaseRequestHandler):
 
         # Parse images if in first batch
         if req.clearcache:
-            print('clearcache called')
+            self.vprint('clearcache called')
             model.prepared = False
             img_list = []
+            print('num images:', len(req.images))
+            print('iterations:', req.iterations)
             for byte_img in req.images:
                 img = np.frombuffer(byte_img.image, dtype='<f4')
                 height = byte_img.height
@@ -208,13 +220,14 @@ class ImageProcessTCPHandler(socketserver.BaseRequestHandler):
                 img = np.flipud(img)
                 img_list.append(img)
             model.prepare(img_list)
-            model.set_iterations(model.batch_size)
+            model.set_iterations(req.iterations)
+            # model.set_iterations(model.batch_size)
         else:
-            print('not clearing cache')
+            self.vprint('not clearing cache')
 
         try:
             # Running inference
-            self.vprint('Starting inference')
+            print('starting batch %s' % req.batch_current)
 
             # main call:
             model = self.server.models[m.name]
@@ -242,10 +255,9 @@ class ImageProcessTCPHandler(socketserver.BaseRequestHandler):
             # process.join() # this blocks
             # result = queue.get()
 
-
             print('job progress: %d' % job_progress + '%')
             if job_progress == 100:
-                print('job complete')
+                print('Job complete')
                 print('-----------------------------------------------')
 
             resp_msg = RespondWrapper()
@@ -264,17 +276,18 @@ class ImageProcessTCPHandler(socketserver.BaseRequestHandler):
 
             # todo: want to call this when next batch is running in subproc
             send_msg(self, resp_msg)
+            self.vprint('message sent')
+            print('batch %s complete' % req.batch_current)
             # p = Process(target=send_msg, args=(self, resp_msg))
             # p.start()
             # if it's the last batch, join to avoid main proc hangup
             # if b == batches-1:
             #     p.join()
 
-
         except Exception as e:
             # Pass error message to the client
-            self.vprint('Exception caught on inference on model:')
-            self.vprint(str(traceback.print_exc()))
+            print('Exception caught on inference on model:')
+            print(str(traceback.print_exc()))
             resp_msg = self.errormsg(str(e))
             send_msg(self, resp_msg)
 

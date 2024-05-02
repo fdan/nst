@@ -62,7 +62,8 @@ message RequestInference {
 	repeated Image images = 2;
 	optional int32 clearcache = 3;
 	optional int32 batch_total = 4;	
-	optional int32 batch_current = 5;		
+	optional int32 batch_current = 5;
+	optional int32 iterations = 6;
 }
 
 // add batch or epoch info for client op hash

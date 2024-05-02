@@ -14,6 +14,12 @@ torch.backends.cudnn.benchmark = False
 torch.backends.cudnn.enabled=False
 
 
+class TorchMaskedImage(object):
+    def __init__(self, tensor, alpha=torch.zeros(0)):
+        self.tensor = tensor
+        self.alpha = alpha
+
+
 class TorchStyle(object):
     def __init__(self, tensor, alpha=torch.zeros(0), target_map=torch.zeros(0)):
         self.tensor = tensor
@@ -33,8 +39,9 @@ class TorchStyle(object):
 class Nst(torch.nn.Module):
     def __init__(self):
         super(Nst, self).__init__()
-        self.vgg = vgg.VGG()
+        self.vgg = vgg.VGG(pool='max')
         self.content = torch.zeros(0)
+        self.temporal_content = torch.zeros(0)
         self.temporal_weight_mask = torch.zeros(0)
         self.content_scale = 1.0
         self.styles = []
@@ -43,6 +50,7 @@ class Nst(torch.nn.Module):
         self.optimiser = None
         self.settings = settings.NstSettings()
         self.start_iter = 1
+        self.prev_iteration_opt = torch.zeros(0)
 
     def prepare(self):
         if self.settings.cuda:
@@ -50,6 +58,8 @@ class Nst(torch.nn.Module):
 
         for param in self.vgg.parameters():
             param.requires_grad = False
+
+        self.opt_masked = self.opt_tensor.clone()
 
         if self.settings.engine == 'gpu':
             self.vgg.cuda()
@@ -86,10 +96,6 @@ class Nst(torch.nn.Module):
             # print('optimiser is asgd')
             self.optimiser = optim.ASGD([self.opt_tensor], lr=self.settings.learning_rate)
 
-
-        # elif self.settings.optimiser == 'lion':
-        #     self.optimiser = Lion([self.opt_tensor], lr=0.1, weight_decay=0.98, use_triton=True)
-
         else:
             raise Exception("unsupported optimiser:", self.settings.optimiser)
 
@@ -100,6 +106,8 @@ class Nst(torch.nn.Module):
                 self.vgg,
                 self.settings.content_layer,
                 self.settings.content_layer_weight,
+                self.settings.content_loss_type,
+                self.styles[0].target_map,
                 self.settings.cuda_device
             )
 
@@ -107,6 +115,23 @@ class Nst(torch.nn.Module):
             self.opt_guides.append(content_guide)
         else:
             print('not using content guide')
+
+        # # temporal content can be null
+        # if self.temporal_content.numel() != 0:
+        #     temporal_content_guide = guides.TemporalContentGuide(
+        #         self.temporal_content,
+        #         self.vgg,
+        #         self.settings.content_layer,
+        #         self.settings.temporal_weight,
+        #         self.settings.content_loss_type,
+        #         self.temporal_weight_mask,
+        #         self.settings.cuda_device
+        #     )
+        #
+        #     temporal_content_guide.prepare()
+        #     self.opt_guides.append(temporal_content_guide)
+        # else:
+        #     print('not using temporal content guide')
 
         if self.settings.laplacian_weight:
             laplacian_guide = guides.LaplacianGuide(
@@ -117,6 +142,7 @@ class Nst(torch.nn.Module):
                 self.settings.laplacian_filter_kernel,
                 self.settings.laplacian_blur_kernel,
                 self.settings.laplacian_blur_sigma,
+                self.settings.laplacian_loss_type,
                 self.settings.cuda_device,
             )
 
@@ -134,6 +160,7 @@ class Nst(torch.nn.Module):
                 self.settings.style_pyramid_span,
                 self.settings.style_zoom,
                 self.settings.gram_weight,
+                self.settings.gram_loss_type,
                 outdir=self.settings.outdir,
                 write_pyramids=self.settings.write_pyramids,
                 write_gradients=self.settings.write_gradients,
@@ -156,6 +183,10 @@ class Nst(torch.nn.Module):
                 self.settings.style_zoom,
                 self.settings.histogram_weight,
                 self.settings.histogram_bins,
+                self.settings.histogram_loss_type,
+                self.settings.random_rotate_mode,
+                self.settings.random_rotate,
+                self.settings.random_crop,
                 outdir=self.settings.outdir,
                 write_pyramids=self.settings.write_pyramids,
                 write_gradients=self.settings.write_gradients,
@@ -169,25 +200,27 @@ class Nst(torch.nn.Module):
         if self.settings.tv_weight:
             tv_guide = guides.TVGuide(
                 self.settings.tv_weight,
+                None,
                 self.settings.cuda
             )
 
             self.opt_guides.append(tv_guide)
 
-        if self.settings.temporal_weight and self.temporal_weight_mask.numel() != 0:
-            temporal_guide = guides.TemporalContentGuide(
-                self.content,
-                self.vgg,
-                self.settings.content_layer,
-                self.settings.content_layer_weight,
-                self.temporal_weight_mask,
-                self.settings.cuda_device
-            )
-
-            temporal_guide.prepare()
-            self.opt_guides.append(temporal_guide)
-        # else:
-        #     print(11.2, self.settings.temporal_weight, self.temporal_weight_mask)
+        # if self.settings.temporal_weight and self.temporal_weight_mask.numel() != 0 and self.temporal_content.numel() != 0:
+        #     temporal_guide = guides.TemporalContentGuide(
+        #         self.content,
+        #         self.vgg,
+        #         self.settings.content_layer,
+        #         self.settings.temporal_weight,
+        #         self.settings.content_loss_type,
+        #         self.temporal_weight_mask,
+        #         self.settings.cuda_device
+        #     )
+        #
+        #     temporal_guide.prepare()
+        #     self.opt_guides.append(temporal_guide)
+        # # else:
+        # #     print(11.2, self.settings.temporal_weight, self.temporal_weight_mask)
 
     def forward(self):
         n_iter = [self.start_iter]
@@ -195,6 +228,9 @@ class Nst(torch.nn.Module):
 
         if self.settings.cuda:
             max_memory = torch.cuda.get_device_properties(torch.cuda.current_device()).total_memory / 1000000
+
+        # self.style_index = 0
+        # self.style_switch_counter = 0
 
         def closure():
             if self.settings.cuda_device:
@@ -205,7 +241,9 @@ class Nst(torch.nn.Module):
             gradients = []
 
             for guide in self.opt_guides:
+                # gradients += guide(self.optimiser, self.opt_tensor, loss, n_iter[0], self.style_index)
                 gradients += guide(self.optimiser, self.opt_tensor, loss, n_iter[0])
+                # gradients += guide(self.optimiser, o, loss, n_iter[0])
 
             b, c, w, h = self.opt_tensor.grad.size()
             if self.settings.cuda:
@@ -219,10 +257,16 @@ class Nst(torch.nn.Module):
             if self.settings.write_gradients:
                 utils.write_tensor(sum_gradients, '%s/grad/%04d.pt' % (self.settings.outdir, n_iter[0]))
 
-            # blur grads - doesn't really work well
-            # import kornia
-            # self.opt_tensor.grad = kornia.filters.gaussian_blur2d(sum_gradients, (3, 3), (0.1, 0.1))
             self.opt_tensor.grad = sum_gradients
+
+            # if self.prev_iteration_opt.numel() != 0:
+            #     real_gradients = self.prev_iteration_opt - self.opt_tensor
+            #     self.opt_masked -= real_gradients
+                # if self.temporal_weight_mask.numel() != 0:
+                #     self.opt_masked -= real_gradients * self.temporal_weight_mask
+                # else:
+                #     self.opt_masked -= real_gradients
+            # self.prev_iteration_opt = self.opt_tensor.clone()
 
             nice_loss = '{:,.0f}'.format(loss.item())
             current_loss[0] = loss.item()
@@ -248,7 +292,9 @@ class Nst(torch.nn.Module):
             while n_iter[0] <= max_iter:
                 self.optimiser.step(closure)
 
+        # return self.opt_masked
         return self.opt_tensor
+
 
     # def save(self, fp):
     #     torch.save(self.state_dict(), fp)

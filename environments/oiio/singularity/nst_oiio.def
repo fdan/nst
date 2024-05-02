@@ -57,7 +57,7 @@ python3.10 -m pip install --no-cache-dir matplotlib
 python3.10 -m pip install --no-cache-dir jupyterlab
 python3.10 -m pip install --no-cache-dir pybind11
 python3.10 -m pip install --no-cache-dir ninja
-python3.10 -m pip install --no-cache-dir torch-lucent
+#python3.10 -m pip install --no-cache-dir torch-lucent
 python3.10 -m pip install --no-cache-dir pytorch_histogram_matching
 
 

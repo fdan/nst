@@ -42,10 +42,10 @@ RUN python3.10 -m pip install --no-cache-dir setuptools wheel && \
     imageio \
     numba
 
-RUN python3.10 -m pip install --no-cache-dir torch==1.13.1+cu117 torchvision==0.14.1+cu117 torchaudio==0.13.1 -f https://download.pytorch.org/whl/torch_stable.html
+RUN python3.10 -m pip install --no-cache-dir torch==2.0.0+cu117 torchvision==0.15.1+cu117 torchaudio==2.0.1+cu117 -f https://download.pytorch.org/whl/torch_stable.html
 RUN python3.10 -m pip install --no-cache-dir cupy-cuda11x
 RUN python3.10 -m pip install --no-cache-dir cython
-RUN python3.10 -m pip install --no-cache-dir kornia
+RUN python3.10 -m pip install --no-cache-dir kornia==0.6.12
 RUN python3.10 -m pip install --no-cache-dir opencv-python
 RUN python3.10 -m pip install --no-cache-dir memory_profiler
 RUN python3.10 -m pip install --no-cache-dir matplotlib

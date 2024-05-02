@@ -1,13 +1,65 @@
 import os
 
 import torch
+from torch import nn
 from torch.autograd import Variable # deprecated - use Tensor
 import torchvision.transforms.functional
+
+import kornia
+
 import math
 
 import numpy as np
 
 from .vgg import VGG
+
+
+
+# def get_fft_scale(h, w, decay_power=.75, **kwargs):
+#     d = .5 ** .5  # set center frequency scale to 1
+#     fy = np.fft.fftfreq(h, d=d)[:,None]
+#     if w % 2 == 1:
+#         fx = np.fft.fftfreq(w, d=d)[: w // 2 + 2]
+#     else:
+#         fx = np.fft.fftfreq(w, d=d)[: w // 2 + 1]
+#     freqs = (fx*fx + fy*fy) ** decay_power
+#     scale = 1.0 / np.maximum(freqs, 1.0 / (max(w, h)*d))
+#     scale = torch.tensor(scale).float()[None, None, ..., None].cuda()
+#     return scale
+#
+# def fft_to_rgb(h, w, t, **kwargs):
+#     scale = get_fft_scale(h, w, **kwargs)
+#     t = scale * t
+#     t = torch.fft.irfft(t, 2, norm='forward')
+#     return t
+#
+# def rgb_to_fft(h, w, t, **kwargs):
+#     t = torch.fft.rfft(t, norm='forward')
+#     scale = get_fft_scale(h, w, **kwargs)
+#     t = t / scale
+#     return t
+
+
+
+def jitter(img):
+    b, c, h, w = img.size()
+
+    resample = kornia.constants.Resample.BICUBIC
+
+    rand_rotation = 1.0
+    # rand_rotation = 0.0
+    # rand_crop_scale = (0.97, 1.0)
+    # rand_crop_ratio = (0.97, 1.03)
+    rand_crop_scale = (0.999, 1.0)
+    # rand_crop_ratio = (h/w*0.98, h/w*1.02)
+    rand_crop_ratio = (h/w, h/w)
+
+    transform = nn.Sequential(
+        kornia.augmentation.RandomResizedCrop(size=(h, w), scale=rand_crop_scale, ratio=rand_crop_ratio, resample=resample),
+        # kornia.augmentation.RandomRotation(degrees=rand_rotation, resample=resample)
+    )
+
+    return transform(img)
 
 
 def get_cuda_device() -> str:
@@ -83,6 +135,27 @@ def zoom_image(img, zoom, output_path=''):
         torch.save(result, output_path)
 
     return result
+
+
+def random_rotate_crop(t, scale=(0.3, 1.0), rotate=(0, 360), mode='circular'):
+    '''
+    modes: reflect, circular
+    '''
+    b, c, h, w = t.size()
+
+    transform_c = torchvision.transforms.RandomResizedCrop((h, w), scale=scale, ratio=(1.0, 1.0))
+    img = transform_c(t)
+
+    crop_x = w - 1
+    crop_y = h - 1
+    img = torch.nn.functional.pad(img, (crop_x, crop_x, crop_y, crop_y), mode=mode)
+
+    transform_r = torchvision.transforms.RandomRotation(rotate)
+    img = transform_r(img)
+
+    img = torchvision.transforms.functional.center_crop(img, (h, w))
+
+    return img
 
 
 def tile(img, zoom, cuda=False):

@@ -52,6 +52,7 @@ RUN python3.8 -m pip install --no-cache-dir torch==1.10.1+cu111 torchvision==0.1
 RUN python3.8 -m pip install --no-cache-dir cupy-cuda110
 RUN python3.8 -m pip install --no-cache-dir cython
 RUN python3.8 -m pip install --no-cache-dir kornia
+RUN python3.8 -m pip install --no-cache-dir torch-lucent
 
 # set env vars for nst
 ENV PATH /workspace/git/nst/bin:$PATH

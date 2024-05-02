@@ -68,11 +68,19 @@ MLClientLive::MLClientLive(Node* node)
 {
     killthread = false;
     terminate = false;
-    Status status = ReadyToSend;
+    allowUpdate = true;
+    responseStatus = CanSend;
+    jobStatus = Completed;
     batch = 0;
+
+    ThreadId this_id = Thread::GetThreadId();
+    std::stringstream  ss1;
+    ss1 << "[MLCL] constructor called, thread id: " << this_id;
+    MLClientComms::DebugPrint(ss1.str());
 }
 
 MLClientLive::~MLClientLive() {
+    MLClientComms::DebugPrint("MLClientLive destructor called");
 }
 
 void MLClientLive::append(Hash& hash){
@@ -168,98 +176,170 @@ void MLClientLive::getRequests(const Box& box, const ChannelSet& channels, int c
 }
 
 
-void MLClientLive::renderStripe(ImagePlane& imagePlane)
-{
-  std::thread::id this_id = std::this_thread::get_id();
+void MLClientLive::renderStripe(ImagePlane& imagePlane) {
+    ThreadId this_id = Thread::GetThreadId();
+    std::stringstream ss0;
+    ss0 << "\n[MLCL] renderStripe entered, (thread id: " << this_id << ")";
+    MLClientComms::DebugPrint(ss0.str());
 
-//    std::stringstream  ss111;
-//    ss111 << "renderStripe saw status " << status << std::endl;
-//    MLClientComms::Vprint(ss111.str());
+    MLClientComms::DebugPrint("[MLCL] renderStripe entered");
 
-  // get the knob values.  floats?
-  DD::Image::Knob* itKnob = knob("iterations");
-  DD::Image::Knob* bsKnob = knob("batch_size");
-  iterations = itKnob->get_value();
+    DD::Image::Knob *itKnob = knob("iterations");
+    DD::Image::Knob *bsKnob = knob("batch_size");
+    DD::Image::Knob *liveRenderKnob = knob("liveRender");
+    int iterations = itKnob->get_value();
+    int batch_size = bsKnob->get_value();
 
-  // need to + 1?
-  batch_size = bsKnob->get_value();
-  batches = iterations / batch_size;
+    std::stringstream ss00;
+    ss00 << "renderStripe iterations: " << iterations;
+    MLClientComms::DebugPrint(ss00.str());
 
-  if (aborted() || cancelled()) {
-    std::stringstream  ss112;
-    ss112 << "renderStripe aborted or cancelled";
-    MLClientComms::Vprint(ss112.str());
-    return;
-  }
+//    bool liveRender = liveRenderKnob->get_value();
 
-  if (haveValidModelInfo() && _modelSelected) {
+//    std::stringstream ss00;
+//    ss00 << "liveRender value" << liveRender << " ";
+//    MLClientComms::Print(ss00.str());
 
-//      std::stringstream  ss113;
-//      ss113 << "renderStripe go";
-//      MLClientComms::Vprint(ss113.str());
+    // why does this not work here?  b/c renderStripe is threaded?
+//  auto logKnob = knob("Log");
+//  std::string msg = "renderStripe entered";
+//  logKnob->set_text(msg.c_str());
+
+    if (iterations == 0) {
+        MLClientComms::DebugPrint("[MLCL] renderStripe saw iterations size 0, returning");
+        return;
+    }
+
+    if (batch_size == 0) {
+        MLClientComms::DebugPrint("[MLCL] renderStripe saw batch_size 0, returning");
+        return;
+    }
+
+    DD::Image::Knob *allowUpdateKnob = knob("allowUpdate");
+    if (!allowUpdateKnob->get_value()) {
+        MLClientComms::DebugPrint("[MLCL] renderStripe saw allowUpdate==False, returning");
+        // this should allow the incoming plane to pass through.  ideally would instead
+        // pass through the cached image, but not sure how
+        input0().fetchPlane(imagePlane);
+//      input0().fetchPlane(getCache());
+//      getCache();
+        return;
+    }
+
+    if (aborted()) {
+        MLClientComms::DebugPrint("[MLCL] renderStripe aborted, returning");
+        return;
+    }
+
+    if (cancelled()) {
+        MLClientComms::DebugPrint("[MLCL] renderStripe cancelled, returning");
+        return;
+    }
+
+    batches = iterations / batch_size;
+
+    if (!haveValidModelInfo() || !_modelSelected) {
+        input0().fetchPlane(imagePlane);
+//      MLClientComms::Vprint("[MLCL] renderStripe returning");
+        return;
+    }
 
     std::string errorMsg;
 
-      if (status==ReadyToSend){
-          std::stringstream  ss1;
-          ss1 << "renderStripe saw status ReadyToSend, sending " << this_id;
-          MLClientComms::Vprint(ss1.str());
-//          status = Sending;
-//          status = HasReceived;
-          terminate = false;
-          Thread::spawn(::listener, 1, this);
-          std::stringstream  ss2;
-          ss2 << "renderStripe spawned listener, returning " << this_id;
-          MLClientComms::Vprint(ss2.str());
+    // live render mode
+    if (liveRenderKnob->get_value() == 1) {
+        MLClientComms::Print("Live render");
 
-          // simple pass through to avoid erroring out
-          input0().fetchPlane(imagePlane);
-          return;
-      }
+        if (responseStatus == CanSend) {
 
-    if (status==Sending){
-        std::stringstream ss3;
-        ss3 << "renderStripe saw status: Sending, returning " << this_id;
-        MLClientComms::Vprint(ss3.str());
-        return;
+            if (jobStatus == InProgress) {
+                MLClientComms::DebugPrint("[MLCL] renderStripe CanSend called when a job is in progress, returning");
+                return;
+            }
+
+            std::stringstream ss1;
+            ss1 << "\n[MLCL] Render job started, (thread id: " << this_id << ")";
+            std::string s1 = ss1.str();
+            MLClientComms::Print(s1);
+                MLClientComms::DebugPrint("[MLCL] renderStripe saw status CanSend");
+            terminate = false;
+            std::stringstream ss2;
+            ss2 << "[MLCL] renderStripe spawned listener";
+            MLClientComms::DebugPrint(ss2.str());
+            input0().fetchPlane(imagePlane);
+            jobStatus = InProgress;
+            killthread = false;
+            Thread::spawn(::listener, 1, this);
+        } else if (responseStatus == HasReceived) {
+            std::stringstream ss5;
+            ss5 << "[MLCL] renderStripe saw status: HasReceived batch " << batch - 1 << ", processing result (thread id: "
+                << this_id << ")";
+            MLClientComms::DebugPrint(ss5.str());
+
+            std::stringstream ss6;
+            ss6 << "[MLCL] Received batch " << batch - 1;
+            std::string s6 = ss6.str();
+            MLClientComms::Print(s6);
+
+            if (!fillImagePlane(imagePlane, errorMsg)) {
+                MLClientComms::Print(errorMsg);
+                error(errorMsg.c_str());
+            }
+
+            if (jobStatus == Completed) {
+                responseStatus = CanSend;
+    //          killthread = false;
+    //          terminate = false;
+                std::string s7 = "Job completed\n";
+                MLClientComms::Print(s7);
+            }
+        }
     }
 
-    if (status==Waiting){
-        std::stringstream ss4;
-        ss4 << "renderStripe saw status: Waiting, returning " << this_id;
-        MLClientComms::Vprint(ss4.str());
-        return;
-    }
+    // do a disk render
+    else{
+        MLClientComms::Print("Disk render");
+        MLClientComms comms(_host, _port);
+        std::string errorMsg;
+        mlserver::RequestInference* requestInference = new mlserver::RequestInference;
 
-    if (status==HasReceived) {
-        std::stringstream ss5;
-        ss5 << "renderStripe saw status: HasReceived, processing result " << this_id;
-        MLClientComms::Vprint(ss5.str());
+        bool clearCache = true;
+        int _batch = 1;
+        int _batches = 1;
+
+        getInferenceRequest(_host, _port, errorMsg, requestInference, clearCache, _batches, _batch, iterations);
+        comms.sendInferenceRequest(*requestInference);
+        comms.readInferenceResponse(responseWrapper);
 
         if (!fillImagePlane(imagePlane, errorMsg)) {
-            MLClientComms::Vprint(errorMsg);
+            MLClientComms::Print(errorMsg);
             error(errorMsg.c_str());
         }
     }
 
-    status = ReadyToSend;
-    killthread = false;
-    terminate = false;
-    batch = 0;
-
+    MLClientComms::DebugPrint("[MLCL] renderStripe returning");
     return;
-  }
+}
+
+    // if we reached this point, reset everything for next call
+//    responseStatus = CanSend;
+//    killthread = false;
+//    terminate = false;
+//    batch = 0;
+//    MLClientComms::Vprint("[MLCL] renderStripe returning");
+//    return;
+//  }
 
   // Check again if we hit abort during processing
-  if (aborted() || cancelled()) {
-    MLClientComms::Vprint("Aborted without processing image.");
-    return;
-  }
+//  if (aborted() || cancelled()) {
+//    MLClientComms::Vprint("Aborted without processing image.");
+//    return;
+//  }
 
   // If we reached here by default let's pull an image from input0() so
   // that it's at least passing something through.
-  input0().fetchPlane(imagePlane);
-}
+//  input0().fetchPlane(imagePlane);
+//}
 
 bool MLClientLive::refreshModelsAndKnobsFromServer(std::string& errorMsg)
 {
@@ -294,19 +374,19 @@ bool MLClientLive::refreshModelsAndKnobsFromServer(std::string& errorMsg)
   std::vector<std::string> modelNames;
   int numModels = responseWrapper.r1().num_models();
   std::stringstream ss;
-  ss << "Server can serve " << std::to_string(numModels) << " models" << std::endl;
+  ss << "[MLCL] Server can serve " << std::to_string(numModels) << " models" << std::endl;
   ss << "-----------------------------------------------";
-  MLClientComms::Vprint(ss.str());
+  MLClientComms::Print(ss.str());
   for (int i = 0; i < numModels; i++) {
-    mlserver::Model m;
-    m = responseWrapper.r1().models(i);
-    modelNames.push_back(m.label());
-    _serverModels.push_back(m);
-    _numInputs.push_back(m.inputs_size());
+    mlserver::Model model;
+    model = responseWrapper.r1().models(i);
+    modelNames.push_back(model.label());
+    _serverModels.push_back(model);
+    _numInputs.push_back(model.inputs_size());
     std::vector<std::string> names;
-    for (int j = 0; j < m.inputs_size(); j++) {
+    for (int j = 0; j < model.inputs_size(); j++) {
       mlserver::ImagePrototype p;
-      p = m.inputs(j);
+      p = model.inputs(j);
       names.push_back(p.name());
     }
     _inputNames.push_back(names);
@@ -421,7 +501,13 @@ bool MLClientLive::getInferenceRequest(const std::string& hostStr,
                                        mlserver::RequestInference* requestInference,
                                        bool clearCache,
                                        int batch_total,
-                                       int batch_current){
+                                       int batch_current,
+                                       int iterations){
+
+    ThreadId this_id = Thread::GetThreadId();
+    std::stringstream  ss1;
+    ss1 << "[MLCL] getInferenceRequest entered, thread id: " << this_id;
+    MLClientComms::DebugPrint(ss1.str());
 
     const Box imageFormat = info().format();
 
@@ -437,7 +523,8 @@ bool MLClientLive::getInferenceRequest(const std::string& hostStr,
     }
 
     requestInference->set_batch_total(batch_total);
-    requestInference->set_batch_current(batch_current);    
+    requestInference->set_batch_current(batch_current);
+    requestInference->set_iterations(iterations);
 
     // todo: the opt image is the first input.  get from cached value
     for (int i = 0; i < node_inputs(); i++) {
@@ -448,20 +535,20 @@ bool MLClientLive::getInferenceRequest(const std::string& hostStr,
         // Get our input & sanity check
         DD::Image::Iop *inputIop = dynamic_cast<DD::Image::Iop *>(input(i));
         if (inputIop == NULL) {
-            errorMsg = "Input is empty or not connected.";
+            errorMsg = "[MLCL] Input is empty or not connected.";
             return false;
         }
 
         // Checking before validating inputs
         if (aborted()) {
-            errorMsg = "Process aborted before validating inputs.";
+            errorMsg = "[MLCL] Process aborted before validating inputs.";
             return false;
         }
 
         // Try validate & request the input, this should be quick if the data
         // has already been requested.
         if (!inputIop->tryValidate(/*force*/true)) {
-            errorMsg = "Unable to validate input.";
+            errorMsg = "[MLCL] Unable to validate input.";
             return false;
         }
 
@@ -488,13 +575,13 @@ bool MLClientLive::getInferenceRequest(const std::string& hostStr,
         // Sanity check that that the plane was filled successfully, and nothing
         // was interrupted.
         if (plane.usage() == 0) {
-            errorMsg = "No image data fetched from input.";
+            errorMsg = "[MLCL] No image data fetched from input.";
             return false;
         }
 
         // Checking after fetching inputs
         if (aborted()) {
-            errorMsg = "Process aborted after fetching inputs.";
+            errorMsg = "[MLCL] Process aborted after fetching inputs.";
             return false;
         }
 
@@ -507,7 +594,7 @@ bool MLClientLive::getInferenceRequest(const std::string& hostStr,
         // Set up our temp contiguous buffer
         size_t byteBufferSize = fr * ft * readChannels.size() * sizeof(float);
         if (byteBufferSize == 0) {
-            errorMsg = "Image size is zero.";
+            errorMsg = "[MLCL] Image size is zero.";
             return false;
         }
         // Create and zero our buffer
@@ -662,11 +749,19 @@ void MLClientLive::knobs(Knob_Callback f)
   Button(f, "connect", "Connect");
   Divider(f, "  ");
 
+  Bool_knob(f, &allowUpdate, "allowUpdate");
+  Divider(f, "  ");
+
+  Bool_knob(f, &allowUpdate, "liveRender");
+  Divider(f, "  ");
+
+  Button(f, "render", "Render");
+  Divider(f, "  ");
+
   Button(f, "cancel", "Cancel");
   Divider(f, "  ");
 
-  static const char* static_choices[] = {
-      0};
+  static const char* static_choices[] = {0};
   Knob* knob = Enumeration_knob(f, &_chosenModel, static_choices, "models", "Models");
   if (knob) {
     _selectedModelknob = knob;
@@ -681,33 +776,41 @@ void MLClientLive::knobs(Knob_Callback f)
   if (!f.makeKnobs()) {
     MLClientLive::addDynamicKnobs(this->firstOp(), f);
   }
+
+//  const char* _multilineStringKnob = "barfoo";
+//  Multiline_String_knob(f, &_multilineStringKnob, "Log");
+//  Divider(f, "  ");
+
 }
 
 int MLClientLive::knob_changed(Knob* knobChanged)
 {
   if (knobChanged->is("cancel")){
-      MLClientComms::Vprint("cancel knob changed");
+      MLClientComms::Print("cancel knob changed");
+
+//      DD::Image::Knob *itKnob = knob("iterations");
+//      int _iterations = itKnob->get_value();
+//      std::stringstream ss00;
+//      ss00 << "renderStripe iterations: " << _iterations;
+//      MLClientComms::Print(ss00.str());
+//      ThreadId this_id = Thread::GetThreadId();
+//      std::stringstream ss1;
+//      ss1 << "knob_changed thead id: " << this_id;
+//      MLClientComms::Print(ss1.str());
+//      auto logKnob = knob("Log");
+//      std::string msg = "foobar";
+//      logKnob->set_text(msg.c_str());
 
       terminate = true;
-
-// send a cancel message - requires an async ml server
-//      this->cancel();
-//      this->abort();
-//      MLClientComms comms(_host, _port);
-//
-//      if (!comms.isConnected()) {
-//          error("Could not connect to server. Please check your host / port numbers.");
-//          return 0;
-//      }
-//
-//      // send a cancel message to the server
-//      if (!comms.sendCancelRequest()){
-//          error("Could not send cancel request");
-//          return 0;
-//      }
-
       return 1;
   }
+
+//  if (knobChanged->is("render")){
+//      MLClientComms::Vprint("render knob changed");
+//      hashCtr += 1;
+//      asapUpdate();
+//      return 1;
+//  }
 
   if (knobChanged->is("host")) {
     if (!MLClientComms::ValidateHostName(_host)) {
@@ -732,6 +835,10 @@ int MLClientLive::knob_changed(Knob* knobChanged)
   }
 
   if (knobChanged->is("connect")) {
+
+    // if reconneng, we need to reset the status to Ready
+    responseStatus = CanSend;
+
     std::string connectErrorMsg;
     if (!refreshModelsAndKnobsFromServer(connectErrorMsg)) {
       error(connectErrorMsg.c_str());
@@ -749,43 +856,6 @@ int MLClientLive::knob_changed(Knob* knobChanged)
     return 1;
   }
 
-//  // Check if dynamic button is pressed
-//  for (int i = 0; i < getModelManager().getNumOfButtons(); i++) {
-//    if (knobChanged->is(getModelManager().getDynamicButtonName(i).c_str())) {
-//      // Set current button to true (pressed) for model inference
-//      getModelManager().setDynamicButtonValue(i, true);
-//      // Set up our error string
-//      std::string errorMsg;
-//      // Set up our incoming response message structure.
-//      mlserver::RespondWrapper responseWrapper;
-//      // Wrap up our image data to be sent, send it, and
-//      // retrieve the response.
-//      if (!processImage(_host, _port, responseWrapper, errorMsg)) {
-//        error(errorMsg.c_str());
-//      }
-//
-//      // Get the resulting general data
-//      if (responseWrapper.has_r2() && responseWrapper.r2().num_objects() > 0) {
-//        const mlserver::FieldValuePairAttrib object = responseWrapper.r2().objects(0);
-//        // Run script in Nuke if object called PythonScript is created
-//        if (object.name() == "PythonScript") {
-//          // Check object has string_attributes
-//          if (object.values_size() != 0
-//            && object.values(0).string_attributes_size() != 0) {
-//            mlserver::StringAttrib pythonScript = object.values(0).string_attributes(0);
-//            // Run Python Script in Nuke
-//            if (pythonScript.values_size() != 0) {
-//              script_command(pythonScript.values(0).c_str(), true, false);
-//              script_unlock();
-//            }
-//          }
-//        }
-//      }
-//      // Set current button to false (unpressed)
-//      getModelManager().setDynamicButtonValue(i, false);
-//      return 1;
-//    }
-//  }
   return 0;
 }
 
@@ -809,70 +879,106 @@ bool MLClientLive::getShowDynamic() const
 
 static void listener(unsigned index, unsigned nThreads, void* d) {
 
-    std::stringstream ss2;
-    ss2 << "listener batches: " << ((MLClientLive*)d)->batches;
-    MLClientComms::Vprint(ss2.str());
+    ThreadId this_id = Thread::GetThreadId();
+    std::stringstream ss10;
+    ss10 << "[LISTENER] Listener thread id: " << this_id;
+    MLClientComms::DebugPrint(ss10.str());
+
+    Guard guard(((MLClientLive *) d)->_lock);
+//    MLClientComms::Vprint("[LISTENER] listener sleeping");
+//    std::this_thread::sleep_for(std::chrono::seconds(5));
+//    MLClientComms::Vprint("[LISTENER] listener awake");
+
+// this doesn't work - wrong thread?
+//    auto logKnob = ((MLClientLive*)d)->knob("Log");
+//    std::string msg = "listener";
+//    logKnob->set_text(msg.c_str());
+
+    std::stringstream ss11;
+    ss11 << "[LISTENER] total batches: " << ((MLClientLive*)d)->batches;
+    MLClientComms::Print(ss11.str());
 
     while (!((MLClientLive *) d)->killthread) {
-        MLClientComms::Vprint("thread not killed");
+        MLClientComms::DebugPrint("[LISTENER] listener thread not killed");
 
         bool clearCache = true;
 
         for (int b = 0; b < ((MLClientLive*)d)->batches; b++) {
-            std::stringstream ss;
-            ss << "batch: " << b;
-            MLClientComms::Vprint(ss.str());
-
+            std::stringstream ss12;
+            ss12 << "[LISTENER] starting batch: " << b;
+            MLClientComms::Print(ss12.str());
             bool terminate = ((MLClientLive *)d)->terminate;
 
-            std::stringstream ss1;
-            ss1 << "terminate status: " << terminate;
-            MLClientComms::Vprint(ss1.str());
+            std::stringstream ss13;
+            ss13 << "[LISTENER] terminate status: " << terminate;
+            MLClientComms::Print(ss13.str());
 
             if (terminate){
-                MLClientComms::Vprint("terminating...");
-                ((MLClientLive *) d)->killthread = true;
+                MLClientComms::Print("[LISTENER] terminating...");
                 ((MLClientLive *) d)->terminate = false;
+                ((MLClientLive *) d)->jobStatus = Completed;
+                ((MLClientLive *) d)->killthread = true;
                 break;
             }
             else{
-                MLClientComms::Vprint("not terminating...");
+                MLClientComms::Print("[LISTENER] not terminating...");
             }
 
             MLClientComms comms(((MLClientLive *) d)->_host, ((MLClientLive *) d)->_port);
-
-            std::string errorMsg;
-
+            std::string errorMsgL;
             mlserver::RequestInference* requestInference = new mlserver::RequestInference;
 
             if (!b==0){
                 clearCache = false;
             }
 
+            // this seems to stop the segfault, and explains why it won't segfault witha breakpoint set
+            // anywhere in the listener.  however it's not a solution and points to a race condition
+            // with the listener's thread and the MLClientLive object's thread.
+            // be interesting to see if we need to do this for each batch, or just at the start of the listener.
+//            std::this_thread::sleep_for(std::chrono::seconds(10));
+
+//            DD::Image::Knob *itKnob = ((MLClientLive*)d)->knob("iterations");
+//            int iterations = itKnob->get_value();
+
+            DD::Image::Knob *bsKnob = ((MLClientLive*)d)->knob("batch_size");
+            int batch_size = bsKnob->get_value();
+
             ((MLClientLive*)d)->getInferenceRequest(((MLClientLive*)d)->_host,
                                                     ((MLClientLive*)d)->_port,
-                                                    errorMsg,
+                                                    errorMsgL,
                                                     requestInference,
                                                     clearCache,
                                                     ((MLClientLive*)d)->batches,
-                                                    b);
+                                                    b,
+                                                    batch_size);
 
             /* send the request to the server
             ideally we'd skip this after the first batch but it requires a change to the server*/
             comms.sendInferenceRequest(*requestInference);
+            MLClientComms::DebugPrint("[LISTENER] listener finished requestInference");
 
             mlserver::RespondWrapper responseWrapper = ((MLClientLive *) d)->responseWrapper;
+
             if (comms.readInferenceResponse(responseWrapper)) {
-                                ((MLClientLive *) d)->responseWrapper = responseWrapper;
-                ((MLClientLive *) d)->status = HasReceived;
+                MLClientComms::DebugPrint("[LISTENER] listener saw readInferenceResponse=1");
+                ((MLClientLive *) d)->responseWrapper = responseWrapper;
+                ((MLClientLive *) d)->responseStatus = HasReceived;
                 ((MLClientLive *) d)->batch = b+1;
                 ((MLClientLive *) d)->hashCtr += 1;
                 ((MLClientLive *) d)->asapUpdate();
             }
+            else{
+                MLClientComms::DebugPrint("[LISTENER] listener saw readInferenceResponse=0");
+            }
+            std::stringstream ss14;
+            ss14 << "[LISTENER] batch: " << b << " finished";
+            MLClientComms::Print(ss14.str());
         }
         ((MLClientLive *) d)->killthread = true;
     }
 
-    MLClientComms::Vprint("\nlistener exiting");
+    ((MLClientLive *) d)->jobStatus = Completed;
+    MLClientComms::Print("[LISTENER] listener exiting");
 }
 

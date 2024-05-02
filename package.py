@@ -14,12 +14,12 @@ requires = [
             'shotgun_utils'
            ]
 
-build_requires = ['cmake-3.10+']
+build_requires = ['cmake-3.16']
 
 variants = [
 #           ['nuke-12'],
             ['nuke-13', 'devtoolset-6'],
-            ['nuke-14', 'devtoolset-6']
+#            ['nuke-14', 'devtoolset-6']
            ]
 
 

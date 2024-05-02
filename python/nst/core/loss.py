@@ -1,5 +1,7 @@
 import torch
 import torch.nn as nn
+from torch.nn import functional as F
+from torch.masked import masked_tensor
 
 import histogram
 
@@ -22,8 +24,8 @@ class TVLoss(nn.Module):
         return loss
 
 
-class MipMSELoss(nn.Module):
-    def forward(self, input, target, mip_weights=None):
+class MipLoss(nn.Module):
+    def forward(self, input, target, loss_type, mip_weights=None):
         """
         input and target are both layer activation pyramids, i.e. a list of mip tensors
         """
@@ -35,16 +37,23 @@ class MipMSELoss(nn.Module):
         # or just assume single layer
         for index, target_activations in enumerate(target_layer_activation_pyramid):
             opt_activations = opt_layer_activation_pyramid[index]
-            a_ = torch.sub(opt_activations, target_activations)
-            b_ = torch.pow(a_, 2)
-            c_ = torch.mean(b_)
+
+            if loss_type == 'mse':
+                c_ = F.mse_loss(opt_activations, target_activations)
+            elif loss_type == 'mae':
+                c_ = F.l1_loss(opt_activations, target_activations)
+            elif loss_type == 'huber':
+                c_ = F.huber_loss(opt_activations, target_activations)
+            else:
+                raise RuntimeError('unknown loss type: %s' % loss_type)
+
             loss += c_
 
         return loss
 
 
-class MipGramMSELoss(nn.Module):
-    def forward(self, input, target, mip_weights):
+class MipGramLoss(nn.Module):
+    def forward(self, input, target, mip_weights, loss_type):
         opt_layer_activation_pyramid = input
         target_layer_gram_pyramid = target
         loss = 0
@@ -55,45 +64,52 @@ class MipGramMSELoss(nn.Module):
             opt_gram = GramMatrix()(opt_activations)
 
             # calculate MSE
-            a_ = torch.sub(opt_gram, target_gram)
-            b_ = torch.pow(a_, 2)
-            c_ = torch.mean(b_)
-            c_ *= mip_weight
-
-            # calculate MAE
             # a_ = torch.sub(opt_gram, target_gram)
-            # b_ = torch.mean(a_)
-            # b_ *= mip_weight
+            # b_ = torch.pow(a_, 2)
+            # c_ = torch.mean(b_)
+            # c_ *= mip_weight
+
+            if loss_type == 'mse':
+                c_ = F.mse_loss(opt_gram, target_gram)
+            elif loss_type == 'mae':
+                c_ = F.l1_loss(opt_gram, target_gram)
+            elif loss_type == 'huber':
+                c_ = F.huber_loss(opt_gram, target_gram)
+            else:
+                raise RuntimeError('unknown loss type: %s' % loss_type)
 
             loss += c_
 
         return loss
 
 
-class MipHistogramMSELoss(nn.Module):
+class MipHistogramLoss(nn.Module):
 
     def computeHistogramMatchedActivation(self, input, target, bins):
-        target_ = target[0]
-        minv = target[1]
-        maxv = target[2]
         assert(len(input.shape) == 3)
-        assert(len(minv.shape) == 1)
-        assert(len(maxv.shape) == 1)
-        assert(target_.shape[0] == input.shape[0])
-        assert(minv.shape[0] == input.shape[0])
-        assert(maxv.shape[0] == input.shape[0])
+        assert(len(target.min.shape) == 1)
+        assert(len(target.max.shape) == 1)
+        assert(target.histogram.shape[0] == input.shape[0])
+        assert(target.min.shape[0] == input.shape[0])
+        assert(target.max.shape[0] == input.shape[0])
         # todo: get n. bins from settings
-        assert(target_.shape[1] == bins)
+        assert(target.histogram.shape[1] == bins)
         res = input.data.clone() # Clone, we don'input want to change the values of features map or target histogram
-        histogram.matchHistogram(res, target_.clone())
+        histogram.matchHistogram(res, target.histogram.clone())
         for c in range(res.size(0)):
-            res[c].mul_(maxv[c] - minv[c]) # Values in range [0, max - min]
-            res[c].add_(minv[c])           # Values in range [min, max]
+            res[c].mul_(target.max[c] - target.min[c]) # Values in range [0, max - min]
+            res[c].add_(target.min[c])           # Values in range [min, max]
         return res.data.unsqueeze(0)
 
-    def forward(self, input, target, mip_weights, bins):
-        opt_layer_activation_pyramid = input
-        target_layer_histogram_pyramid = target
+    def forward(self,
+                opt_layer_activation_pyramid,
+                target_layer_histogram_pyramid,
+                mip_weights,
+                bins,
+                loss_type):
+        """
+        target is a guides.Histogram
+        """
         loss = 0
 
         for index, target_histogram in enumerate(target_layer_histogram_pyramid):
@@ -104,9 +120,20 @@ class MipHistogramMSELoss(nn.Module):
                                                                               target_histogram,
                                                                               bins)
 
-            a_ = torch.sub(opt_activation[0], histogramCorrectedTarget)
-            b_ = torch.pow(a_, 2)
-            c_ = torch.mean(b_)
+            # manual mse loss:
+            # a_ = torch.sub(opt_activation, histogramCorrectedTarget)
+            # b_ = torch.pow(a_, 2)
+            # c_ = torch.mean(b_)
+
+            if loss_type == 'mse':
+                c_ = F.mse_loss(opt_activation, histogramCorrectedTarget)
+            elif loss_type == 'mae':
+                c_ = F.l1_loss(opt_activation, histogramCorrectedTarget)
+            elif loss_type == 'huber':
+                c_ = F.huber_loss(opt_activation, histogramCorrectedTarget)
+            else:
+                raise RuntimeError('unknown loss type: %s' % loss_type)
+
             c_ *= mip_weight
 
             loss += c_
@@ -114,17 +141,74 @@ class MipHistogramMSELoss(nn.Module):
         return loss
 
 
-class TemporalLoss(nn.Module):
-    pass
+class MipHistogramLossMasked(nn.Module):
+
+    def computeHistogramMatchedActivation(self, input, target, bins):
+        target_ = target[0]
+        minv = target[1]
+        target.max = target[2]
+        assert(len(input.shape) == 3)
+        assert(len(minv.shape) == 1)
+        assert(len(target.max.shape) == 1)
+        assert(target_.shape[0] == input.shape[0])
+        assert(minv.shape[0] == input.shape[0])
+        assert(target.max.shape[0] == input.shape[0])
+        # todo: get n. bins from settings
+        assert(target_.shape[1] == bins)
+        res = input.data.clone() # Clone, we don'input want to change the values of features map or target histogram
+        histogram.matchHistogram(res, target_.clone())
+        for c in range(res.size(0)):
+            res[c].mul_(target.max[c] - minv[c]) # Values in range [0, max - min]
+            res[c].add_(minv[c])           # Values in range [min, max]
+        return res.data.unsqueeze(0)
+
+    def forward(self,
+                opt_layer_activation_pyramid,
+                target_layer_histogram_pyramid,
+                target,
+                mip_weights,
+                bins,
+                mask,
+                loss_type):
+
+        loss = 0
+
+        for index, target_histogram in enumerate(target_layer_histogram_pyramid):
+            mip_weight = mip_weights[index]
+            opt_activation = opt_layer_activation_pyramid[index]
+
+            histogramCorrectedTarget = self.computeHistogramMatchedActivation(opt_activation[0],
+                                                                              target_histogram,
+                                                                              bins)
+
+            # todo: only subtract values given by the mask
+            # mask and data need to be same dimensions
+
+            opt_activation_mt = masked_tensor(opt_activation.float(), mask)
+            histogramCorrectedTarget_mt = masked_tensor(histogramCorrectedTarget.float(), mask)
+
+            # c_ = F.l1_loss(opt_activation_mt, histogramCorrectedTarget_mt)
+
+            # MAE
+            a_ = torch.sub(opt_activation_mt, histogramCorrectedTarget_mt)
+            c_ = torch.mean(a_)
+            c_ *= mip_weight
+            loss += c_
+
+        return loss
 
 
-class MSELoss(nn.Module):
-    def forward(self, input, target, mip_weight):
-        a_ = torch.sub(input, target)
-        b_ = torch.pow(a_, 2)
-        c_ = torch.mean(b_)
-        c_ *= mip_weight
-        return c_
+# class TemporalLoss(nn.Module):
+#     pass
+
+
+# class MSELoss(nn.Module):
+#     def forward(self, input, target, mip_weight):
+#         a_ = torch.sub(input, target)
+#         b_ = torch.pow(a_, 2)
+#         c_ = torch.mean(b_)
+#         c_ *= mip_weight
+#         return c_
 
 
 # class MaskedMSELoss(nn.Module):
