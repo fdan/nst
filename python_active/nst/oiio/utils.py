@@ -115,22 +115,13 @@ def pts_to_exrs(outdir, raw=False, cleanup=False):
         pt_to_exr(fp, raw=raw, cleanup=cleanup)
 
 
-def pt_to_exr(inpath, raw=False, colorspace='acescg', cleanup=False):
+def pt_to_exr(inpath, raw=False, cleanup=False):
     tensor = torch.load(inpath)
     buf = tensor_to_buf(tensor, raw=raw)
-    if colorspace != 'srgb_texture':
-        buf = oiio.ImageBufAlgo.colorconvert(buf, 'srgb_texture', colorspace)
     outpath = inpath.replace('.pt', '.exr')
     write_exr(buf, outpath)
     if cleanup:
         os.remove(inpath)
-
-
-def pt_to_acescg_tensor(inpath, raw=False):
-    tensor = torch.load(inpath)
-    buf = tensor_to_buf(tensor, raw=raw)
-    buf = oiio.ImageBufAlgo.colorconvert(buf, 'srgb_texture', 'acescg')
-
 
 
 def transform_image_tensor(tensor: torch.Tensor, do_cuda: bool, raw=False) -> torch.Tensor:
@@ -219,24 +210,7 @@ def buf_to_tensor(buf: oiio.ImageBuf, do_cuda: bool, raw=False) -> torch.Tensor:
         return it.unsqueeze(0)
 
 
-def np_to_tensor(np_array, do_cuda, colorspace='acescg', raw=False):
-    """
-    given a simple float rgb tensor as loaded by oiio, convert to an imagenet tensor
-    """
-    x, y, z = np_array.shape
-    buf = oiio.ImageBuf(oiio.ImageSpec(y, x, z, oiio.FLOAT))
-    buf.set_pixels(oiio.ROI(), np_array)
-
-    # do colorspace conversion?
-    if colorspace:
-        if colorspace != 'srgb_texture':
-            buf = oiio.ImageBufAlgo.colorconvert(buf, colorspace, 'srgb_texture')
-
-    return buf_to_tensor(buf, do_cuda, raw=raw)
-
-
-def tensor_to_buf(tensor: torch.Tensor, raw=False, colorspace='srgb_texture') -> oiio.ImageBuf:
-
+def tensor_to_buf(tensor: torch.Tensor, raw=False) -> oiio.ImageBuf:
     tforms_ = []
 
     if not raw:
@@ -259,28 +233,7 @@ def tensor_to_buf(tensor: torch.Tensor, raw=False, colorspace='srgb_texture') ->
     x, y, z = n.shape
     buf = ImageBuf(ImageSpec(y, x, z, oiio.FLOAT))
     buf.set_pixels(ROI(), n)
-
-    if colorspace != 'srgb_texture':
-        buf = oiio.ImageBufAlgo.colorconvert(buf, 'srgb_texture', colorspace)
-
     return buf
-
-
-def imagenet_to_rgb(tensor):
-    tforms_ = []
-    tforms_ += [transforms.Lambda(lambda x: x.mul_(1. / 255.))]
-
-    # add imagenet mean
-    tforms_ += [transforms.Normalize(mean=[(-0.40760392), -0.45795686, -0.48501961], std=[1, 1, 1])]
-
-    # turn to RGB
-    tforms_ += [transforms.Lambda(lambda x: x[torch.LongTensor([2, 1, 0])])]
-
-    tforms = transforms.Compose(tforms_)
-    tensor_ = torch.clone(tensor)
-    # return tforms(tensor_)
-    return tforms(tensor_.data[0].cpu())
-    # return tforms(tensor_.data[0].cpu().squeeze())
 
 
 def write_exr(exr_buf: oiio.ImageBuf, filepath: str) -> None:
@@ -343,7 +296,7 @@ def write_activations(activations, outdir, layer_limit=10, ext='exr'):
         np_write(e, fp, ext='exr', silent=True)
 
 
-def np_write(np, fp, ext='exr', silent=False):
+def np_write(np, fp, ext='jpg', silent=False):
     os.makedirs(os.path.abspath(os.path.join(fp, os.path.pardir)), exist_ok=True)
     x, y, z = np.shape
     buf = ImageBuf(ImageSpec(y, x, z, oiio.FLOAT)) # flip x and y
@@ -396,78 +349,3 @@ def write_noise_img(x, y, filepath):
     buf = oiio.ImageBuf(oiio.ImageSpec(y, x, z, oiio.FLOAT))
     buf.set_pixels(oiio.ROI(), n)
     write_exr(buf, filepath)
-
-
-def weighted_random(a, b, weight=[0.5, 0.5]):
-    weight.reverse()
-    x, y, z = a.shape
-    choice = np.random.choice(2, x*y, p=weight).reshape((x, y, 1)).astype(bool)
-    c = np.where(choice, a, b)
-    return c
-
-
-def weighted_random_alpha(a, b, alpha, weight=0.5):
-    # weight.reverse()
-    x, y, z = a.shape
-
-    weight_ = [1-weight, weight]
-
-    alpha = np.rint(alpha).astype(int)
-    choice = np.random.choice(2, x*y, p=weight_).reshape((x, y, 1))
-
-    # d = '/mnt/ala/research/danielf/proj/seq/id01/id01_060/render/nst/style08/comp/v015/2068x876/exr/tc/choice.exr'
-    # np_write(choice.astype(float), d, silent=True)
-
-    choice_a = choice * alpha
-    # e = '/mnt/ala/research/danielf/proj/seq/id01/id01_060/render/nst/style08/comp/v015/2068x876/exr/tc/choice_a.exr'
-    # np_write(choice_a.astype(float), e, silent=True)
-
-    c = np.where(choice_a.astype(bool), a, b)
-    return c
-
-
-def weighted_blend_alpha(a, b, alpha, weight=[0.5, 0.5]):
-    x, y, z = a.shape
-
-    a = np.clip(a, 0.0, 1.0)
-    b = np.clip(b, 0.0, 1.0)
-
-    a_weighted = a * weight[0]
-    b_weighted = b * weight[1]
-
-    # a_divisor = np.full((x, y, z), weight[0], dtype=np.float32)
-    # b_divisor = np.full((x, y, z), weight[1], dtype=np.float32)
-    # divisor = a_divisor + b_divisor
-    # weighted_sum = a_weighted = b_weighted
-    # normalised = weighted_sum / divisor
-
-    return a_weighted
-
-
-import numba
-@numba.guvectorize([(numba.float32[:, :, :],
-                     numba.float32[:, :, :],
-                     numba.float32[:, :, :],
-                     numba.float32,
-                     numba.float32[:, :, :])],
-                   "(a,b,c),(a,b,c),(a,b,c),()->(a,b,c)")
-def blend_a_b(a, b, alpha, weight, output):
-    x, y, z = a.shape
-
-    for i in range(0, x):
-        for j in range(0, y):
-
-            alpha_value = alpha[i][j][0]
-
-            a_value = a[i][j]
-            if a_value.sum() == -3.0:
-                a_value = np.zeros(3, np.float32)
-
-            a_value = a_value * np.full(3, weight, dtype=np.float32) * alpha_value
-
-            if alpha_value == 0.0:
-                b_value = b[i][j]
-            else:
-                b_value = b[i][j] * np.full(3, (1.0-weight), dtype=np.float32)
-
-            output[i][j] = a_value + b_value

@@ -121,8 +121,7 @@ class WriterSettings(BaseSettings):
         super(WriterSettings, self).__init__()
         self.styles = [StyleImage()]
         self.content = None
-        # self.temporal_content = None
-        self.temporal_mask = None
+        self.temporal_content = None
         self.opt_image = Image()
         self.out = ''
         self.write_style_pyramid = False
@@ -166,25 +165,15 @@ class AnimSettings(WriterSettings):
         self.first_frame = 1001
         self.last_frame = 1010
         self.starting_pass = 1 # direction
-        self.iterations_per_pass = 10
+        self.passes = 15
+        # self.pass_iterations = 30 # should derive this
         self.use_temporal_loss_after = 8
         self.motion_fore = ''
         self.motion_fore_weight = ''
         self.motion_back = ''
         self.motion_back_weight = ''
-        self.interleave = True
-        self.depth = ''
-        self.interleaved = True
-        self.checkpoint_format = 'pt'
-        self.debug_output = False
-        self.first_pass_iterations = 40
-        self.total_iterations = 200
-        self.warp_weight = 0.75
-        self.grad_mask_min = 0.1
-        self.grad_mask_blur = 0.0
-        self.blend_method = 'random_weighted' # 'none', 'blend_weighted'
-        self.debug_frames = []
-        self.skip_passes = []
-        self.skip_frames = []
-
+        self.interleave = False
+        self.depth = Image()
+        self.id = Image()
+        self.temporal_weight_mask = Image()
 

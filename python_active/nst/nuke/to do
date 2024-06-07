@@ -1,0 +1,14 @@
+
+
+nuke to do:
+
+* implement in ml server/client (hardcode num styles for now)
+* wrap in gizmo to allow automated writing of inputs
+* send to farm button creates a job with two tasks types:
+    1. cache input images to disk from nuke (1 task per job)
+    2. run the headless oiio nst job from yaml, using the cached images (1 task per frame) (temporal smoothing an option)
+
+
+down the track a c++ implementation of core could be worth considering if commercial distribution became an opportunity.
+having said that I'm obliged to write up my findings so possibly not alot of point in hiding the source code.
+

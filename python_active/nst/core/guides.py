@@ -34,11 +34,19 @@ class OptGuide(nn.Module):
 
 
 class ContentGuide(OptGuide):
-    def __init__(self, tensor, vgg, layer, layer_weight, loss_type, temporal_mask, cuda_device=None):
+    def __init__(self,
+                 tensor,
+                 vgg,
+                 layer,
+                 layer_weight,
+                 loss_type,
+                 temporal_mask,
+                 cuda_device=None):
         super(ContentGuide, self).__init__()
         self.name = "content guide"
         self.tensor = tensor
         self.loss_type = loss_type
+        self.temporal_mask = temporal_mask
         self.target = None
         self.weight = layer_weight
         self.vgg = vgg
@@ -74,18 +82,14 @@ class ContentGuide(OptGuide):
         weighted_loss.backward(retain_graph=True)
         # from here on, opt_tensor.grad contains the derived gradients
 
-        # manually apply gradients:
-        # x.data.sub_(lr * x.grad.data())
-        # x.grad.data.zero_()
-
         loss += weighted_loss
 
         layer_gradients = opt_tensor.grad.clone()
 
-        # if self.temporal_mask.numel() != 0:
-        #     b, c, w, h = opt_tensor.grad.size()
-        #     for i in range(0, c):
-        #         layer_gradients[0][i] *= self.temporal_mask[0][0]
+        if self.temporal_mask.numel() != 0:
+            b, c, w, h = opt_tensor.grad.size()
+            for i in range(0, c):
+                layer_gradients[0][i] *= self.temporal_mask[0][0]
 
         return layer_gradients
 
@@ -131,7 +135,7 @@ class TemporalContentGuide(OptGuide):
         opt_pyramid = utils.make_gaussian_pyramid(opt_tensor, 1, 1, cuda=cuda)
         opt_activation = self.vgg(opt_pyramid, [self.layer])[0]
 
-        # todo: need to apply the mask to the opt activations
+        # need to apply the mask to the opt activations
         b, c, h, w = opt_activation[0].size()
         for i in range(0, c):
             opt_activation[0][0][i] *= self.resized_mask[0][0]
@@ -401,6 +405,7 @@ class StyleHistogramGuide(OptGuide):
                  random_rotate_mode,
                  random_rotate,
                  random_crop,
+                 temporal_mask,
                  cuda_device=None,
                  write_gradients=False,
                  write_pyramids = False,
@@ -414,6 +419,7 @@ class StyleHistogramGuide(OptGuide):
         self.random_rotate_mode = random_rotate_mode
         self.random_rotate = random_rotate
         self.random_crop = random_crop
+        self.temporal_mask = temporal_mask
         self.target = []
         self.target_maps = []
         self.vgg = vgg
@@ -543,11 +549,8 @@ class StyleHistogramGuide(OptGuide):
 
             # clone the gradients to a new tensor
             layer_gradients = opt_tensor.grad.clone()
-            # layer_gradients = o.grad.clone()
 
-            # get the layer name
             layer_name = self.layers[index]
-
             if torch.is_tensor(self.target_maps[index]) and layer_name in self.mask_layers:
                 b, c, w, h = opt_tensor.grad.size()
                 for i in range(0, c):

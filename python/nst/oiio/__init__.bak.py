@@ -126,11 +126,11 @@ class StyleWriter(object):
             #     buf = oiio.ImageBufAlgo.colorconvert(buf, 'srgb_texture', self.settings.out_colorspace)
 
             out = self.settings.out.split('/')
-            out[-1] = '%03d_' % self.pass_ + out[-1]
+            out[-1] = '%d_' % self.pass_ + out[-1]
             out_pass = '/'.join(out)
             print('writing:', out_pass)
             buf.write(out_pass)
-            # buf.write(self.settings.out)
+            buf.write(self.settings.out)
 
         # elif self.settings.output_format == 'pt':
         #     out = self.settings.out.replace('.exr', '.pt')
@@ -355,44 +355,36 @@ class AnimWriter(StyleWriter):
         self.outdir = os.path.abspath(os.path.join(self.settings.out, os.path.pardir))
 
         # clean any previous output
-        if not self.settings.skip_frames and not self.settings.skip_passes:
-            if os.path.isdir(self.outdir):
-                shutil.rmtree(self.outdir)
-            os.makedirs(self.outdir)
+        if os.path.isdir(self.outdir):
+            shutil.rmtree(self.outdir)
+        os.makedirs(self.outdir)
 
         # todo: how to handle when there's a remainder?
-        # print('iterations per pass:', self.settings.iterations_per_pass)
-        passes = int(self.settings.total_iterations / self.settings.iterations_per_pass)
+        passes = int(self.settings.core.iterations / self.settings.iterations_per_pass)
         # self.settings.core.iterations = int(self.settings.core.iterations / passes)
         # for pass_ in range(self.settings.starting_pass, self.settings.passes+1):
         for pass_ in range(self.settings.starting_pass, passes+1):
-
-            if pass_ in self.settings.skip_passes:
-                continue
-
             print('pass: %s' % pass_)
-            # print('iterations per pass:', self.settings.iterations_per_pass)
-
             self.pass_ = pass_
 
             if pass_ == self.settings.starting_pass:
                 self.settings.core.iterations = self.settings.first_pass_iterations
             else:
-                self.settings.core.iterations = int(self.settings.total_iterations / passes)
+                self.settings.core.iterations = int(self.settings.core.iterations / passes)
+
+            # if direction is 1, we are in a forward pass.  if 0, negative.
+            # self.settings.core.iterations = int(self.settings.core.iterations / passes)
 
             direction = pass_ % 2
+            # direction_ = 'forward' if direction else 'backward'
 
-            start = self.settings.first_frame if direction else self.settings.last_frame
-            end = self.settings.last_frame+1 if direction else self.settings.first_frame-1
-            increment_by = 1 if direction else -1
+            start = self.settings.last_frame if direction == 0 else self.settings.first_frame
+            end = self.settings.first_frame if direction == 0 else self.settings.last_frame
+            increment_by = -1 if direction == 0 else 1
 
             for this_frame in range(start, end, increment_by):
-
-                if this_frame in self.settings.skip_frames:
-                    continue
-
+            # for this_frame in range(start, end+increment_by):
                 print('\nframe: %s' % (this_frame))
-                # print('iterations per pass:', self.settings.iterations_per_pass)
                 self.settings.frame = this_frame
                 self.this_frame = this_frame
                 self.direction = direction
@@ -411,6 +403,7 @@ class AnimWriter(StyleWriter):
         # print('finished')
 
     def prepare_opt(self):
+        return super(AnimWriter, self).prepare_opt()
 
         if not self.settings.interleaved:
             return super(AnimWriter, self).prepare_opt()
@@ -430,11 +423,10 @@ class AnimWriter(StyleWriter):
         else:
             raise Exception('Direction must be 0 or 1')
 
-        # curr_frame_checkpoint_fp = self.settings.out
-        # don't use the output, for better debugging use the pass output
-        out = self.settings.out.split('/')
-        out[-1] = '%03d_' % (self.pass_-1) + out[-1]
-        curr_frame_checkpoint_fp = '/'.join(out)
+        # print('flow filepath:', flow)
+
+        curr_frame_checkpoint_fp = self.settings.out
+        # print('current_frame_checkpoint_fp:', curr_frame_checkpoint_fp)
 
         if self.pass_ == 1:
             print('first pass, not resuming from checkpoint')
@@ -458,25 +450,17 @@ class AnimWriter(StyleWriter):
                 print('no checkpoint to resume from')
                 return super(AnimWriter, self).prepare_opt()
 
-        print('resuming from checkpoint:', curr_frame_checkpoint_fp)
+        # print('resuming from checkpoint:', curr_frame_checkpoint_fp)
 
         curr_frame_checkpoint_buf = oiio.ImageBuf(curr_frame_checkpoint_fp)
         curr_frame_checkpoint_np = curr_frame_checkpoint_buf.get_pixels(roi=curr_frame_checkpoint_buf.roi_full)
 
         # warp the prior frame checkpoint and blend with the current frame checkpoint
         prev_frame_checkpoint_fp = re.sub(FRAME_REGEX, ".%s." % prev_frame, self.settings.out)
-
-        # t = 1 if self.direction else -1
-        fs = prev_frame_checkpoint_fp.split('/')
-        fs[-1] = '%03d_' % (self.pass_) + fs[-1]
-        prev_frame_checkpoint_fp = '/'.join(fs)
-
-        print('warping from previous frame checkpoint:', prev_frame_checkpoint_fp)
+        # print('warping from frame:', prev_frame_checkpoint_fp)
 
         prev_frame_checkpoint_buf = oiio.ImageBuf(prev_frame_checkpoint_fp)
         prev_frame_checkpoint_np = prev_frame_checkpoint_buf.get_pixels(roi=prev_frame_checkpoint_buf.roi_full)
-
-        print('flow file:', flow)
 
         this_frame_flow_buf = oiio.ImageBuf(flow)
         this_frame_flow_np = this_frame_flow_buf.get_pixels(roi=this_frame_flow_buf.roi_full)
@@ -487,13 +471,18 @@ class AnimWriter(StyleWriter):
         curr_frame_depth_np = curr_frame_depth_buf.get_pixels(roi=curr_frame_depth_buf.roi_full)
 
         x, y, z = curr_frame_depth_np.shape
-        # prev_frame_warped_np = np.zeros((x, y, z), dtype=np.float32)
-        prev_frame_warped_np = np.copy(curr_frame_checkpoint_np)
-
+        prev_frame_warped_np = np.zeros((x, y, z), dtype=np.float32)
         boundary = 10
 
-        temporal_coherence.sample_back(prev_frame_checkpoint_np, this_frame_flow_np, boundary,
-                                       prev_frame_warped_np, interpolation='nn')
+        # print('sample back:')
+        # print(prev_frame_checkpoint_fp)
+        # print(prev_frame_checkpoint_np.shape)
+        # print(flow)
+        # print('prev frame warped:', this_frame_flow_np.shape)
+        # print(prev_frame_warped_np.shape)
+
+        temporal_coherence.sample_back(prev_frame_checkpoint_np, this_frame_flow_np, boundary, prev_frame_warped_np,
+                                       interpolation='nn')
 
         curr_frame_mask_buf = oiio.ImageBuf(flow_weight)
         curr_frame_mask_np = curr_frame_mask_buf.get_pixels(roi=curr_frame_mask_buf.roi_full)
@@ -510,97 +499,90 @@ class AnimWriter(StyleWriter):
 
         # to do: should weighted random take an alpha?
         if self.settings.blend_method == 'random_weighted':
+            # curr_frame_checkpoint_np = utils.weighted_random(prev_frame_warped_np, curr_frame_checkpoint_np,
+            #                                                  weight=[self.settings.warp_random_weight,
+            #                                                          1-self.settings.warp_random_weight])
 
             curr_frame_checkpoint_np = utils.weighted_random_alpha(prev_frame_warped_np,
                                                                    curr_frame_checkpoint_np,
                                                                    curr_frame_mask_np,
-                                                                   weight=self.settings.warp_weight
+                                                                   weight=[self.settings.warp_random_weight,
+                                                                   1-self.settings.warp_random_weight]
                                                                    )
 
             if self.settings.debug_output and self.this_frame in self.settings.debug_frames:
                 d = '%s/%s_weighted_random.%04d.exr' % (self.outdir, self.pass_, self.this_frame)
                 utils.np_write(curr_frame_checkpoint_np, d, silent=True)
 
-        elif self.settings.blend_method == 'none':
-            # curr_frame_checkpoint_np = prev_frame_warped_np
-            temporal_coherence.a_over_b(prev_frame_warped_np, curr_frame_checkpoint_np, curr_frame_mask_np, curr_frame_checkpoint_np)
+        elif self.settings.blend_method == 'all_warp':
+            curr_frame_checkpoint_np = prev_frame_warped_np
 
-        elif self.settings.blend_method == 'blend_weighted':
+        elif self.settings.blend_method == 'all_checkpoint':
+            pass
 
-            blend_output = np.zeros((x, y, z))
+        elif self.settings.blend_method == 'add_normalise':
+            # apply weights
+            # prev_frame_warped_np *= curr_frame_mask_np
 
-            utils.blend_a_b(prev_frame_warped_np, curr_frame_checkpoint_np, curr_frame_mask_np,
-                            self.settings.warp_weight, blend_output)
-
-            curr_frame_checkpoint_np = blend_output
-
-            # if self.settings.debug_output and self.this_frame in self.settings.debug_frames:
+            # if self.settings.debug_output and self.this_frame == 1004:
             #     c = '%s/%s_prev_frame_warped_weighted.%04d.exr' % (self.outdir, self.pass_, self.this_frame)
             #     utils.np_write(prev_frame_warped_np, c, silent=True)
             #     d = '%s/%s_curr_frame_checkpoint.%04d.exr' % (self.outdir, self.pass_, self.this_frame)
             #     utils.np_write(curr_frame_checkpoint_np, d, silent=True)
-            #
-            # weighted_prev_frame_warped_np = prev_frame_warped_np * self.settings.warp_weight * curr_frame_mask_np
-            # weighted_curr_frame_checkpoint_np = curr_frame_checkpoint_np * (1.0 - self.settings.warp_weight)
 
-            # curr_frame_checkpoint_np += (prev_frame_warped_np * curr_frame_mask_np)
-            # if self.settings.debug_output and self.this_frame in self.settings.debug_frames:
-            #     e = '%s/%s_curr_frame_sum.%04d.exr' % (self.outdir, self.pass_, self.this_frame)
-            #     utils.np_write(curr_frame_checkpoint_np, e, silent=True)
+            # add to the current frame
+            # todo: support weighting
+            curr_frame_checkpoint_np += (prev_frame_warped_np * curr_frame_mask_np)
+
+            if self.settings.debug_output and self.this_frame in self.settings.debug_frames:
+                e = '%s/%s_curr_frame_sum.%04d.exr' % (self.outdir, self.pass_, self.this_frame)
+                utils.np_write(curr_frame_checkpoint_np, e, silent=True)
 
             # normalise
-            # warp_divisor = np.full((x, y, z), self.settings.warp_weight, dtype=np.float32)
-            # checkpoint_divisor = np.full((x, y, z), (1 - self.settings.warp_weight), dtype=np.float32)
+            divisor = np.ones((x, y, z), dtype=np.float32)
+            divisor += curr_frame_mask_np
+            curr_frame_checkpoint_np /= divisor
 
-            # divisor = warp_divisor + checkpoint_divisor
-            # current_frame_sum_np = weighted_prev_frame_warped_np + weighted_curr_frame_checkpoint_np
-            # current_frame_normalised_np = current_frame_sum_np / divisor
-
-            # divisor = np.ones((x, y, z), dtype=np.float32)
-            # divisor += curr_frame_mask_np
-            # curr_frame_checkpoint_np /= divisor
-
-            # if self.settings.debug_output and self.this_frame in self.settings.debug_frames:
-            #     e = '%s/%s_curr_frame_sum.%04d.exr' % (self.outdir, self.pass_, self.this_frame)
-            #     utils.np_write(current_frame_sum_np, e, silent=True)
-            #     f = '%s/%s_curr_frame_normalised.%04d.exr' % (self.outdir, self.pass_, self.this_frame)
-            #     utils.np_write(current_frame_normalised_np, f, silent=True)
+            if self.settings.debug_output and self.this_frame in self.settings.debug_frames:
+                f = '%s/%s_curr_frame_normalised.%04d.exr' % (self.outdir, self.pass_, self.this_frame)
+                utils.np_write(curr_frame_checkpoint_np, f, silent=True)
 
         # composite over the given opt image using the motion mask as an aplha channel
-        # orig_opt_fp = self.settings.opt_image.rgb_filepath
-        # orig_opt_buf = oiio.ImageBuf(orig_opt_fp)
-        # orig_opt_np = orig_opt_buf.get_pixels(roi=orig_opt_buf.roi_full)
+        orig_opt_fp = self.settings.opt_image.rgb_filepath
+        orig_opt_buf = oiio.ImageBuf(orig_opt_fp)
+        orig_opt_np = orig_opt_buf.get_pixels(roi=orig_opt_buf.roi_full)
+        # b = orig_opt_np
+        # alpha = curr_frame_mask_np
+        # premult_b = b * alpha
+        # a = curr_frame_checkpoint_np
+        # a += b * alpha
 
         # temporal_coherence.a_over_b(prev_frame_warped_np, curr_frame_checkpoint_np, curr_frame_mask_np, curr_frame_checkpoint_np)
 
         # comp over the original opt input:
-        # temporal_coherence.a_over_b(curr_frame_checkpoint_np, orig_opt_np, curr_frame_mask_np, curr_frame_checkpoint_np)
+        temporal_coherence.a_over_b(curr_frame_checkpoint_np, orig_opt_np, curr_frame_mask_np, curr_frame_checkpoint_np)
 
         if self.settings.debug_output and self.this_frame in self.settings.debug_frames:
-            # g = '%s/%s_a_over_b.%04d.exr' % (self.outdir, self.pass_, self.this_frame)
-            # utils.np_write(curr_frame_checkpoint_np, g, silent=True)
-
-            h = '%s/%s_mask.%04d.exr' % (self.outdir, self.pass_, self.this_frame)
-            utils.np_write(curr_frame_mask_np, h)
+            g = '%s/%s_a_over_b.%04d.exr' % (self.outdir, self.pass_, self.this_frame)
+            utils.np_write(curr_frame_checkpoint_np, g, silent=True)
 
         curr_frame_mask_np_inv = np.ones((x, y, z), dtype=np.float32) - curr_frame_mask_np
 
-        if self.settings.grad_mask_blur:
-            # blur for gradient domain blurring, should harmonise edges (?)
-            curr_frame_mask_np_inv = sc.rgb2gray(curr_frame_mask_np_inv)
-            curr_frame_mask_np_inv = sf.gaussian(curr_frame_mask_np_inv, sigma=self.settings.grad_mask_blur, truncate=1.0)
-            curr_frame_mask_np_inv = sc.gray2rgb(curr_frame_mask_np_inv)
+        # blur for gradient domain blurring, should harmonise edges
+        # curr_frame_mask_np_inv = sc.rgb2gray(curr_frame_mask_np_inv)
+        # curr_frame_mask_np_inv = sf.gaussian(curr_frame_mask_np_inv, sigma=5, truncate=1.0)
+        # curr_frame_mask_np_inv = sc.gray2rgb(curr_frame_mask_np_inv)
 
         temporal_weight_mask = utils.np_to_tensor(curr_frame_mask_np_inv, self.settings.core.cuda, raw=True)
 
-        # self.nst.temporal_weight_mask = torch.clamp(temporal_weight_mask, 0.0, 1.0)
-        self.nst.temporal_weight_mask = torch.clamp(temporal_weight_mask, self.settings.grad_mask_min, 1.0)
+        self.nst.temporal_weight_mask = torch.clamp(temporal_weight_mask, 0.0, 1.0)
+        # self.nst.temporal_weight_mask = torch.clamp(temporal_weight_mask, self.settings.grad_mask_min, 1.0)
         # self.nst.temporal_weight_mask = temporal_weight_mask
 
         if self.settings.debug_output and self.this_frame in self.settings.debug_frames:
-            i = '%s/%s_mask_inv.%04d.exr' % (self.outdir, self.pass_, self.this_frame)
+            h = '%s/%s_mask.%04d.exr' % (self.outdir, self.pass_, self.this_frame)
             mpib = utils.tensor_to_buf(self.nst.temporal_weight_mask, raw=True)
-            utils.write_exr(mpib, i)
+            utils.write_exr(mpib, h)
 
         # self.nst.temporal_weight_mask = utils.np_to_tensor(curr_frame_mask_np, self.settings.core.cuda, raw=True)
         # print(4.5, self.nst.temporal_weight_mask.max())

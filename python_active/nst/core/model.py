@@ -41,16 +41,16 @@ class Nst(torch.nn.Module):
         super(Nst, self).__init__()
         self.vgg = vgg.VGG(pool='max')
         self.content = torch.zeros(0)
-        # self.temporal_content = torch.zeros(0)
+        self.temporal_content = torch.zeros(0)
         self.temporal_weight_mask = torch.zeros(0)
         self.content_scale = 1.0
         self.styles = []
         self.opt_tensor = torch.zeros(0)
+        self.opt_masked = torch.zeros(0)
         self.opt_guides = []
         self.optimiser = None
         self.settings = settings.NstSettings()
         self.start_iter = 1
-        self.prev_iteration_opt = torch.zeros(0)
 
     def prepare(self):
         if self.settings.cuda:
@@ -59,6 +59,7 @@ class Nst(torch.nn.Module):
         for param in self.vgg.parameters():
             param.requires_grad = False
 
+        # clone the opt tensor, doesn't require grad
         self.opt_masked = self.opt_tensor.clone()
 
         if self.settings.engine == 'gpu':
@@ -107,8 +108,10 @@ class Nst(torch.nn.Module):
                 self.settings.content_layer,
                 self.settings.content_layer_weight,
                 self.settings.content_loss_type,
+                # self.temporal_weight_mask,
                 self.styles[0].target_map,
                 self.settings.cuda_device
+
             )
 
             content_guide.prepare()
@@ -187,6 +190,7 @@ class Nst(torch.nn.Module):
                 self.settings.random_rotate_mode,
                 self.settings.random_rotate,
                 self.settings.random_crop,
+                self.temporal_weight_mask,
                 outdir=self.settings.outdir,
                 write_pyramids=self.settings.write_pyramids,
                 write_gradients=self.settings.write_gradients,
@@ -219,6 +223,8 @@ class Nst(torch.nn.Module):
         #
         #     temporal_guide.prepare()
         #     self.opt_guides.append(temporal_guide)
+        # # else:
+        # #     print(11.2, self.settings.temporal_weight, self.temporal_weight_mask)
 
     def forward(self):
         n_iter = [self.start_iter]
@@ -227,6 +233,8 @@ class Nst(torch.nn.Module):
         if self.settings.cuda:
             max_memory = torch.cuda.get_device_properties(torch.cuda.current_device()).total_memory / 1000000
 
+        # self.style_index = 0
+        # self.style_switch_counter = 0
 
         def closure():
             if self.settings.cuda_device:
@@ -236,8 +244,12 @@ class Nst(torch.nn.Module):
 
             gradients = []
 
+            # print(1.1, self.opt_masked.sum())
+
             for guide in self.opt_guides:
+                # gradients += guide(self.optimiser, self.opt_tensor, loss, n_iter[0], self.style_index)
                 gradients += guide(self.optimiser, self.opt_tensor, loss, n_iter[0])
+                # gradients += guide(self.optimiser, o, loss, n_iter[0])
 
             b, c, w, h = self.opt_tensor.grad.size()
             if self.settings.cuda:
@@ -251,26 +263,11 @@ class Nst(torch.nn.Module):
             if self.settings.write_gradients:
                 utils.write_tensor(sum_gradients, '%s/grad/%04d.pt' % (self.settings.outdir, n_iter[0]))
 
-            self.opt_tensor.grad = sum_gradients
-
-            # temporal mask is applied globally to all guide gradients
-            # in order to introduce a temporal content loss, the grad masking below would have
-            # to take place in the style and content guides?  and I'm not sure it can as-is?
-            # i.e. I would have to solve the issue of applying the gradients properly during the iteration
-            # may require quite a big rethink and alot of tsting
-
-            # if a temporal mask was given:
-            if self.temporal_weight_mask.numel() != 0:
-
-                # was there a previous iteration and did we store it's opt tensor?
-                if self.prev_iteration_opt.numel() != 0:
-
-                    # calculate the gradients that were applied at the end of the last iteration
-                    # (deriving them gives slightly incorrect values)
-                    real_gradients = self.prev_iteration_opt - self.opt_tensor
-                    self.opt_masked -= real_gradients * self.temporal_weight_mask
-
-                self.prev_iteration_opt = self.opt_tensor.clone()
+            # print(1.1, sum_gradients.sum())
+            # print(1.2, self.opt_masked.sum())
+            # self.opt_tensor.grad = sum_gradients
+            # self.opt_masked -= (sum_gradients * 200000)
+            # self.opt_masked.data.sub_(sum_gradients.data / self.settings.learning_rate)
 
             nice_loss = '{:,.0f}'.format(loss.item())
             current_loss[0] = loss.item()
@@ -296,13 +293,8 @@ class Nst(torch.nn.Module):
             while n_iter[0] <= max_iter:
                 self.optimiser.step(closure)
 
-        if self.temporal_weight_mask.numel() != 0:
-            return self.opt_masked
-        else:
-            return self.opt_tensor
-        # return self.opt_tensor
+        return self.opt_tensor
         # return self.opt_masked
-
 
     # def save(self, fp):
     #     torch.save(self.state_dict(), fp)
