@@ -34,7 +34,8 @@ class OptGuide(nn.Module):
 
 
 class ContentGuide(OptGuide):
-    def __init__(self, tensor, vgg, layer, layer_weight, loss_type, temporal_mask, cuda_device=None):
+    def __init__(self, tensor, vgg, layer, layer_weight,
+                 loss_type, temporal_mask, cuda_device=None):
         super(ContentGuide, self).__init__()
         self.name = "content guide"
         self.tensor = tensor
@@ -44,10 +45,10 @@ class ContentGuide(OptGuide):
         self.vgg = vgg
         self.layer = layer
         self.cuda_device = cuda_device
+        self.temporal_mask = temporal_mask
 
     def prepare(self):
         self.target = self.vgg([self.tensor], [self.layer])[0]
-        # self.target = self.vgg([self.tensor], [self.layer], mask=self.temporal_mask)[0]
 
     def loss(self, opt, target):
         loss_fn = loss.MipLoss()
@@ -57,6 +58,7 @@ class ContentGuide(OptGuide):
 
         return loss_fn(opt, target, self.loss_type)
 
+    # def forward(self, optimiser, opt_tensor, opt_masked, loss, iteration):
     def forward(self, optimiser, opt_tensor, loss, iteration):
         if self.cuda_device:
             cuda = True
@@ -86,12 +88,13 @@ class ContentGuide(OptGuide):
         #     b, c, w, h = opt_tensor.grad.size()
         #     for i in range(0, c):
         #         layer_gradients[0][i] *= self.temporal_mask[0][0]
-
+        # return layer_gradients, opt_masked
         return layer_gradients
 
 
 class TemporalContentGuide(OptGuide):
-    def __init__(self, tensor, vgg, layer, weight, loss_type, mask, cuda_device=None):
+    def __init__(self, tensor, vgg, layer, weight, loss_type,
+                  mask, cuda_device=None):
         super(TemporalContentGuide, self).__init__()
         self.name = "temporal content guide"
         self.tensor = tensor
@@ -107,12 +110,11 @@ class TemporalContentGuide(OptGuide):
     def prepare(self):
         self.target = self.vgg([self.tensor], [self.layer])[0]
 
-        # apply the mask
-        b, c, h, w = self.target[0].size()
-        self.resized_mask = utils.rescale_tensor_by_tensor(self.mask, self.target[0])
-        for i in range(0, c):
-            self.target[0][0][i] *= self.resized_mask[0][0]
-
+        # # apply the mask
+        # b, c, h, w = self.target[0].size()
+        # self.resized_mask = utils.rescale_tensor_by_tensor(self.mask, self.target[0])
+        # for i in range(0, c):
+        #     self.target[0][0][i] *= self.resized_mask[0][0]
 
     def loss(self, opt, target):
         loss_fn = loss.MipLoss()
@@ -122,7 +124,8 @@ class TemporalContentGuide(OptGuide):
 
         return loss_fn(opt, target, self.loss_type)
 
-    def forward(self, optimiser, opt_tensor, loss, iteration):
+    # def forward(self, optimiser, opt_tensor, loss, iteration):
+    def forward(self, optimiser, opt_tensor, opt_masked, loss, iteration):
         if self.cuda_device:
             cuda = True
         else:
@@ -144,7 +147,11 @@ class TemporalContentGuide(OptGuide):
         # from here on, opt_tensor.grad contains the derived gradients
 
         loss += weighted_loss
-        return opt_tensor.grad.clone()
+        grad = opt_tensor.grad.clone()
+
+        # todo: mask the grad and apply to opt_masked
+
+        return grad, opt_masked
 
 
 class TVGuide(OptGuide):

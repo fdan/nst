@@ -4,7 +4,10 @@ from torch import optim
 from . import guides
 from . import vgg
 from . import utils
+from .adamv import AdamV
 import nst.settings as settings
+
+import nst.oiio.utils
 
 # https://pytorch.org/docs/stable/notes/randomness.html
 torch.manual_seed(0)
@@ -51,6 +54,7 @@ class Nst(torch.nn.Module):
         self.settings = settings.NstSettings()
         self.start_iter = 1
         self.prev_iteration_opt = torch.zeros(0)
+        self.opt_masked = torch.zeros(0)
 
     def prepare(self):
         if self.settings.cuda:
@@ -70,34 +74,12 @@ class Nst(torch.nn.Module):
             self.vgg.load_state_dict(torch.load(self.settings.model_path))
             self.settings.cuda = False
 
-        # optimiser
-        if self.settings.optimiser == 'lbfgs':
-            # print('optimiser is lbfgs')
-            self.optimiser = optim.LBFGS([self.opt_tensor],
-                                         lr=self.settings.learning_rate)
-
-        elif self.settings.optimiser == 'adam':
-            # print('optimiser is adam')
-            self.optimiser = optim.Adam([self.opt_tensor], lr=self.settings.learning_rate, amsgrad=True)
-
-        elif self.settings.optimiser == 'adamw':
-            # print('optimiser is adamw')
-            self.optimiser = optim.AdamW([self.opt_tensor], lr=self.settings.learning_rate)
-
-        elif self.settings.optimiser == 'adagrad':
-            # print('optimiser is adagrad')
-            self.optimiser = optim.Adagrad([self.opt_tensor], lr=self.settings.learning_rate)
-
-        elif self.settings.optimiser == 'rmsprop':
-            # print('optimiser is rmsprop')
-            self.optimiser = optim.RMSprop([self.opt_tensor], lr=self.settings.learning_rate)
-
-        elif self.settings.optimiser == 'asgd':
-            # print('optimiser is asgd')
-            self.optimiser = optim.ASGD([self.opt_tensor], lr=self.settings.learning_rate)
-
-        else:
-            raise Exception("unsupported optimiser:", self.settings.optimiser)
+        params = [self.opt_tensor]
+        self.optimiser = AdamV(params,
+                               self.temporal_weight_mask,
+                               lr=self.settings.learning_rate,
+                               amsgrad=True,
+                               foreach=False)
 
         # content can be null
         if self.content.numel() != 0:
@@ -107,7 +89,7 @@ class Nst(torch.nn.Module):
                 self.settings.content_layer,
                 self.settings.content_layer_weight,
                 self.settings.content_loss_type,
-                self.styles[0].target_map,
+                self.temporal_weight_mask,
                 self.settings.cuda_device
             )
 
@@ -238,6 +220,9 @@ class Nst(torch.nn.Module):
 
             for guide in self.opt_guides:
                 gradients += guide(self.optimiser, self.opt_tensor, loss, n_iter[0])
+                # guide_grad, opt_masked = guide(self.optimiser, self.opt_tensor, self.opt_masked, loss, n_iter[0])
+                # gradients += guide_grad
+                # self.opt_masked = opt_masked
 
             b, c, w, h = self.opt_tensor.grad.size()
             if self.settings.cuda:
@@ -251,25 +236,27 @@ class Nst(torch.nn.Module):
             if self.settings.write_gradients:
                 utils.write_tensor(sum_gradients, '%s/grad/%04d.pt' % (self.settings.outdir, n_iter[0]))
 
-            self.opt_tensor.grad = sum_gradients
+            if self.temporal_weight_mask.numel() != 0:
+                self.opt_tensor.grad = sum_gradients * (self.temporal_weight_mask)
+            else:
+                self.opt_tensor.grad = sum_gradients
 
-            # temporal mask is applied globally to all guide gradients
-            # in order to introduce a temporal content loss, the grad masking below would have
-            # to take place in the style and content guides?  and I'm not sure it can as-is?
-            # i.e. I would have to solve the issue of applying the gradients properly during the iteration
-            # may require quite a big rethink and alot of tsting
+            self.opt_tensor.grad = sum_gradients
 
             # if a temporal mask was given:
             if self.temporal_weight_mask.numel() != 0:
-
                 # was there a previous iteration and did we store it's opt tensor?
                 if self.prev_iteration_opt.numel() != 0:
-
                     # calculate the gradients that were applied at the end of the last iteration
                     # (deriving them gives slightly incorrect values)
-                    real_gradients = self.prev_iteration_opt - self.opt_tensor
-                    self.opt_masked -= real_gradients * self.temporal_weight_mask
+                    # real_gradients = self.prev_iteration_opt - self.opt_tensor
+                    real_gradients = self.opt_tensor - self.prev_iteration_opt
 
+                    grad_fp = self.settings.outdir + '/prog/grad.%04d.exr' % n_iter[0]
+                    grad_buf = nst.oiio.utils.tensor_to_buf(real_gradients, raw=True)
+                    nst.oiio.utils.write_exr(grad_buf, grad_fp)
+
+                    self.opt_masked -= real_gradients * self.temporal_weight_mask
                 self.prev_iteration_opt = self.opt_tensor.clone()
 
             nice_loss = '{:,.0f}'.format(loss.item())
@@ -285,15 +272,16 @@ class Nst(torch.nn.Module):
                 print(msg)
 
             if self.settings.progressive_output:
-                if n_iter[0] % self.settings.progressive_interval == 0:
-                    fp = self.settings.outdir + '/prog/%04d.pt' % n_iter[0]
-                    utils.write_tensor(self.opt_tensor, fp)
+                opt_final_fp = self.settings.outdir + '/prog/opt_final.%04d.exr' % n_iter[0]
+                opt_final_buf = nst.oiio.utils.tensor_to_buf(self.opt_tensor, colorspace='acescg')
+                nst.oiio.utils.write_exr(opt_final_buf, opt_final_fp)
 
             return loss
 
         if self.settings.iterations:
             max_iter = int(self.settings.iterations)
             while n_iter[0] <= max_iter:
+                self.optimiser.iteration = (n_iter[0]+1)
                 self.optimiser.step(closure)
 
         if self.temporal_weight_mask.numel() != 0:

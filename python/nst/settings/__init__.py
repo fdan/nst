@@ -61,7 +61,6 @@ class BaseSettings(object):
         self.__dict__ = data
 
 
-
 class NstSettings(BaseSettings):
     def __init__(self):
         super(NstSettings, self).__init__()

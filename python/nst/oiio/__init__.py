@@ -101,7 +101,10 @@ class StyleWriter(object):
         #     self.nst.temporal_content = self.prepare_temporal_content()
 
         if self.settings.temporal_mask:
+            print('temporal mask provided')
             self.nst.temporal_weight_mask = self.prepare_temporal_mask()
+        else:
+            print('no temporal mask')
 
         if self.nst.opt_tensor.numel() == 0:
             self.nst.opt_tensor = self.prepare_opt()
@@ -125,12 +128,12 @@ class StyleWriter(object):
             # if self.settings.out_colorspace != 'srgb_texture':
             #     buf = oiio.ImageBufAlgo.colorconvert(buf, 'srgb_texture', self.settings.out_colorspace)
 
-            out = self.settings.out.split('/')
-            out[-1] = '%03d_' % self.pass_ + out[-1]
-            out_pass = '/'.join(out)
-            print('writing:', out_pass)
-            buf.write(out_pass)
-            # buf.write(self.settings.out)
+            # out = self.settings.out.split('/')
+            # out[-1] = '%03d_' % self.pass_ + out[-1]
+            # out_pass = '/'.join(out)
+            # print('writing:', out_pass)
+            # buf.write(out_pass)
+            buf.write(self.settings.out)
 
         # elif self.settings.output_format == 'pt':
         #     out = self.settings.out.replace('.exr', '.pt')
@@ -166,10 +169,10 @@ class StyleWriter(object):
         return content_tensor
 
     def prepare_temporal_mask(self):
-        mask_tensor = utils.image_to_tensor(self.settings.temporal_mask, self.settings.core.cuda,
+        mask_tensor = utils.image_to_tensor(self.settings.temporal_mask,
+                                            self.settings.core.cuda,
                                             raw=True)
-        # mask_tensor = utils.image_to_tensor(self.settings.temporal_mask.rgb_filepath, self.settings.core.cuda,
-        #                                     raw=True)
+
         return mask_tensor
 
     # def prepare_temporal_content(self):
